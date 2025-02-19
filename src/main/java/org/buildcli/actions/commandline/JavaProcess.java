@@ -2,43 +2,35 @@ package org.buildcli.actions.commandline;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
-public class JavaProcess implements CommandLineProcess {
-  private final List<String> commands = new ArrayList<>();
+
+public class JavaProcess extends AbstractCommandLineProcess {
 
   private JavaProcess() {
-    commands.add("java");
+    super("java");
   }
 
-  public static JavaProcess createRunJarProcess(String jarName, String... args) {
+
+  public static JavaProcess createRunJarProcess(String jarName, String...args) {
+    var arg = Arrays.stream(args).reduce((a, b) -> a + " " + b).orElse("");
+    return createProcess("-jar", jarName, arg);
+  }
+
+  public static JavaProcess createGetVersionProcess() {
+    return createProcess("--version");
+  }
+
+  public static JavaProcess createProcess(String... args) {
     var process = new JavaProcess();
 
-    process.commands.addAll(List.of("-jar", jarName));
-    if (args != null && args.length > 0) {
-      process.commands.addAll(List.of(args));
-    }
-
+    process.commands.addAll(List.of(args));
     return process;
   }
 
-  public static JavaProcess createRunClassProcess(String className, String... args) {
-    var process = new JavaProcess();
-
-    process.commands.add(className);
-    if (args != null && args.length > 0) {
-      process.commands.addAll(List.of(args));
-    }
-
-    return process;
-  }
-
-  @Override
-  public int run() {
-    try {
-      return new ProcessBuilder(commands).inheritIO().start().waitFor();
-    } catch (InterruptedException | IOException e) {
-      throw new RuntimeException(e);
-    }
+  public static CommandLineProcess createRunClassProcess(String absolutePath, String...args) {
+    var arg = Arrays.stream(args).reduce((a, b) -> a + " " + b).orElse("");
+    return createProcess(absolutePath, arg);
   }
 }
