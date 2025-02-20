@@ -1,6 +1,6 @@
-package org.buildcli.commands.project.add;
+package dev.buildcli.cli.commands.project.add;
 
-import org.buildcli.domain.BuildCLICommand;
+import dev.buildcli.core.domain.BuildCLICommand;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine.Command;
