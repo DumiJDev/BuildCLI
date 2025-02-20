@@ -1,4 +1,4 @@
-package dev.buildcli.cli.domain.git;
+package dev.buildcli.core.domain.git;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -7,8 +7,8 @@ import java.io.InputStreamReader;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import static dev.buildcli.cli.domain.git.GitCommands.*;
-import static dev.buildcli.cli.domain.git.GitCommandFormatter.*;
+import static dev.buildcli.core.domain.git.GitCommands.*;
+import static dev.buildcli.core.domain.git.GitCommandFormatter.*;
 
 public class GitCommandExecutor extends GitCommandUtils {
 

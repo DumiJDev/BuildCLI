@@ -1,4 +1,4 @@
-package dev.buildcli.cli.actions.pipeline;
+package dev.buildcli.core.actions.pipeline;
 
 import java.io.IOException;
 

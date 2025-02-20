@@ -1,4 +1,4 @@
-package dev.buildcli.cli.exceptions;
+package dev.buildcli.core.exceptions;
 
 @Deprecated( forRemoval = true)
 public class ThrowingComandExecutorWrapper {

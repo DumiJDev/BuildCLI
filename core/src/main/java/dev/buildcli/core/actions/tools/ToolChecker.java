@@ -1,4 +1,4 @@
-package dev.buildcli.cli.actions.tools;
+package dev.buildcli.core.actions.tools;
 
 public interface ToolChecker {
   String name();

@@ -1,6 +1,6 @@
-package dev.buildcli.cli.actions.commandline;
+package dev.buildcli.core.actions.commandline;
 
-import dev.buildcli.cli.constants.MavenConstants;
+import dev.buildcli.core.constants.MavenConstants;
 
 import java.util.Arrays;
 

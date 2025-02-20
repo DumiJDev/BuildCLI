@@ -1,7 +1,7 @@
-package dev.buildcli.cli.actions.ai.factories;
+package dev.buildcli.core.actions.ai.factories;
 
-import dev.buildcli.cli.actions.ai.params.OllamaAIServiceParams;
-import dev.buildcli.cli.actions.ai.service.OllamaAIService;
+import dev.buildcli.core.actions.ai.params.OllamaAIServiceParams;
+import dev.buildcli.core.actions.ai.service.OllamaAIService;
 
 public class OllamaAIServiceFactory implements AIServiceFactory<OllamaAIService, OllamaAIServiceParams>{
   @Override

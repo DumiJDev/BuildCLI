@@ -1,6 +1,6 @@
-package dev.buildcli.cli.constants;
+package dev.buildcli.core.constants;
 
-import dev.buildcli.cli.utils.OS;
+import dev.buildcli.core.utils.OS;
 
 public class GradleConstants {
   public static final String GRADLE_CMD_WINDOWS = "gradle.bat";

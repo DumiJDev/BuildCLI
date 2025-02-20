@@ -1,4 +1,4 @@
-package dev.buildcli.cli.utils;
+package dev.buildcli.core.utils;
 
 import java.io.IOException;
 import java.nio.file.Files;

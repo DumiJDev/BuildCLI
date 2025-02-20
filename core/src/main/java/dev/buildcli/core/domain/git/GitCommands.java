@@ -1,4 +1,4 @@
-package dev.buildcli.cli.domain.git;
+package dev.buildcli.core.domain.git;
 
 public final class GitCommands {
     public static final String GIT = "git";

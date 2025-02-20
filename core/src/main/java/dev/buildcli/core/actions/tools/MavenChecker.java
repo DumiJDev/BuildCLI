@@ -1,7 +1,7 @@
-package dev.buildcli.cli.actions.tools;
+package dev.buildcli.core.actions.tools;
 
-import dev.buildcli.cli.actions.commandline.MavenProcess;
-import dev.buildcli.cli.utils.MavenInstaller;
+import dev.buildcli.core.actions.commandline.MavenProcess;
+import dev.buildcli.core.utils.MavenInstaller;
 
 public class MavenChecker implements ToolChecker {
 

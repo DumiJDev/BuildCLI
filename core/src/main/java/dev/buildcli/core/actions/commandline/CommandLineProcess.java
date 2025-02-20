@@ -1,4 +1,4 @@
-package dev.buildcli.cli.actions.commandline;
+package dev.buildcli.core.actions.commandline;
 
 import java.util.List;
 

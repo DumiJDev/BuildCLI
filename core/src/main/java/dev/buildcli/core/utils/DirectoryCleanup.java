@@ -1,6 +1,6 @@
-package dev.buildcli.cli.utils;
+package dev.buildcli.core.utils;
 
-import dev.buildcli.cli.log.SystemOutLogger;
+import dev.buildcli.core.log.SystemOutLogger;
 
 import java.io.File;
 import java.io.IOException;

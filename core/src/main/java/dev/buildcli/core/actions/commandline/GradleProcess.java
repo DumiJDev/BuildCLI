@@ -1,6 +1,6 @@
-package dev.buildcli.cli.actions.commandline;
+package dev.buildcli.core.actions.commandline;
 
-import dev.buildcli.cli.constants.GradleConstants;
+import dev.buildcli.core.constants.GradleConstants;
 
 import java.util.Arrays;
 

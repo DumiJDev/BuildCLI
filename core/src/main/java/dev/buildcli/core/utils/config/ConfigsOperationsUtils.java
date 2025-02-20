@@ -1,16 +1,16 @@
-package dev.buildcli.cli.utils.config;
+package dev.buildcli.core.utils.config;
 
-import dev.buildcli.cli.domain.configs.BuildCLIConfig;
-import dev.buildcli.cli.exceptions.ConfigException;
-import dev.buildcli.cli.log.SystemOutLogger;
+import dev.buildcli.core.domain.configs.BuildCLIConfig;
+import dev.buildcli.core.exceptions.ConfigException;
+import dev.buildcli.core.log.SystemOutLogger;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.Optional;
 
-import static dev.buildcli.cli.constants.ConfigDefaultConstants.BUILD_CLI_CONFIG_FILE_NAME;
-import static dev.buildcli.cli.constants.ConfigDefaultConstants.BUILD_CLI_CONFIG_GLOBAL_FILE;
+import static dev.buildcli.core.constants.ConfigDefaultConstants.BUILD_CLI_CONFIG_FILE_NAME;
+import static dev.buildcli.core.constants.ConfigDefaultConstants.BUILD_CLI_CONFIG_GLOBAL_FILE;
 
 class ConfigsOperationsUtils {
 

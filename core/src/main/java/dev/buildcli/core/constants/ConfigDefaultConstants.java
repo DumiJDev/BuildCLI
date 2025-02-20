@@ -1,4 +1,4 @@
-package dev.buildcli.cli.constants;
+package dev.buildcli.core.constants;
 
 import java.nio.file.Path;
 

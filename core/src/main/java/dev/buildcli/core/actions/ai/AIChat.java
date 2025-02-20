@@ -1,4 +1,4 @@
-package dev.buildcli.cli.actions.ai;
+package dev.buildcli.core.actions.ai;
 
 import java.util.UUID;
 

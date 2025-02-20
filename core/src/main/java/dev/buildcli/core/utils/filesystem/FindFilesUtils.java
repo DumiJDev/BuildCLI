@@ -1,4 +1,4 @@
-package dev.buildcli.cli.utils.filesystem;
+package dev.buildcli.core.utils.filesystem;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

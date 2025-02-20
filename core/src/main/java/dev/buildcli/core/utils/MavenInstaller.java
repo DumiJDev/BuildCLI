@@ -1,7 +1,7 @@
-package dev.buildcli.cli.utils;
+package dev.buildcli.core.utils;
 
-import dev.buildcli.cli.log.SystemOutLogger;
-import dev.buildcli.cli.utils.compress.FileExtractor;
+import dev.buildcli.core.log.SystemOutLogger;
+import dev.buildcli.core.utils.compress.FileExtractor;
 
 import java.io.File;
 import java.io.FileOutputStream;

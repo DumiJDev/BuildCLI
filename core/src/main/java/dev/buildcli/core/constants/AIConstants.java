@@ -1,4 +1,4 @@
-package dev.buildcli.cli.constants;
+package dev.buildcli.core.constants;
 
 public abstract class AIConstants {
   public static final String DOCUMENT_CODE_PROMPT = """

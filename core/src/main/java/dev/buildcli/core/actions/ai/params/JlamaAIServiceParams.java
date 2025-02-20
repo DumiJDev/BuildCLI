@@ -1,6 +1,6 @@
-package dev.buildcli.cli.actions.ai.params;
+package dev.buildcli.core.actions.ai.params;
 
-import dev.buildcli.cli.actions.ai.AIServiceParams;
+import dev.buildcli.core.actions.ai.AIServiceParams;
 
 import java.util.Optional;
 

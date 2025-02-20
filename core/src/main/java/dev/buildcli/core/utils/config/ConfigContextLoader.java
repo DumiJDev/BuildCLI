@@ -1,6 +1,6 @@
-package dev.buildcli.cli.utils.config;
+package dev.buildcli.core.utils.config;
 
-import dev.buildcli.cli.domain.configs.BuildCLIConfig;
+import dev.buildcli.core.domain.configs.BuildCLIConfig;
 
 public abstract class ConfigContextLoader {
   private static BuildCLIConfig localConfig = null;

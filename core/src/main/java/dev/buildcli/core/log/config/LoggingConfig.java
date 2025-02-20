@@ -1,4 +1,4 @@
-package dev.buildcli.cli.log.config;
+package dev.buildcli.core.log.config;
 
 import java.io.IOException;
 import java.io.InputStream;

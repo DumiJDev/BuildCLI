@@ -1,7 +1,7 @@
-package dev.buildcli.cli.actions.ai.factories;
+package dev.buildcli.core.actions.ai.factories;
 
-import dev.buildcli.cli.actions.ai.params.JlamaAIServiceParams;
-import dev.buildcli.cli.actions.ai.service.JLamaAIService;
+import dev.buildcli.core.actions.ai.params.JlamaAIServiceParams;
+import dev.buildcli.core.actions.ai.service.JLamaAIService;
 
 public class JLamaAIServiceFactory implements AIServiceFactory<JLamaAIService, JlamaAIServiceParams> {
 

@@ -1,5 +1,5 @@
-package dev.buildcli.cli.domain.configs;
-import dev.buildcli.cli.exceptions.ConfigException;
+package dev.buildcli.core.domain.configs;
+import dev.buildcli.core.exceptions.ConfigException;
 
 import java.io.*;
 import java.util.*;

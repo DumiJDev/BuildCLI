@@ -1,6 +1,6 @@
-package dev.buildcli.cli.utils;
+package dev.buildcli.core.utils;
 
-import dev.buildcli.cli.domain.git.GitCommandExecutor;
+import dev.buildcli.core.domain.git.GitCommandExecutor;
 
 import java.io.*;
 import java.nio.file.Files;

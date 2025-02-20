@@ -1,4 +1,4 @@
-package dev.buildcli.cli.domain.git;
+package dev.buildcli.core.domain.git;
 
 import org.eclipse.jgit.revwalk.RevCommit;
 

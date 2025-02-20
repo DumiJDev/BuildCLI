@@ -1,4 +1,4 @@
-package dev.buildcli.cli.exceptions;
+package dev.buildcli.core.exceptions;
 
 public class CommandExecutorRuntimeException extends RuntimeException {
 

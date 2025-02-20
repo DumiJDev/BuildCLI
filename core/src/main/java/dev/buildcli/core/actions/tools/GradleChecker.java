@@ -1,7 +1,7 @@
-package dev.buildcli.cli.actions.tools;
+package dev.buildcli.core.actions.tools;
 
-import dev.buildcli.cli.actions.commandline.GradleProcess;
-import dev.buildcli.cli.utils.GradleInstaller;
+import dev.buildcli.core.actions.commandline.GradleProcess;
+import dev.buildcli.core.utils.GradleInstaller;
 
 public class GradleChecker implements ToolChecker {
   @Override

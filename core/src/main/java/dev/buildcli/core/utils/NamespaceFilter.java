@@ -1,4 +1,4 @@
-package dev.buildcli.cli.utils;
+package dev.buildcli.core.utils;
 
 import javax.xml.stream.XMLStreamReader;
 import javax.xml.stream.util.StreamReaderDelegate;

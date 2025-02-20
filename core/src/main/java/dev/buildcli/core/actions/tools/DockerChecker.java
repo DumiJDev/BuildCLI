@@ -1,6 +1,6 @@
-package dev.buildcli.cli.actions.tools;
+package dev.buildcli.core.actions.tools;
 
-import dev.buildcli.cli.actions.commandline.DockerProcess;
+import dev.buildcli.core.actions.commandline.DockerProcess;
 
 public class DockerChecker implements ToolChecker {
   @Override

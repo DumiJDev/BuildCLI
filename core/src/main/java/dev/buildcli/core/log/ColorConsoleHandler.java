@@ -1,4 +1,4 @@
-package dev.buildcli.cli.log;
+package dev.buildcli.core.log;
 
 import java.util.logging.ConsoleHandler;
 import java.util.logging.Level;

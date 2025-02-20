@@ -1,6 +1,6 @@
-package dev.buildcli.cli.actions.tools;
+package dev.buildcli.core.actions.tools;
 
-import dev.buildcli.cli.actions.commandline.JavaProcess;
+import dev.buildcli.core.actions.commandline.JavaProcess;
 
 public class JDKChecker implements ToolChecker {
   @Override

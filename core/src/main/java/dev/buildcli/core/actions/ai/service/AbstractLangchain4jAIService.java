@@ -1,10 +1,10 @@
-package dev.buildcli.cli.actions.ai.service;
+package dev.buildcli.core.actions.ai.service;
 
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatLanguageModel;
-import dev.buildcli.cli.actions.ai.AIChat;
-import dev.buildcli.cli.actions.ai.AIService;
+import dev.buildcli.core.actions.ai.AIChat;
+import dev.buildcli.core.actions.ai.AIService;
 
 public abstract class AbstractLangchain4jAIService implements AIService {
   private final ChatLanguageModel model;

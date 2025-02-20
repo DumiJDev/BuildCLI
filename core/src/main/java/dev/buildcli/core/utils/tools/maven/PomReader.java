@@ -1,11 +1,11 @@
-package dev.buildcli.cli.utils.tools.maven;
+package dev.buildcli.core.utils.tools.maven;
 
 import jakarta.xml.bind.JAXBContext;
-import dev.buildcli.cli.constants.MavenConstants;
-import dev.buildcli.cli.exceptions.ExtractionRuntimeException;
-import dev.buildcli.cli.model.Dependency;
-import dev.buildcli.cli.model.Pom;
-import dev.buildcli.cli.utils.NamespaceFilter;
+import dev.buildcli.core.constants.MavenConstants;
+import dev.buildcli.core.exceptions.ExtractionRuntimeException;
+import dev.buildcli.core.model.Dependency;
+import dev.buildcli.core.model.Pom;
+import dev.buildcli.core.utils.NamespaceFilter;
 import org.xml.sax.SAXException;
 
 import javax.xml.XMLConstants;

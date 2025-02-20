@@ -1,4 +1,4 @@
-package dev.buildcli.cli.actions.ai.service;
+package dev.buildcli.core.actions.ai.service;
 
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.jlama.JlamaChatModel.JlamaChatModelBuilder;

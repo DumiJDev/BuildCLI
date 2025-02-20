@@ -1,4 +1,4 @@
-package dev.buildcli.cli.utils.tools;
+package dev.buildcli.core.utils.tools;
 
 import java.util.Scanner;
 

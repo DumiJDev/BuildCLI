@@ -1,4 +1,4 @@
-package dev.buildcli.core.core;
+package dev.buildcli.core.project;
 
 public class ProjectTester extends ProjectExecutor {
 

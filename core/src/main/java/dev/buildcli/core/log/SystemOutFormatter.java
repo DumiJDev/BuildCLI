@@ -1,4 +1,4 @@
-package dev.buildcli.cli.log;
+package dev.buildcli.core.log;
 
 import java.util.logging.Formatter;
 import java.util.logging.LogRecord;

@@ -1,4 +1,4 @@
-package dev.buildcli.cli.model;
+package dev.buildcli.core.model;
 
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;

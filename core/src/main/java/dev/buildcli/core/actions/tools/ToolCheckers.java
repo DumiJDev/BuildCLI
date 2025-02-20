@@ -1,4 +1,4 @@
-package dev.buildcli.cli.actions.tools;
+package dev.buildcli.core.actions.tools;
 
 import java.util.LinkedList;
 import java.util.List;

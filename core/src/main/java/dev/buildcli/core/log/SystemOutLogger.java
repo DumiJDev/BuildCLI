@@ -1,13 +1,12 @@
-package dev.buildcli.cli.log;
+package dev.buildcli.core.log;
 
-import dev.buildcli.cli.BuildCLI;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
 public class SystemOutLogger {
 
-	private static final Logger logger = LoggerFactory.getLogger(BuildCLI.class);
+	private static final Logger logger = LoggerFactory.getLogger("BuildCLI");
 
 	private SystemOutLogger() { }
 

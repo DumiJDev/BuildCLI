@@ -1,4 +1,4 @@
-package dev.buildcli.cli.actions.commandline;
+package dev.buildcli.core.actions.commandline;
 
 @Deprecated(forRemoval = true)
 public abstract class BuildTool {

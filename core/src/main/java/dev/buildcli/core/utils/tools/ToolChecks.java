@@ -1,10 +1,10 @@
-package dev.buildcli.cli.utils.tools;
+package dev.buildcli.core.utils.tools;
 
 import java.io.File;
 import java.io.IOException;
 
-import static dev.buildcli.cli.utils.SystemCommands.GRADLE;
-import static dev.buildcli.cli.utils.SystemCommands.MVN;
+import static dev.buildcli.core.utils.SystemCommands.GRADLE;
+import static dev.buildcli.core.utils.SystemCommands.MVN;
 
 public abstract class ToolChecks {
   private ToolChecks() {
