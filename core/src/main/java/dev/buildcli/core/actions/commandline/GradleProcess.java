@@ -5,12 +5,12 @@ import dev.buildcli.core.constants.GradleConstants;
 import java.util.Arrays;
 
 public class GradleProcess extends AbstractCommandLineProcess {
-  private GradleProcess() {
-    super(GradleConstants.GRADLE_CMD);
+  private GradleProcess(boolean printOutput) {
+    super(GradleConstants.GRADLE_CMD, printOutput);
   }
 
   public static GradleProcess createProcessor(String... tasks) {
-    var processor = new GradleProcess();
+    var processor = new GradleProcess(true);
     processor.commands.addAll(Arrays.asList(tasks));
     return processor;
   }
@@ -24,6 +24,8 @@ public class GradleProcess extends AbstractCommandLineProcess {
   }
 
   public static GradleProcess createGetVersionProcess() {
-    return createProcessor("-version");
+    var processor = new GradleProcess(false);
+    processor.commands.add("--version");
+    return processor;
   }
 }
