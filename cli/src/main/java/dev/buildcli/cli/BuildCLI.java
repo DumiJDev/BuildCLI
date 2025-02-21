@@ -1,6 +1,6 @@
-package dev.buildcli.cli;
+package org.buildcli;
 
-import dev.buildcli.cli.commands.*;
+import org.buildcli.commands.*;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 
@@ -8,9 +8,8 @@ import picocli.CommandLine.Command;
     version = "BuildCLI 0.0.14",
     description = "BuildCLI - A CLI for Java Project Management",
     subcommands = {
-        AutocompleteCommand.class, DoctorCommand.class, ProjectCommand.class, VersionCommand.class,
-        AboutCommand.class, CommandLine.HelpCommand.class, ConfigCommand.class,
-        RunCommand.class,ChangelogCommand.class
+        AutocompleteCommand.class, ProjectCommand.class, VersionCommand.class,
+        AboutCommand.class, CommandLine.HelpCommand.class, ConfigCommand.class
     }
 )
 public class BuildCLI {
