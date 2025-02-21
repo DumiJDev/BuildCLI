@@ -10,7 +10,7 @@ import picocli.CommandLine.Command;
     subcommands = {
         AutocompleteCommand.class, DoctorCommand.class, ProjectCommand.class, VersionCommand.class,
         AboutCommand.class, CommandLine.HelpCommand.class, ConfigCommand.class,
-        RunCommand.class,
+        RunCommand.class,ChangelogCommand.class
     }
 )
 public class BuildCLI {
