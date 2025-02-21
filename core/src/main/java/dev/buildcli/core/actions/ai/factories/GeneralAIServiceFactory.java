@@ -3,6 +3,7 @@ package dev.buildcli.core.actions.ai.factories;
 import dev.buildcli.core.actions.ai.AIService;
 import dev.buildcli.core.actions.ai.AIServiceParams;
 
+@SuppressWarnings("rawtypes")
 public class GeneralAIServiceFactory implements AIServiceFactory {
 
   @SuppressWarnings({"unchecked"})
