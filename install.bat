@@ -56,7 +56,7 @@ if not exist "%USERPROFILE%\bin" (
 )
 
 echo Copying BuildCLI JAR to %USERPROFILE%\bin...
-copy target\buildcli.jar "%USERPROFILE%\bin\buildcli.jar" >nul
+copy cli\target\buildcli.jar "%USERPROFILE%\bin\buildcli.jar" >nul
 
 echo Creating buildcli.bat shortcut...
 (
