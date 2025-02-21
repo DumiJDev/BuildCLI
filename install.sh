@@ -35,7 +35,7 @@ if [ ! -d "$HOME/bin" ]; then
     mkdir -p "$HOME/bin"
 fi
 
-cp target/buildcli.jar "$HOME/bin/"
+cp cli/target/buildcli.jar "$HOME/bin/"
 
 cat <<EOF > "$HOME/bin/buildcli"
 #!/bin/bash
