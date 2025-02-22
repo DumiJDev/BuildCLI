@@ -1,6 +1,6 @@
-package org.buildcli.commands;
+package dev.buildcli.cli.commands;
 
-import org.buildcli.domain.BuildCLICommand;
+import dev.buildcli.core.domain.BuildCLICommand;
 import org.buildcli.utils.FileTypes;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.errors.GitAPIException;
