@@ -17,7 +17,7 @@ public class AutoCompleteManager {
 
     public void setupAutocomplete() {
         String commandName = "buildcli";
-        String fullyQualifiedClassName = "org.buildcli.BuildCLI";
+        String fullyQualifiedClassName = "dev.buildcli.cli.BuildCLI";
 
         try {
             List<String> availableShells = detectAvailableShells();
