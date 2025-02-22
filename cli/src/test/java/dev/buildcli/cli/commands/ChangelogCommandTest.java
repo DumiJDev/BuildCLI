@@ -1,4 +1,4 @@
-package org.buildcli.commands;
+package dev.buildcli.cli.commands;
 
 import org.eclipse.jgit.api.Git;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import dev.buildcli.cli.commands.ChangelogCommand;
 
 import static org.junit.jupiter.api.Assertions.*;
 
