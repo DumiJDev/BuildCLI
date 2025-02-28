@@ -11,6 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Auto Label PRs
         uses: actions/labeler@v4
         with:
@@ -20,7 +23,11 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'issues'
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Auto Label Issues
-        uses: github/issue-labeler@v3
+        uses: github/issue-labeler@v3.4
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+          configuration-path: .github/labeler.yml
