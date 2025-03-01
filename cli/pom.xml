@@ -63,7 +63,13 @@
 			<groupId>dev.buildcli</groupId>
 			<artifactId>buildcli-core</artifactId>
 		</dependency>
-	</dependencies>
+        <dependency>
+            <groupId>dev.buildcli</groupId>
+            <artifactId>buildcli-hooks</artifactId>
+            <version>0.14.0</version>
+            <scope>compile</scope>
+        </dependency>
+    </dependencies>
 
 	<build>
 		<finalName>buildcli</finalName>
