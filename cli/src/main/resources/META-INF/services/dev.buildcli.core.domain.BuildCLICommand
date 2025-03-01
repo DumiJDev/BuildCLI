@@ -1,0 +1,3 @@
+dev.buildcli.cli.commands.AboutCommand
+dev.buildcli.cli.commands.HookAddCommand
+dev.buildcli.cli.commands.HookRemoveCommand
