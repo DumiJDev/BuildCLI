@@ -1,15 +1,12 @@
 package dev.buildcli.cli.commands;
 
-import dev.buildcli.core.domain.BuildCLICommand;
+import dev.buildcli.cli.commands.hook.HookAddCommand;
+import dev.buildcli.cli.commands.hook.HookListCommand;
+import dev.buildcli.cli.commands.hook.HookRemoveCommand;
 import picocli.CommandLine;
 
 @CommandLine.Command(name="hook",
-description = "Manage hooks",
-subcommands = {HookAddCommand.class, HookRemoveCommand.class})
-public class HookCommand implements dev.buildcli.hooks.HookCommand {
-
-    @Override
-    public void run() {
-
-    }
+description = "Manage hooks. Hooks are commands that are executed before or after a specific command.",
+subcommands = {HookAddCommand.class, HookRemoveCommand.class, HookListCommand.class})
+public class HookCommand{
 }
