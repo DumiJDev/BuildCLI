@@ -220,7 +220,7 @@ public class DockerManager {
                 containers.add(line);
             }
         } catch (IOException e) {
-            String errorMessage = "Erro ao listar os containers ativos: %s".formatted(e.getMessage());
+            String errorMessage = "Error listing active containers: %s".formatted(e.getMessage());
             logger.error(errorMessage);
             Thread.currentThread().interrupt();
         }
