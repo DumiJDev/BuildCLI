@@ -7,14 +7,11 @@ import dev.buildcli.core.model.DockerComposeConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
 
-import static dev.buildcli.core.actions.commandline.DockerProcess.createInfoProcess;
-import static dev.buildcli.core.actions.commandline.DockerProcess.createProcess;
+import static dev.buildcli.core.actions.commandline.DockerProcess.*;
 import static dev.buildcli.core.exceptions.DockerException.DockerBuildException;
 import static dev.buildcli.core.exceptions.DockerException.DockerfileNotFoundException;
 
@@ -61,7 +58,7 @@ public class DockerManager {
     }
 
     private static void createDockercontent(DockerComposeConfig config) {
-        String contentContent = buildcontentContent(config);
+        String contentContent = buildContent(config);
         writeToFile(contentContent);
     }
 
@@ -74,7 +71,7 @@ public class DockerManager {
         }
     }
 
-    private static String buildcontentContent(DockerComposeConfig config) {
+    private static String buildContent(DockerComposeConfig config) {
         StringBuilder content = new StringBuilder();
 
         content.append("services:\n");
@@ -83,36 +80,53 @@ public class DockerManager {
         content.append("      context: .\n");
         content.append("      dockerfile: ").append(config.dockerFilePath()).append("\n");
 
-        if (config.ports() != null && !config.ports().isEmpty()) {
-            content.append("    ports:\n");
-            for (String port : config.ports()) {
-                content.append("      - \"").append(port).append("\"\n");
-            }
-        }
+        appendPorts(content, config.ports());
 
-        if (config.volumes() != null && !config.volumes().isEmpty()) {
-            content.append("    volumes:\n");
-            for (String volume : config.volumes()) {
-                content.append("      - \"").append(volume).append("\"\n");
-            }
-        }
+        appendVolumes(content, config.volumes());
 
-        if (config.cpu() != null || config.memory() != null) {
-            content.append("    deploy:\n");
-            content.append("      resources:\n");
-            content.append("        limits:\n");
-            if (config.cpu() != null) {
-                content.append("          cpus: '").append(config.cpu()).append("'\n");
-            }
-            if (config.memory() != null) {
-                content.append("          memory: ").append(config.memory()).append("\n");
-            }
+        appendResourceLimits(content, config.cpu(), config.memory());
+
+        if (config.volumes() == null || config.volumes().isEmpty()) {
+            content.append("volumes:\n");
+            content.append("  app_data_volume:\n");
         }
 
         return content.toString();
     }
 
-    public static void startContainer(String containerName, boolean rebuild) throws DockerException {
+    private static void appendPorts(StringBuilder content, List<String> ports) {
+        if (ports != null && !ports.isEmpty()) {
+            content.append("    ports:\n");
+            ports.forEach(port -> content.append("      - ").append(port).append("\n"));
+        }
+    }
+
+    private static void appendVolumes(StringBuilder content, List<String> volumes) {
+        if (volumes != null && !volumes.isEmpty()) {
+            content.append("    volumes:\n");
+            volumes.stream()
+                    .filter(volume -> volume.matches("^.+:.+$")) // Filter volumes with valid format
+                    .forEach(volume -> content.append("      - ")
+                            .append(volume.replace("\\", "/")).append("\n"));
+        } else {
+            // Add the default named volume if no volume is specified
+            content.append("    volumes:\n");
+            content.append("      - app_data_volume:/app/data\n");
+        }
+    }
+
+    private static void appendResourceLimits(StringBuilder content, String cpu, String memory) {
+        if (cpu != null) {
+            // Convert CPUs to cpu_shares (1 CPU = 1024 shares)
+            int cpuShares = (int) (Double.parseDouble(cpu) * 1024);
+            content.append("    cpu_shares: ").append(cpuShares).append("\n");
+        }
+        if (memory != null) {
+            content.append("    mem_limit: ").append(memory).append("\n");
+        }
+    }
+
+    public static void upContainer( boolean rebuild) throws DockerException {
 
         if (!isDockerEngineRunning()) {
             throw new DockerEngineNotRunningException("Docker Engine is not running. Please start Docker and try again.");
@@ -129,10 +143,6 @@ public class DockerManager {
             commandArgs.add("--build");
         }
         commandArgs.add("-d");
-
-        if (containerName != null && !containerName.isBlank()) {
-            commandArgs.add(containerName);
-        }
 
         try {
 
