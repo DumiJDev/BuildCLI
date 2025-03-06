@@ -3,6 +3,7 @@ package dev.buildcli.core.utils;
 import dev.buildcli.core.exceptions.DockerException;
 import dev.buildcli.core.exceptions.DockerException.DockerComposeFileNotFoundException;
 import dev.buildcli.core.exceptions.DockerException.DockerEngineNotRunningException;
+import dev.buildcli.core.exceptions.DockerException.NoRunningContainersException;
 import dev.buildcli.core.model.DockerComposeConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -168,5 +169,61 @@ public class DockerManager {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    public static void downContainer(String containerName) throws DockerException {
+
+        List<String> activeContainers = getActiveContainers();
+
+        if (!isDockerEngineRunning()) {
+            throw new DockerEngineNotRunningException("Docker Engine is not running. Please start Docker and try again.");
+        }
+
+        if(activeContainers.isEmpty()) {
+            throw new NoRunningContainersException("No containers are currently running.");
+        }
+
+        if ((containerName == null) || containerName.isEmpty()) {
+            logger.info("Taking down all running containers...");
+            createSilentProcess("compose", "down").run();
+        } else if(activeContainers.contains(containerName)) {
+            String infoMessage = "Taking down specified container: %s".formatted(containerName);
+            logger.info(infoMessage);
+            shutDownContainer(containerName);
+            createSilentProcess("compose", "down").run();
+        } else {
+            throw new IllegalArgumentException("The specified container '" + containerName + "' is not running.");
+        }
+    }
+
+    private static void shutDownContainer (String containerName) {
+        try {
+            Process process = new ProcessBuilder("docker", "down", containerName).start();
+            process.waitFor();
+            String infoMessage = "Container %s taken down successfully.".formatted(containerName);
+            logger.info(infoMessage);
+        } catch (IOException | InterruptedException e) {
+            String errorMessage = "Error while taking down the container: %s".formatted(e.getMessage());
+            logger.error(errorMessage);
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private static List<String> getActiveContainers() {
+        List<String> containers = new ArrayList<>();
+
+        try{
+            Process process = new ProcessBuilder("docker", "ps", "--format", "{{.Names}}").start();
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String line;
+            while((line = reader.readLine()) != null) {
+                containers.add(line);
+            }
+        } catch (IOException e) {
+            String errorMessage = "Erro ao listar os containers ativos: %s".formatted(e.getMessage());
+            logger.error(errorMessage);
+            Thread.currentThread().interrupt();
+        }
+        return containers;
     }
 }
