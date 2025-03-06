@@ -29,6 +29,10 @@
             <groupId>dev.buildcli</groupId>
             <artifactId>buildcli-core</artifactId>
         </dependency>
+        <dependency>
+            <groupId>dev.buildcli</groupId>
+            <artifactId>buildcli-plugin</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
