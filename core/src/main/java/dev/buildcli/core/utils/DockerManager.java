@@ -22,10 +22,10 @@ public class DockerManager {
     public void setupDocker() {
         try {
             createDockerfile();
-            System.out.println("Dockerfile created successfully.");
-            System.out.println("Use 'buildcli --docker-build' to build and run the Docker container.");
+            logger.info("Dockerfile created successfully.");
+            logger.info("Use 'buildcli --docker-build' to build and run the Docker container.");
         } catch (IOException e) {
-            System.err.println("Error: Could not setup Docker environment.");
+            logger.error("Error: Could not setup Docker environment.");
         }
     }
 
@@ -40,10 +40,10 @@ public class DockerManager {
                         EXPOSE 8080
                         CMD ["java", "-jar", "app.jar"]
                         """);
-                System.out.println("Dockerfile generated.");
+                logger.info("Dockerfile generated.");
             }
         } else {
-            System.out.println("Dockerfile already exists.");
+            logger.info("Dockerfile already exists.");
         }
     }
 
@@ -55,10 +55,10 @@ public class DockerManager {
             throw new DockerfileNotFoundException(errorMessage);
         }
 
-        createDockercontent(config);
+        createDockerContent(config);
     }
 
-    private static void createDockercontent(DockerComposeConfig config) {
+    private static void createDockerContent(DockerComposeConfig config) {
         String contentContent = buildContent(config);
         writeToFile(contentContent);
     }
@@ -129,7 +129,7 @@ public class DockerManager {
 
     public static void upContainer( boolean rebuild) throws DockerException {
 
-        if (!isDockerEngineRunning()) {
+        if (isDockerEngineNotRunning()) {
             throw new DockerEngineNotRunningException("Docker Engine is not running. Please start Docker and try again.");
         }
 
@@ -162,12 +162,12 @@ public class DockerManager {
         }
     }
 
-    private static boolean isDockerEngineRunning() {
+    private static boolean isDockerEngineNotRunning() {
         try {
             int buildExitCode = createInfoProcess().run();
-            return buildExitCode == 0;
+            return buildExitCode != 0;
         } catch (Exception e) {
-            return false;
+            return true;
         }
     }
 
@@ -175,7 +175,7 @@ public class DockerManager {
 
         List<String> activeContainers = getActiveContainers();
 
-        if (!isDockerEngineRunning()) {
+        if (isDockerEngineNotRunning()) {
             throw new DockerEngineNotRunningException("Docker Engine is not running. Please start Docker and try again.");
         }
 
