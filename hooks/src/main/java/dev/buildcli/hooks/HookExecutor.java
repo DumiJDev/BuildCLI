@@ -22,7 +22,10 @@ public class HookExecutor {
         List<String[]> orderedHooks = orderHooks(args);
         List<Integer> exitCodes = new ArrayList<>();
         for (String[] command : orderedHooks) {
-            log.info("\nExecuting command: {}", command);
+            if(orderedHooks.size()>1) {
+                var commandString = String.join(" ", command);
+                log.info("\nExecuting command: {}", commandString);
+            }
             exitCodes.add(commandLine.execute(command));
 
         }
