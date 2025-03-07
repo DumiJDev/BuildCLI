@@ -4,7 +4,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -16,14 +15,14 @@ public class HookManager {
     private final HookExecutor hookExecutor;
 
     public HookManager(CommandLine command) {
-        this.hookLoader = new HookLoader(new File("hooks.json").getAbsolutePath());
+        this.hookLoader = new HookLoader();
         this.hookValidator = new HookValidator(command);
         this.hookExecutor = new HookExecutor(hooks);
         this.hooks.addAll(hookLoader.loadHooks());
     }
 
     public void registerHook(Hook hook) {
-        log.info("Registering hook: {}", hook);
+
         if (!hookValidator.isValidCommand(hook.command())) {
             log.error("Invalid command: {}", hook.command());
             throw new IllegalArgumentException("Unknown command: " + hook.command());
@@ -34,6 +33,8 @@ public class HookManager {
         }
         hooks.add(hook);
         hookLoader.saveHooks(hooks);
+
+        log.info("Hook registered : {}", hook);
     }
 
     public void removeHook(String commandName, HookPhase phase) {
@@ -47,9 +48,12 @@ public class HookManager {
     }
 
     public void listHooks() {
-        String myHooks = hooks.toString().replace("]", "]\n")
-                .replace("\n, ", "\n")
-                .substring(1, hooks.toString().length() - 1);
+        StringBuilder myHooks = new StringBuilder(hooks.toString().replace("]", "]\n").replace("\n, ", "\n"));
+        if (myHooks.length() > 1) {
+            int bracketAtEnd = 2;
+            myHooks.deleteCharAt(0);
+            myHooks.setLength(myHooks.length() - bracketAtEnd);
+        }
         log.info("Hooks configured: \n{}", myHooks);
     }
 }
