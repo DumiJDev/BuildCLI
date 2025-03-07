@@ -6,28 +6,39 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class HookValidator {
-    private final Set<String> availableCommands;
+    private final Set<String[]> availableCommands;
 
     public HookValidator(CommandLine commandLine) {
         this.availableCommands = loadAvailableCommands(commandLine);
     }
 
-    private Set<String> loadAvailableCommands(CommandLine commandLine) {
-        Set<String> commands = new HashSet<>();
-        commandLine.getSubcommands().forEach((name, subcommand) -> {
-            CommandLine.Command annotation = subcommand.getCommand().getClass().getAnnotation(CommandLine.Command.class);
-            if (annotation != null) {
-                commands.add(annotation.name());
-            }
-        });
+    private Set<String[]> loadAvailableCommands(CommandLine commandLine) {
+        Set<String[]> commands = new HashSet<>();
+        collectCommands(commandLine, new String[]{}, commands);
         return commands;
     }
 
-    public boolean isValidCommand(String commandName) {
-        return availableCommands.contains(commandName);
+    private void collectCommands(CommandLine commandLine, String[] parent, Set<String[]> commands) {
+        commandLine.getSubcommands().forEach((name, subcommand) -> {
+            String[] fullCommand = new String[parent.length + 1];
+            System.arraycopy(parent, 0, fullCommand, 0, parent.length);
+            fullCommand[parent.length] = name;
+            commands.add(fullCommand);
+            collectCommands(subcommand, fullCommand, commands);
+        });
     }
 
-    public boolean isValidPhase(String phase){
+    public boolean isValidCommand(String commandName) {
+        String[] commandParts = commandName.split(" ");
+        for (String[] command : availableCommands) {
+            if (java.util.Arrays.equals(command, commandParts)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean isValidPhase(String phase) {
         try {
             HookPhase.valueOf(phase.toUpperCase());
             return true;
