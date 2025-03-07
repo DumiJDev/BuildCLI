@@ -5,8 +5,6 @@ import dev.buildcli.core.domain.BuildCLICommand;
 import dev.buildcli.hooks.Hook;
 import dev.buildcli.hooks.HookManager;
 import dev.buildcli.hooks.HookPhase;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Parameters;
@@ -14,21 +12,19 @@ import picocli.CommandLine.Parameters;
 
 @Command(
         name = "add",
-        description = "Add a hook to a command. Usage: hook add [before/after] [command], [hookCommand]" +
-                "Example: 'add before project build, project clean' . This will execute 'project clean' before 'project build'"
+        description = "Add a hook to a command. Usage: hook add [before/after] \"[command]\", \"[hookCommand]\"" +
+                "Example: 'add before \"project build\" \"project clean\"' . This will execute 'project clean' before 'project build'"
 )
 public class HookAddCommand implements BuildCLICommand {
 
     @Parameters(index = "0", description = "When your hook will be executed (before/after)")
     private String phase;
 
-    @Parameters(index = "1", arity ="1..*", split = ",", description = "Main command for attach the hook")
+    @Parameters(index = "1", arity ="1..*", description = "Main command for attach the hook")
     private String command;
 
     @Parameters(index = "2", arity = "1..*", description = "HookCommand to be executed")
     private String hookCommand;
-
-    private final Logger log = LoggerFactory.getLogger(HookAddCommand.class);
 
     @Override
     public void run() {
@@ -38,6 +34,5 @@ public class HookAddCommand implements BuildCLICommand {
         Hook hook = new Hook(command, hookPhase, hookCommand);
 
         hookManager.registerHook(hook);
-        log.info("Hook registered : {}", hook);
     }
 }
