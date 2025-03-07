@@ -10,16 +10,39 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Type;
+import java.net.URISyntaxException;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.jar.JarFile;
 
 public class HookLoader {
     private static final Logger log = LoggerFactory.getLogger(HookLoader.class);
     private final Gson gson = new Gson();
     private final String hooksFilePath;
 
-    public HookLoader(String hooksFilePath) {
-        this.hooksFilePath = hooksFilePath;
+    public HookLoader() {
+        this.hooksFilePath = getGlobalHooksFilePath();
+    }
+
+    private String getGlobalHooksFilePath() {
+        try {
+            File jarFile = new File(getClass().getProtectionDomain().getCodeSource().getLocation().toURI());
+            if (jarFile.isFile()) {
+                try (JarFile jar = new JarFile(jarFile)) {
+                    String jarDir = jarFile.getParent();
+                    return Paths.get(jarDir, "hooks.json").toString();
+                }
+            } else {
+                String jarDir = jarFile.getParent();
+                return Paths.get(jarDir, "hooks.json").toString();
+            }
+        } catch (URISyntaxException e) {
+            log.error("URISyntaxException while determining JAR directory: {}", e.getMessage());
+        } catch (IOException e) {
+            log.error("IOException while determining JAR directory: {}", e.getMessage());
+        }
+        return null;
     }
 
     public List<Hook> loadHooks() {
@@ -48,7 +71,7 @@ public class HookLoader {
     }
 
     public void saveHooks(List<Hook> hooks) {
-        log.info("Saving hooks to JSON file: {}", hooksFilePath);
+        log.info("Saving hook to JSON file: {}", hooksFilePath);
         File file = new File(hooksFilePath);
         File parent = file.getParentFile();
         if (parent != null && !parent.exists()) {
@@ -57,7 +80,7 @@ public class HookLoader {
         }
         try (FileWriter writer = new FileWriter(file)) {
             gson.toJson(hooks, writer);
-            log.info("Hooks saved successfully.");
+            log.info("Hook saved successfully.");
         } catch (IOException e) {
             log.error("Error saving hooks: {}", e.getMessage());
         }
