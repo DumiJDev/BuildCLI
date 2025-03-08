@@ -37,11 +37,9 @@ body:
     label: On which device are you experiencing this bug?
     multiple: true
     options:
-    - Android
-    - iPhone
-    - Linux
-    - Chrome
     - Windows
+    - MacOS
+    - Linux
 - type: checkboxes
   id: terms
   attributes:
