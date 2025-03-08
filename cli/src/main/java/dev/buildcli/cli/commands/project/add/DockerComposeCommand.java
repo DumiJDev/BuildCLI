@@ -6,6 +6,7 @@ import dev.buildcli.core.model.DockerComposeConfig;
 import dev.buildcli.core.utils.DockerManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -47,8 +48,8 @@ public class DockerComposeCommand implements BuildCLICommand {
         try {
             DockerManager.setupDockerCompose(config);
             logger.info("docker-compose.yml created successfully!");
-        } catch (DockerException e) {
-            logger.error("Failed to setup docker-content.yml", e);
+        } catch (DockerException | CommandLine.ExecutionException e) {
+            throw new CommandLine.ExecutionException(new CommandLine(this), "Failed to setup docker-compose: " + e.getMessage(), e);
         }
     }
 }
