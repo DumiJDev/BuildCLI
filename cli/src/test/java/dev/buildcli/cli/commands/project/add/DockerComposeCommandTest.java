@@ -5,6 +5,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import dev.buildcli.cli.utilsForTest.TestAppender;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
@@ -19,12 +20,14 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@DisplayName("DockerComposeCommand Tests")
 class DockerComposeCommandTest {
 
     private TestAppender testAppender;
     private final String validDockerFilePath = "./ValidDockerFile";
 
     @BeforeEach
+    @DisplayName("Set up test environment")
     void setUp() throws IOException {
         testAppender = new TestAppender();
         testAppender.start();
@@ -35,13 +38,15 @@ class DockerComposeCommandTest {
     }
 
     @AfterEach
+    @DisplayName("Tear down test environment")
     void tearDown() throws IOException {
         Files.deleteIfExists(Paths.get(validDockerFilePath));
         testAppender.stop();
     }
 
     @Test
-    void testDockerComposeCommand_Success() {
+    @DisplayName("Test DockerComposeCommand success scenario")
+    void testDockerComposeCommandSuccess() {
         CommandLine cmd = new CommandLine(new DockerComposeCommand());
         int exitCode = cmd.execute("--ports", "8080:8080", "--volumes", "./data:/app/data", "--cpu", "2", "--memory", "512m", "--dockerfile", "./ValidDockerFile");
 
@@ -52,8 +57,8 @@ class DockerComposeCommandTest {
     }
 
     @Test
-    void testDockerComposeCommand_Failure() {
-
+    @DisplayName("Test DockerComposeCommand failure scenario (Dockerfile not found)")
+    void testDockerComposeCommandFailureDockerfileNotFound() {
         ByteArrayOutputStream errContent = new ByteArrayOutputStream();
         PrintStream originalErr = System.err;
         System.setErr(new PrintStream(errContent));
@@ -68,5 +73,4 @@ class DockerComposeCommandTest {
         String errOutput = errContent.toString();
         assertTrue(errOutput.contains("Dockerfile not found: ./InvalidDockerFile"), "Expected Dockerfile not found detail not found in stderr.");
     }
-
 }
