@@ -114,18 +114,20 @@ public abstract class ShellInteractiveUtils {
     Function<T, String> display = formatter != null ? formatter : Object::toString;
     int selectedIndex = 0;
     int startIndex = 0;
-    int maxVisibleOptions = Math.min(options.size(), terminal.getHeight() - 5);
-
-    // Display the prompt and initial instructions
-    println(prompt);
-    println("(Use arrow keys ↑↓ to navigate, Enter to select, Ctrl+C to cancel)");
-    terminal.flush();
+    int maxVisibleOptions = options.size();
 
     boolean first = true;
 
     while (true) {
-      // Clear the previous display area
-      clearLines((first ? 0 : maxVisibleOptions + 2));
+      if (!first) {
+        // Clear the previous display area
+        clearLines(maxVisibleOptions * 2);
+      }
+
+      // Display the prompt and initial instructions
+      println(prompt);
+      println("(Use arrow keys ↑↓ to navigate, Enter to select, Ctrl+C to cancel)");
+
       first = false;
 
       // Render the currently visible options
@@ -139,12 +141,11 @@ public abstract class ShellInteractiveUtils {
         println();
         print("↓ more options below\r");
       }
-      terminal.flush();
 
       try {
-        int code = terminal.reader().read();
-        switch (code) {
-          case KeyMap.UP:
+        var key = KeyDetector.detectKey(terminal.reader());
+        switch (key) {
+          case KeyDetector.KeyType.UP:
             if (selectedIndex > 0) {
               selectedIndex--;
               if (selectedIndex < startIndex) {
@@ -152,7 +153,7 @@ public abstract class ShellInteractiveUtils {
               }
             }
             break;
-          case KeyMap.DOWN:
+          case KeyDetector.KeyType.DOWN:
             if (selectedIndex < options.size() - 1) {
               selectedIndex++;
               if (selectedIndex >= startIndex + maxVisibleOptions) {
@@ -160,14 +161,13 @@ public abstract class ShellInteractiveUtils {
               }
             }
             break;
-          case KeyMap.ENTER:
-          case KeyMap.ENTER_ALTERNATIVE:
-            clearLines(maxVisibleOptions + 3);
+          case KeyDetector.KeyType.ENTER:
+            clearLines(maxVisibleOptions * 2);
             println("Selected: " + display.apply(options.get(selectedIndex)));
             terminal.flush();
             return options.get(selectedIndex);
-          case KeyMap.CTRL_C:
-            clearLines(maxVisibleOptions + 3);
+          case KeyDetector.KeyType.CTRL_C:
+            clearLines(maxVisibleOptions * 2);
             println("Operation canceled");
             return null;
           default:
@@ -175,7 +175,7 @@ public abstract class ShellInteractiveUtils {
             break;
         }
       } catch (UserInterruptException | IOException e) {
-        clearLines(maxVisibleOptions + 3);
+        clearLines(maxVisibleOptions * 2);
         println("Operation canceled");
         return null;
       }

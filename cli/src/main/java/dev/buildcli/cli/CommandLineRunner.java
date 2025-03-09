@@ -15,10 +15,6 @@ public class CommandLineRunner {
   public static void main(String[] args) {
     LoggingConfig.configure();
 
-    var chose = ShellInteractiveUtils.multilineOption("Choose your country", List.of("USA", "Angola","Congo", "Canada"));
-
-    System.out.println(chose);
-
     if (BuildCLIService.shouldShowAsciiArt(args)) {
       BuildCLIService.welcome();
     }
