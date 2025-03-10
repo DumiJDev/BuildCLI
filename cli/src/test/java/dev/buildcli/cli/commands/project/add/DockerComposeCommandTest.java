@@ -17,18 +17,20 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 @DisplayName("DockerComposeCommand Tests")
 class DockerComposeCommandTest {
 
     private TestAppender testAppender;
     private final String validDockerFilePath = "./ValidDockerFile";
+    private final String invalidDockerFilePath = "./InvalidDockerFile";
+    private DockerComposeCommand command;
 
     @BeforeEach
     @DisplayName("Set up test environment")
     void setUp() throws IOException {
+        command = new DockerComposeCommand();
         testAppender = new TestAppender();
         testAppender.start();
         Logger logger = (Logger) LoggerFactory.getLogger(DockerComposeCommand.class);
@@ -47,7 +49,7 @@ class DockerComposeCommandTest {
     @Test
     @DisplayName("Test DockerComposeCommand success scenario")
     void testDockerComposeCommandSuccess() {
-        CommandLine cmd = new CommandLine(new DockerComposeCommand());
+        CommandLine cmd = new CommandLine(command);
         int exitCode = cmd.execute("--ports", "8080:8080", "--volumes", "./data:/app/data", "--cpu", "2", "--memory", "512m", "--dockerfile", "./ValidDockerFile");
 
         assertEquals(0, exitCode);
@@ -63,8 +65,8 @@ class DockerComposeCommandTest {
         PrintStream originalErr = System.err;
         System.setErr(new PrintStream(errContent));
 
-        CommandLine cmd = new CommandLine(new DockerComposeCommand());
-        int exitCode = cmd.execute("--ports", "8080:8080", "--volumes", "./data:/app/data", "--cpu", "2", "--memory", "512m", "--dockerfile", "./InvalidDockerFile");
+        CommandLine cmd = new CommandLine(command);
+        int exitCode = cmd.execute("--ports", "8080:8080", "--volumes", "./data:/app/data", "--cpu", "2", "--memory", "512m", "--dockerfile", invalidDockerFilePath);
 
         System.setErr(originalErr);
 
@@ -73,4 +75,19 @@ class DockerComposeCommandTest {
         String errOutput = errContent.toString();
         assertTrue(errOutput.contains("Dockerfile not found: ./InvalidDockerFile"), "Expected Dockerfile not found detail not found in stderr.");
     }
+
+    @Test
+    @DisplayName("Test run() failure scenario - catch block throws ExecutionException")
+    void testRunFailureException() {
+
+        command.setDockerFilePath(invalidDockerFilePath);
+
+        CommandLine.ExecutionException thrown = assertThrows(CommandLine.ExecutionException.class,
+                command::run,
+                "Expected run() to throw CommandLine.ExecutionException");
+
+        assertTrue(thrown.getMessage().contains("Failed to setup docker-compose:"),
+                "Exception message should contain 'Failed to setup docker-compose:'");
+    }
+
 }

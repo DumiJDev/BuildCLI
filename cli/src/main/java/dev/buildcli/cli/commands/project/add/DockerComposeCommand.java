@@ -41,6 +41,10 @@ public class DockerComposeCommand implements BuildCLICommand {
             description = "Path of DockerFile (default: ./DockerFile)")
     private String dockerFilePath;
 
+    public void setDockerFilePath(String dockerFilePath) {
+        this.dockerFilePath = dockerFilePath;
+    }
+
     @Override
     public void run() {
 
