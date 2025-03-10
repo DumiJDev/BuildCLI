@@ -87,7 +87,6 @@ public abstract class ShellInteractiveUtils {
 
       // Print error for invalid input
       println("Please enter '" + yes + "' or '" + no + "'");
-      terminal.flush();
     }
   }
 
@@ -164,7 +163,6 @@ public abstract class ShellInteractiveUtils {
           case KeyDetector.KeyType.ENTER:
             clearLines(maxVisibleOptions * 2);
             println("Selected: " + display.apply(options.get(selectedIndex)));
-            terminal.flush();
             return options.get(selectedIndex);
           case KeyDetector.KeyType.CTRL_C:
             clearLines(maxVisibleOptions * 2);
@@ -245,7 +243,6 @@ public abstract class ShellInteractiveUtils {
       } catch (UserInterruptException e) {
         // User pressed Ctrl+C
         println("Operation canceled");
-        terminal.flush();
         return null;
       }
 
@@ -257,7 +254,6 @@ public abstract class ShellInteractiveUtils {
       // Check if input is required but not provided
       if (input.isEmpty() && required) {
         println("Input is required. Please enter a value.");
-        terminal.flush();
         continue;
       }
 
