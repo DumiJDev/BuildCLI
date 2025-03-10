@@ -1,5 +1,7 @@
 package dev.buildcli.core.utils;
 
+import dev.buildcli.core.utils.formatter.Formatter;
+import dev.buildcli.core.utils.formatter.FormatterFactory;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.lib.Ref;
@@ -120,6 +122,7 @@ public class ChangelogManager {
     }
 
     protected static Optional<String> getLatestGitTag() throws IOException {
+
         try (Git git = Git.open(repositoryDir)) {
             List<Ref> taglist = git.tagList().call();
             if (!taglist.isEmpty()) {
@@ -134,135 +137,9 @@ public class ChangelogManager {
     }
 
     protected static String generateOutput(Map<String, Map<String, List<String>>> data, String format) {
-        return switch (format.toLowerCase()) {
-            case "html" -> generateHtml(data);
-            case "json" -> generateJson(data);
-            default -> generateMarkdown(data);
-        };
-    }
+        Formatter formatter = FormatterFactory.getFormatter(format.toLowerCase());
 
-    private static String generateMarkdown(Map<String, Map<String, List<String>>> data) {
-        var sb = new StringBuilder();
-        sb.append("""
-                    # Changelog
-        
-                    All notable changes to this project will be documented in this file.
-        
-                    The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-                    and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-        
-                    """);
-
-        data.forEach((version, sections) -> {
-            sb.append("## [%s] - %s%n%n" .formatted(version, LocalDate.now()));
-
-            ORDERED_SECTIONS.forEach(section -> {
-                var commits = sections.get(section);
-                if (commits != null && !commits.isEmpty()){
-                    sb.append("### %s%n" .formatted(section));
-                    commits.forEach(commitsMsg -> sb.append("- %s%n" .formatted(commitsMsg)));
-                    sb.append("\n");
-                }
-            });
-        });
-
-        return sb.toString();
-    }
-
-    private static String generateHtml(Map<String, Map<String, List<String>>> data) {
-        StringBuilder sb = new StringBuilder();
-
-        sb.append("""
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                        <meta charset="UTF-8">
-                        <title>Changelog</title>
-                    </head>
-                    <body>
-                        <h1>Changelog</h1>
-                        <p>All notable changes to this project will be documented in this file.<br>
-                        The format is based on <a href="https://keepachangelog.com/en/1.0.0/">Keep a Changelog</a>,<br>
-                        and this project adheres to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-                    """);
-
-        data.forEach((version, sectionMap) -> {
-            sb.append("<h2>[%s] - %s</h2>\n".formatted(version, LocalDate.now()));
-
-            ORDERED_SECTIONS.forEach(section -> {
-                var commits = sectionMap.get(section);
-                if (commits != null && !commits.isEmpty()) {
-                    sb.append("<h3>%s</h3>\n<ul>\n".formatted(section));
-                    commits.forEach(commitMsg -> sb.append("  <li>%s</li>\n".formatted(commitMsg)));
-                    sb.append("</ul>\n");
-                }
-            });
-        });
-
-        sb.append("""
-            </body>
-            </html>
-            """);
-
-        return sb.toString();
-    }
-
-    private static String generateJson(Map<String, Map<String, List<String>>> data) {
-        var sb = new StringBuilder();
-        sb.append("{\n");
-        sb.append("  \"changelog\": {\n");
-        sb.append("    \"description\": \"All notable changes to this project will be documented in this file." +
-                " The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.\",\n");
-        sb.append("    \"versions\": [\n");
-
-        var versions = data.entrySet().stream().toList();
-        for (int i = 0; i < versions.size(); i++) {
-            var entry = versions.get(i);
-            var version = entry.getKey();
-            var sections = entry.getValue();
-
-            sb.append("      {\n");
-            sb.append("        \"version\": \"").append(version).append("\",\n");
-            sb.append("        \"date\": \"").append(LocalDate.now()).append("\",\n");
-            sb.append("        \"sections\": {\n");
-
-            var nonEmptySections = ORDERED_SECTIONS.stream()
-                    .filter(section -> sections.containsKey(section) && !sections.get(section).isEmpty())
-                    .toList();
-
-            for (int j = 0; j < nonEmptySections.size(); j++) {
-                var section = nonEmptySections.get(j);
-                var commits = sections.get(section);
-
-                sb.append("          \"").append(section).append("\": [\n");
-                for (int k = 0; k < commits.size(); k++) {
-                    var commit = commits.get(k).replace("\"", "\\\"");
-                    sb.append("            \"").append(commit).append("\"");
-                    if (k < commits.size() - 1) {
-                        sb.append(",");
-                    }
-                    sb.append("\n");
-                }
-                sb.append("          ]");
-                if (j < nonEmptySections.size() - 1) {
-                    sb.append(",");
-                }
-                sb.append("\n");
-            }
-
-            sb.append("        }\n");
-            sb.append("      }");
-            if (i < versions.size() - 1) {
-                sb.append(",");
-            }
-            sb.append("\n");
-        }
-
-        sb.append("    ]\n");
-        sb.append("  }\n");
-        sb.append("}\n");
-
-        return sb.toString();
+        return formatter.generate(data);
     }
 
     protected static void writeToFile(String content, String outputFile) throws IOException {
