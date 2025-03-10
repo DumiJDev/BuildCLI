@@ -1,19 +1,17 @@
 package dev.buildcli.cli;
 
-import dev.buildcli.core.utils.input.ShellInteractiveUtils;
 import dev.buildcli.core.domain.configs.BuildCLIConfig;
-import dev.buildcli.plugin.CommandFactory;
 import dev.buildcli.core.log.config.LoggingConfig;
 import dev.buildcli.core.utils.BuildCLIService;
+import dev.buildcli.core.utils.input.InteractiveInputUtils;
 import dev.buildcli.plugin.BuildCLICommandPlugin;
+import dev.buildcli.plugin.CommandFactory;
 import dev.buildcli.plugin.PluginManager;
 import picocli.CommandLine;
-import picocli.CommandLine.Command;
 
 import java.util.List;
 
 public class CommandLineRunner {
-  private static CommandLine commandLine;
 
   public static void main(String[] args) {
     LoggingConfig.configure();
@@ -25,9 +23,11 @@ public class CommandLineRunner {
     var commandPlugins = PluginManager.getCommands();
 
     BuildCLIConfig.initialize();
-    commandLine = new CommandLine(new BuildCLI());
+    var commandLine = new CommandLine(new BuildCLI());
 
-    register(commandPlugins);
+    commandLine.addSubcommand(CommandLine.Model.CommandSpec.create().name("hello"));
+
+    register(commandLine, commandPlugins);
 
     int exitCode = commandLine.execute(args);
     BuildCLIService.checkUpdatesBuildCLIAndUpdate();
@@ -35,9 +35,18 @@ public class CommandLineRunner {
     System.exit(exitCode);
   }
 
-  private static void register(List<BuildCLICommandPlugin> plugins) {
+  private static void register(CommandLine commandLine, List<BuildCLICommandPlugin> plugins) {
+    var subcommands = commandLine.getSubcommands();
     for (BuildCLICommandPlugin commandPlugin : plugins) {
-      commandLine.addSubcommand(CommandFactory.createCommandLine(commandPlugin));
+      var command = CommandFactory.createCommandLine(commandPlugin);
+
+      if (subcommands.containsKey(command.getCommandName())) {
+        var confirm = InteractiveInputUtils.confirm("Do you want override the subcommand \"" + command.getCommandName() + "\"");
+        if (confirm) {
+          commandLine.getCommandSpec().removeSubcommand(command.getCommandName());
+          commandLine.addSubcommand(command);
+        }
+      }
     }
   }
 }

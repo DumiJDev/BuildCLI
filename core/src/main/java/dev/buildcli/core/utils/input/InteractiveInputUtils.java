@@ -12,12 +12,15 @@ import org.jline.utils.InfoCmp;
 import java.io.IOException;
 import java.util.List;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
-public abstract class ShellInteractiveUtils {
+import static java.util.List.of;
+
+public abstract class InteractiveInputUtils {
   private static final Terminal terminal;
   private static final LineReader reader;
 
-  private ShellInteractiveUtils() {}
+  private InteractiveInputUtils() {}
 
   static {
     try {
@@ -37,10 +40,14 @@ public abstract class ShellInteractiveUtils {
     }
   }
 
-  public static boolean confirm(String message, String yesOption, String noOption, Boolean defaultValue) {
+  public static boolean confirm(String message, List<String> yesOptions, List<String> noOptions, Boolean defaultValue) {
     // Set default options if not provided
-    String yes = yesOption != null ? yesOption : "yes";
-    String no = noOption != null ? noOption : "no";
+    var yes = yesOptions != null && !yesOptions.isEmpty() ? yesOptions : of("yes", "y");
+    var no = noOptions != null && !noOptions.isEmpty() ? noOptions : of("no", "n");
+
+    //Normalizing options
+    yes = yes.stream().map(String::toLowerCase).toList();
+    no = no.stream().map(String::toLowerCase).toList();
 
     // Create prompt text showing default value
     StringBuilder promptBuilder = new StringBuilder(message);
@@ -48,14 +55,14 @@ public abstract class ShellInteractiveUtils {
 
     if (defaultValue != null) {
       if (defaultValue) {
-        promptBuilder.append("[").append(yes).append("]");
-        promptBuilder.append("/").append(no);
+        promptBuilder.append("[").append(yes.getFirst()).append("]");
+        promptBuilder.append("/").append(no.getFirst());
       } else {
-        promptBuilder.append(yes);
-        promptBuilder.append("/[").append(no).append("]");
+        promptBuilder.append(yes.getFirst());
+        promptBuilder.append("/[").append(no.getFirst()).append("]");
       }
     } else {
-      promptBuilder.append(yes).append("/").append(no);
+      promptBuilder.append(yes.getFirst()).append("/").append(no.getFirst());
     }
 
     promptBuilder.append("): ");
@@ -76,22 +83,22 @@ public abstract class ShellInteractiveUtils {
       }
 
       // Check for yes match
-      if (input.equals(yes.toLowerCase()) || input.equals("y")) {
+      if (yes.contains(input)) {
         return true;
       }
 
       // Check for no match
-      if (input.equals(no.toLowerCase()) || input.equals("n")) {
+      if (no.contains(input)) {
         return false;
       }
 
       // Print error for invalid input
-      println("Please enter '" + yes + "' or '" + no + "'");
+      println("Please enter '" + yes.getFirst() + "' or '" + no.getFirst() + "'");
     }
   }
 
   public static boolean confirm(String message) {
-    return confirm(message, "yes", "no", null);
+    return confirm(message, of("yes","y"), of("no", "n"), null);
   }
 
   /**
