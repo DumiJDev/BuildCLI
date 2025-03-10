@@ -27,8 +27,6 @@ public class CommandLineRunner {
     BuildCLIConfig.initialize();
     var commandLine = new CommandLine(new BuildCLI());
 
-    commandLine.addSubcommand(CommandLine.Model.CommandSpec.create().name("hello"));
-
     register(commandLine, commandPlugins);
 
     int exitCode = commandLine.execute(args);
