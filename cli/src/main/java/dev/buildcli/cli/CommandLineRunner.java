@@ -13,6 +13,8 @@ import picocli.CommandLine.Command;
 import java.util.List;
 
 public class CommandLineRunner {
+  private static CommandLine commandLine;
+
   public static void main(String[] args) {
     LoggingConfig.configure();
 
@@ -23,15 +25,19 @@ public class CommandLineRunner {
     var commandPlugins = PluginManager.getCommands();
 
     BuildCLIConfig.initialize();
-    var commandLine = new CommandLine(new BuildCLI());
+    commandLine = new CommandLine(new BuildCLI());
 
-    for (BuildCLICommandPlugin commandPlugin : commandPlugins) {
-      commandLine.addSubcommand(CommandFactory.createCommandLine(commandPlugin));
-    }
+    register(commandPlugins);
 
     int exitCode = commandLine.execute(args);
     BuildCLIService.checkUpdatesBuildCLIAndUpdate();
 
     System.exit(exitCode);
+  }
+
+  private static void register(List<BuildCLICommandPlugin> plugins) {
+    for (BuildCLICommandPlugin commandPlugin : plugins) {
+      commandLine.addSubcommand(CommandFactory.createCommandLine(commandPlugin));
+    }
   }
 }
