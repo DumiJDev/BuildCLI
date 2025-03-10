@@ -12,7 +12,6 @@ import org.jline.utils.InfoCmp;
 import java.io.IOException;
 import java.util.List;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import static java.util.List.of;
 
@@ -111,7 +110,7 @@ public abstract class InteractiveInputUtils {
    * @return The selected option or {@code null} if the operation was canceled.
    * @throws IllegalArgumentException if the options list is null or empty.
    */
-  public static <T> T multilineOption(String prompt, List<T> options, Function<T, String> formatter) {
+  public static <T> T options(String prompt, List<T> options, Function<T, String> formatter) {
     if (options == null || options.isEmpty()) {
       throw new IllegalArgumentException("Options list cannot be empty");
     }
@@ -151,7 +150,7 @@ public abstract class InteractiveInputUtils {
       try {
         var key = KeyDetector.detectKey(terminal.reader());
         switch (key) {
-          case KeyDetector.KeyType.UP:
+          case UP:
             if (selectedIndex > 0) {
               selectedIndex--;
               if (selectedIndex < startIndex) {
@@ -159,7 +158,7 @@ public abstract class InteractiveInputUtils {
               }
             }
             break;
-          case KeyDetector.KeyType.DOWN:
+          case DOWN:
             if (selectedIndex < options.size() - 1) {
               selectedIndex++;
               if (selectedIndex >= startIndex + maxVisibleOptions) {
@@ -167,11 +166,11 @@ public abstract class InteractiveInputUtils {
               }
             }
             break;
-          case KeyDetector.KeyType.ENTER:
+          case ENTER:
             clearLines(maxVisibleOptions * 2);
             println("Selected: " + display.apply(options.get(selectedIndex)));
             return options.get(selectedIndex);
-          case KeyDetector.KeyType.CTRL_C:
+          case CTRL_C:
             clearLines(maxVisibleOptions * 2);
             println("Operation canceled");
             return null;
@@ -230,11 +229,11 @@ public abstract class InteractiveInputUtils {
   }
 
 
-  public static <T> T multilineOption(String prompt, List<T> options) {
-    return multilineOption(prompt, options, Object::toString);
+  public static <T> T options(String prompt, List<T> options) {
+    return options(prompt, options, Object::toString);
   }
 
-  public static String input(String prompt, String defaultValue, boolean required) {
+  public static String question(String prompt, String defaultValue, boolean required) {
     String effectivePrompt = prompt;
 
     if (defaultValue != null && !defaultValue.isEmpty()) {
@@ -269,8 +268,8 @@ public abstract class InteractiveInputUtils {
   }
 
 
-  public static String input(String prompt) {
-    return input(prompt, null, false);
+  public static String question(String prompt) {
+    return question(prompt, null, false);
   }
 
   private static void clearLines(int count) {
