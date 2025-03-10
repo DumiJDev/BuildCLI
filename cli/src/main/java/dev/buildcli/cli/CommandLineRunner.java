@@ -16,6 +16,8 @@ public class CommandLineRunner {
   public static void main(String[] args) {
     LoggingConfig.configure();
 
+    var chose = InteractiveInputUtils.options("Your country?", List.of("USA", "UK", "Brazil"));
+
     if (BuildCLIService.shouldShowAsciiArt(args)) {
       BuildCLIService.welcome();
     }

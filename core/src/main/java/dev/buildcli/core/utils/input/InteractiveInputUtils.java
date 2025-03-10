@@ -126,7 +126,7 @@ public abstract class InteractiveInputUtils {
     while (true) {
       if (!first) {
         // Clear the previous display area
-        clearLines(maxVisibleOptions * 2);
+        clearLines(maxVisibleOptions * 100);
       }
 
       // Display the prompt and initial instructions
@@ -167,11 +167,10 @@ public abstract class InteractiveInputUtils {
             }
             break;
           case ENTER:
-            clearLines(maxVisibleOptions * 2);
-            println("Selected: " + display.apply(options.get(selectedIndex)));
+            clearLines(maxVisibleOptions * 100);
             return options.get(selectedIndex);
           case CTRL_C:
-            clearLines(maxVisibleOptions * 2);
+            clearLines(maxVisibleOptions * 100);
             println("Operation canceled");
             return null;
           default:
@@ -179,7 +178,7 @@ public abstract class InteractiveInputUtils {
             break;
         }
       } catch (UserInterruptException | IOException e) {
-        clearLines(maxVisibleOptions * 2);
+        clearLines(maxVisibleOptions * 100);
         println("Operation canceled");
         return null;
       }
