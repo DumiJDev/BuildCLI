@@ -127,7 +127,7 @@ public class DockerManager {
         }
     }
 
-    public static void upContainer( boolean rebuild) throws DockerException {
+    public void upContainer( boolean rebuild) throws DockerException {
 
         if (isDockerEngineNotRunning()) {
             throw new DockerEngineNotRunningException("Docker Engine is not running. Please start Docker and try again.");
@@ -162,7 +162,7 @@ public class DockerManager {
         }
     }
 
-    private static boolean isDockerEngineNotRunning() {
+    public boolean isDockerEngineNotRunning() {
         try {
             int buildExitCode = createInfoProcess().run();
             return buildExitCode != 0;
@@ -171,7 +171,7 @@ public class DockerManager {
         }
     }
 
-    public static void downContainer(String containerName) throws DockerException {
+    public void downContainer(String containerName) throws DockerException {
 
         List<String> activeContainers = getActiveContainers();
 
@@ -196,7 +196,7 @@ public class DockerManager {
         }
     }
 
-    private static void shutDownContainer (String containerName) {
+    private void shutDownContainer (String containerName) {
         try {
             Process process = new ProcessBuilder("docker", "down", containerName).start();
             process.waitFor();
@@ -209,7 +209,7 @@ public class DockerManager {
         }
     }
 
-    private static List<String> getActiveContainers() {
+    public List<String> getActiveContainers() {
         List<String> containers = new ArrayList<>();
 
         try{
