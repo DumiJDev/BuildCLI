@@ -7,8 +7,7 @@ import picocli.CommandLine;
 import java.util.ArrayList;
 import java.util.List;
 
-import static dev.buildcli.hooks.HookPhase.AFTER;
-import static dev.buildcli.hooks.HookPhase.BEFORE;
+import static dev.buildcli.hooks.phase.HookPhase.*;
 
 public class HookExecutor {
     private static final Logger log = LoggerFactory.getLogger(HookExecutor.class);

@@ -1,5 +1,6 @@
 package dev.buildcli.hooks;
 
+import dev.buildcli.hooks.phase.HookPhase;
 import picocli.CommandLine;
 
 import java.util.HashSet;
