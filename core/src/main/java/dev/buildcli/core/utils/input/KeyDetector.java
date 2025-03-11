@@ -20,7 +20,7 @@ public class KeyDetector {
 
     // Check if it's the start of an escape sequence
     if (sequence[0] == 27) { // ESC
-      while (length < sequence.length && reader.peek(50) != -2) {
+      while (length < sequence.length && reader.peek(100) != -2) {
         sequence[length++] = reader.read();
       }
     }

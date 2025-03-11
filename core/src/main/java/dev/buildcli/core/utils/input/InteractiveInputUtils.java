@@ -27,6 +27,8 @@ public abstract class InteractiveInputUtils {
           .system(true)
           .build();
 
+      terminal.enterRawMode();
+
       reader = LineReaderBuilder.builder()
           .terminal(terminal)
           .option(LineReader.Option.AUTO_FRESH_LINE, true)
@@ -34,6 +36,7 @@ public abstract class InteractiveInputUtils {
           .option(LineReader.Option.DISABLE_EVENT_EXPANSION, true)
           .completer(new StringsCompleter(""))
           .build();
+
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
@@ -174,6 +177,7 @@ public abstract class InteractiveInputUtils {
             println("Operation canceled");
             return null;
           default:
+            System.out.println(key);
             // Ignore other keys
             break;
         }
