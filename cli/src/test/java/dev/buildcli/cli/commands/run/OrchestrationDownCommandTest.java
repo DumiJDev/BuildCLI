@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Logger;
 import dev.buildcli.cli.utilsForTest.TestAppender;
 import dev.buildcli.core.exceptions.DockerException;
 import dev.buildcli.core.utils.DockerManager;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,13 @@ class OrchestrationDownCommandTest {
         testAppender.start();
         Logger logger = (Logger) LoggerFactory.getLogger(OrchestrationDownCommand.class);
         logger.addAppender(testAppender);
+    }
+
+    @AfterEach
+    void tearDown() {
+        testAppender.stop();
+        Logger logger = (Logger) LoggerFactory.getLogger(DockerManager.class);
+        logger.detachAndStopAllAppenders();
     }
 
     @Test
