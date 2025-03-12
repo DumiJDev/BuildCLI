@@ -13,7 +13,6 @@ import java.lang.reflect.Type;
 import java.net.URISyntaxException;
 import java.nio.file.Paths;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.jar.JarFile;
 
@@ -61,7 +60,7 @@ public class HookLoader {
             }
         }
 
-        Type type = new TypeToken<List<Hook>>() {}.getType();
+        Type type = new TypeToken<Set<Hook>>() {}.getType();
         try (FileReader reader = new FileReader(file)) {
             Set<Hook> loadedHooks = gson.fromJson(reader, type);
             return loadedHooks != null ? loadedHooks : new HashSet<>();
