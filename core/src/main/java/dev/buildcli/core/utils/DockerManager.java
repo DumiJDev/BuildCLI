@@ -29,7 +29,7 @@ public class DockerManager {
         }
     }
 
-    private void createDockerfile() throws IOException {
+   protected void createDockerfile() throws IOException {
         File dockerfile = new File("Dockerfile");
         if (dockerfile.createNewFile()) {
             try (FileWriter writer = new FileWriter(dockerfile)) {
@@ -59,20 +59,20 @@ public class DockerManager {
     }
 
     private static void createDockerContent(DockerComposeConfig config) {
-        String contentContent = buildContent(config);
-        writeToFile(contentContent);
+        String contentCompose = buildContent(config);
+        writeToFile(contentCompose);
     }
 
-    private static void writeToFile(String contentContent) {
+    private static void writeToFile(String contentCompose) {
         try(FileWriter writer = new FileWriter("docker-compose.yml")) {
-            writer.write(contentContent);
+            writer.write(contentCompose);
         } catch (IOException e) {
             String errorMessage = "Failed to setup docker-compose.yml%s".formatted(e.getMessage());
             logger.error(errorMessage);
         }
     }
 
-    private static String buildContent(DockerComposeConfig config) {
+    protected static String buildContent(DockerComposeConfig config) {
         StringBuilder content = new StringBuilder();
 
         content.append("services:\n");
@@ -95,14 +95,14 @@ public class DockerManager {
         return content.toString();
     }
 
-    private static void appendPorts(StringBuilder content, List<String> ports) {
+    protected static void appendPorts(StringBuilder content, List<String> ports) {
         if (ports != null && !ports.isEmpty()) {
             content.append("    ports:\n");
             ports.forEach(port -> content.append("      - ").append(port).append("\n"));
         }
     }
 
-    private static void appendVolumes(StringBuilder content, List<String> volumes) {
+    protected static void appendVolumes(StringBuilder content, List<String> volumes) {
         if (volumes != null && !volumes.isEmpty()) {
             content.append("    volumes:\n");
             volumes.stream()
@@ -116,7 +116,7 @@ public class DockerManager {
         }
     }
 
-    private static void appendResourceLimits(StringBuilder content, String cpu, String memory) {
+    protected static void appendResourceLimits(StringBuilder content, String cpu, String memory) {
         if (cpu != null) {
             // Convert CPUs to cpu_shares (1 CPU = 1024 shares)
             int cpuShares = (int) (Double.parseDouble(cpu) * 1024);
