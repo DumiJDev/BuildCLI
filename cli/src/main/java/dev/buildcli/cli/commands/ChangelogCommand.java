@@ -1,9 +1,11 @@
 package dev.buildcli.cli.commands;
 
 import dev.buildcli.core.domain.BuildCLICommand;
-import dev.buildcli.core.utils.ChangelogManager;
+import dev.buildcli.core.actions.changelog.ChangelogManager;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
+import picocli.CommandLine.Spec;
+import picocli.CommandLine.Model.CommandSpec;
 
 import java.util.*;
 
@@ -44,9 +46,15 @@ public class ChangelogCommand implements BuildCLICommand {
     )
     private List<String> includeTypes = new ArrayList<>();
 
+    private String repositoryDir = ".";
+
+    @Spec
+    private CommandSpec spec;
+
     @Override
     public void run() {
-        ChangelogManager.generateChangelog(version, outputFile, format, includeTypes);
+        ChangelogManager changelogManager = new ChangelogManager(spec, repositoryDir);
+        changelogManager.generateChangelog(version, outputFile, format, includeTypes);
     }
 
 
