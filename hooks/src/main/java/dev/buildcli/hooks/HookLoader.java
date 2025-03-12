@@ -12,8 +12,9 @@ import java.io.IOException;
 import java.lang.reflect.Type;
 import java.net.URISyntaxException;
 import java.nio.file.Paths;
-import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.jar.JarFile;
 
 public class HookLoader {
@@ -45,7 +46,7 @@ public class HookLoader {
         return null;
     }
 
-    public List<Hook> loadHooks() {
+    public Set<Hook> loadHooks() {
         log.debug("Loading hooks from JSON file: {}", hooksFilePath);
         File file = new File(hooksFilePath);
         if (!file.exists()) {
@@ -62,15 +63,15 @@ public class HookLoader {
 
         Type type = new TypeToken<List<Hook>>() {}.getType();
         try (FileReader reader = new FileReader(file)) {
-            List<Hook> loadedHooks = gson.fromJson(reader, type);
-            return loadedHooks != null ? loadedHooks : new ArrayList<>();
+            Set<Hook> loadedHooks = gson.fromJson(reader, type);
+            return loadedHooks != null ? loadedHooks : new HashSet<>();
         } catch (IOException e) {
             log.warn("Error loading hooks: \n{}", e.getMessage());
-            return new ArrayList<>();
+            return new HashSet<>();
         }
     }
 
-    public void saveHooks(List<Hook> hooks) {
+    public void saveHooks(Set<Hook> hooks) {
         log.info("Saving hook to JSON file: {}", hooksFilePath);
         File file = new File(hooksFilePath);
         File parent = file.getParentFile();

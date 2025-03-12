@@ -5,12 +5,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 public class HookManager {
     private static final Logger log = LoggerFactory.getLogger(HookManager.class);
-    private final List<Hook> hooks = new ArrayList<>();
+    private final Set<Hook> hooks = new HashSet<>();
     private final HookLoader hookLoader;
     private final HookValidator hookValidator;
     private final HookExecutor hookExecutor;
@@ -32,6 +32,11 @@ public class HookManager {
             log.error("Invalid phase: {}", hook.phase());
             throw new IllegalArgumentException("Unknown phase: " + hook.phase());
         }
+        if (hookValidator.isHookAlreadyRegistered(hooks, hook)) {
+            log.error("Hook already registered: {}", hook);
+            throw new IllegalArgumentException("Hook already registered: " + hook);
+        }
+
         hooks.add(hook);
         hookLoader.saveHooks(hooks);
 

@@ -47,4 +47,8 @@ public class HookValidator {
             return false;
         }
     }
+
+    public boolean isHookAlreadyRegistered(Set<Hook> hooks, Hook hook) {
+        return hooks.stream().anyMatch(h -> h.command().equals(hook.command()) && h.phase() == hook.phase());
+    }
 }

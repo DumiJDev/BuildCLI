@@ -6,14 +6,15 @@ import picocli.CommandLine;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import static dev.buildcli.hooks.phase.HookPhase.*;
 
 public class HookExecutor {
     private static final Logger log = LoggerFactory.getLogger(HookExecutor.class);
-    private final List<Hook> hooks;
+    private final Set<Hook> hooks;
 
-    public HookExecutor(List<Hook> hooks) {
+    public HookExecutor(Set<Hook> hooks) {
         this.hooks = hooks;
     }
 

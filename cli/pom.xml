@@ -43,7 +43,7 @@
 		<dependency>
 			<groupId>dev.buildcli</groupId>
 			<artifactId>buildcli-hooks</artifactId>
-			<version>0.14.0</version>
+			<version>${project.version}</version>
 		</dependency>
 	</dependencies>
 
