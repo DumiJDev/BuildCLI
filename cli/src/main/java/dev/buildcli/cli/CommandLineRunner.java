@@ -7,6 +7,7 @@ import dev.buildcli.core.utils.input.InteractiveInputUtils;
 import dev.buildcli.plugin.BuildCLICommandPlugin;
 import dev.buildcli.plugin.CommandFactory;
 import dev.buildcli.plugin.PluginManager;
+import dev.buildcli.hooks.HookManager;
 import picocli.CommandLine;
 
 import java.util.List;
@@ -27,10 +28,13 @@ public class CommandLineRunner {
 
     register(commandLine, commandPlugins);
 
-    int exitCode = commandLine.execute(args);
+    HookManager hook = new HookManager(commandLine);
+
+    hook.executeHook(args, commandLine);
+
     BuildCLIService.checkUpdatesBuildCLIAndUpdate();
 
-    System.exit(exitCode);
+    System.exit(0);
   }
 
   private static void register(CommandLine commandLine, List<BuildCLICommandPlugin> plugins) {
