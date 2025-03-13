@@ -2,6 +2,7 @@ package dev.buildcli.core.actions.commandline;
 
 import dev.buildcli.core.constants.GradleConstants;
 
+import java.io.File;
 import java.util.Arrays;
 
 public class GradleProcess extends AbstractCommandLineProcess {
@@ -15,12 +16,12 @@ public class GradleProcess extends AbstractCommandLineProcess {
     return processor;
   }
 
-  public static GradleProcess createPackageProcessor() {
-    return createProcessor("clean", "build");
+  public static GradleProcess createPackageProcessor(File directory) {
+    return createProcessor("clean", "build", "-f", directory.getAbsolutePath());
   }
 
-  public static GradleProcess createCompileProcessor() {
-    return createProcessor("clean", "classes");
+  public static GradleProcess createCompileProcessor(File directory) {
+    return createProcessor("clean", "classes", "-f", directory.getAbsolutePath());
   }
 
   public static GradleProcess createGetVersionProcess() {

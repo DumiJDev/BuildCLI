@@ -2,6 +2,7 @@ package dev.buildcli.core.actions.commandline;
 
 import dev.buildcli.core.constants.MavenConstants;
 
+import java.io.File;
 import java.util.Arrays;
 
 public class MavenProcess extends AbstractCommandLineProcess {
@@ -15,12 +16,12 @@ public class MavenProcess extends AbstractCommandLineProcess {
     return processor;
   }
 
-  public static MavenProcess createPackageProcessor() {
-    return createProcessor("clean", "package");
+  public static MavenProcess createPackageProcessor(File directory) {
+    return createProcessor("clean", "package", "-f", directory.getAbsolutePath());
   }
 
-  public static MavenProcess createCompileProcessor() {
-    return createProcessor("clean", "compile");
+  public static MavenProcess createCompileProcessor(File directory) {
+    return createProcessor("clean", "compile", "-f", directory.getAbsolutePath());
   }
 
   public static MavenProcess createGetVersionProcessor() {
