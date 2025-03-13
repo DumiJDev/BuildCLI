@@ -117,9 +117,7 @@ class DockerManagerTest {
         DockerComposeConfig configMock = mock(DockerComposeConfig.class);
         when(configMock.dockerFilePath()).thenReturn("non_existent_Dockerfile");
 
-        DockerException exception = assertThrows(DockerfileNotFoundException.class, () -> {
-            DockerManager.setupDockerCompose(configMock);
-        });
+        DockerException exception = assertThrows(DockerfileNotFoundException.class, () -> DockerManager.setupDockerCompose(configMock));
 
         assertTrue(exception.getMessage().contains("Dockerfile not found:"), "Expected exception message not found");
     }
@@ -229,9 +227,7 @@ class DockerManagerTest {
         when(dockerManager.isDockerEngineNotRunning()).thenReturn(false);
         when(dockerManager.getActiveContainers()).thenReturn(List.of(new String[0]));
 
-        DockerException exception = assertThrows(DockerException.NoRunningContainersException.class, () -> {
-            dockerManager.downContainer("container1");
-        });
+        DockerException exception = assertThrows(DockerException.NoRunningContainersException.class, () -> dockerManager.downContainer("container1"));
 
         assertTrue(exception.getMessage().contains("No containers are currently running."), "Expected exception message to contain 'No containers are currently running.'");
     }
@@ -242,9 +238,7 @@ class DockerManagerTest {
         dockerManager = spy(dockerManager);
         when(dockerManager.isDockerEngineNotRunning()).thenReturn(false);
 
-        DockerException exception = assertThrows(DockerException.NoRunningContainersException.class, () -> {
-            dockerManager.downContainer("container1");
-        });
+        DockerException exception = assertThrows(DockerException.NoRunningContainersException.class, () -> dockerManager.downContainer("container1"));
 
         assertTrue(exception.getMessage().contains("No containers are currently running."), "Expected exception message to contain 'No containers are currently running.'");
     }
@@ -257,9 +251,7 @@ class DockerManagerTest {
         when(dockerManager.isDockerEngineNotRunning()).thenReturn(false);
         when(dockerManager.getActiveContainers()).thenReturn(List.of("container1"));
 
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
-            dockerManager.downContainer("container2");
-        });
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> dockerManager.downContainer("container2"));
 
         assertTrue(exception.getMessage().contains("The specified container '" + "container2" + "' is not running." ));
     }
