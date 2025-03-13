@@ -248,7 +248,7 @@ Below, you'll find a Quick Start Guide and usage examples for the new feature.
 
 ### Quick Start Guide
 
-#### 1. Generate a Docker Compose file for your project:
+### 1. Generate a Docker Compose file for your project:
 
 ```bash
 buildcli project add dockerCompose
@@ -262,11 +262,11 @@ This command creates a docker-compose.yml file with a primary service for your j
 image built from the enhanced Dockerfile.
 
 
-#### 2. Customize Essential Parameters:
+### 2. Customize Essential Parameters:
 
 You can customize ports, volumes, and resource limits (CPU and memory) using CLI flag. For example:
 
-### Options:
+#### Options:
 
 - `--ports, -p <ports>:`
   Specify the ports to expose for the container. Format: `<host_port>:<container_port>`.
@@ -283,7 +283,7 @@ You can customize ports, volumes, and resource limits (CPU and memory) using CLI
 - `--dockerfile, -d <dockerfile_path>:`
 - Specify the path to the Dockerfile for the container.
 
-### Example Command
+#### Example Command
 
 ```bash
 buildcli project add dockerCompose --ports 8080:8080 --volumes /data:/app/data --cpu 2 --memory 512m --dockerfile /path/to/Dockerfile
@@ -333,7 +333,7 @@ buildcli run oc down
 ```
 
 
-#### 5. Stop a specific container:
+### 5. Stop a specific container:
 
 To stop a specific container, use the following command:
 
@@ -345,7 +345,6 @@ or
 ```bash
 buildcli oc down -n <container_name>
 ```
-
 
 ---
 
