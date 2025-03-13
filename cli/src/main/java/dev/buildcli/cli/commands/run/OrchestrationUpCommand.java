@@ -22,6 +22,10 @@ public class OrchestrationUpCommand implements BuildCLICommand {
         this.dockerManager = dockerManager;
     }
 
+    public OrchestrationUpCommand() {
+        this.dockerManager = new DockerManager();
+    }
+
     @Override
     public void run() {
         try {

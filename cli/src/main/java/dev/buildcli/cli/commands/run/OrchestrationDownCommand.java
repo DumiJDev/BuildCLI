@@ -23,6 +23,10 @@ public class OrchestrationDownCommand implements BuildCLICommand {
         this.dockerManager = dockerManager;
     }
 
+    public OrchestrationDownCommand() {
+        this.dockerManager = new DockerManager();
+    }
+
     public void setContainerName(String containerName) {
         this.containerName = containerName;
     }
