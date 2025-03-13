@@ -1,13 +1,15 @@
 package dev.buildcli.cli.commands.project.add;
 
-import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
-import dev.buildcli.cli.utilsForTest.TestAppender;
-import org.junit.jupiter.api.AfterEach;
+import dev.buildcli.cli.utilsForTest.LogbackExtension;
+import dev.buildcli.cli.utilsForTest.LogbackLogger;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.slf4j.LoggerFactory;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.junit.jupiter.MockitoExtension;
 import picocli.CommandLine;
 
 import java.io.ByteArrayOutputStream;
@@ -20,41 +22,38 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 @DisplayName("DockerComposeCommand Tests")
+@LogbackLogger(DockerComposeCommand.class)
+@ExtendWith({MockitoExtension.class, LogbackExtension.class})
 class DockerComposeCommandTest {
 
-    private TestAppender testAppender;
-    private final String validDockerFilePath = "./ValidDockerFile";
-    private final String invalidDockerFilePath = "./InvalidDockerFile";
+    private static final String VALID_DOCKER_FILE = "./ValidDockerFile";
+    private static final String INVALID_DOCKER_FILE = "./InvalidDockerFile";
+    private static final String DOCKER_COMPOSE_FILE = "./docker-compose.yml";
+
+    @InjectMocks
     private DockerComposeCommand command;
 
     @BeforeEach
     @DisplayName("Set up test environment")
     void setUp() throws IOException {
-        command = new DockerComposeCommand();
-        testAppender = new TestAppender();
-        testAppender.start();
-        Logger logger = (Logger) LoggerFactory.getLogger(DockerComposeCommand.class);
-        logger.addAppender(testAppender);
-
-        Files.write(Paths.get(validDockerFilePath), "FROM alpine".getBytes());
+        Files.write(Paths.get(VALID_DOCKER_FILE), "FROM alpine".getBytes());
     }
 
-    @AfterEach
-    @DisplayName("Tear down test environment")
-    void tearDown() throws IOException {
-        Files.deleteIfExists(Paths.get(validDockerFilePath));
-        testAppender.stop();
+    @AfterAll
+    @DisplayName("Clean up Dockerfile and docker-compose.yml")
+    static void afterAll() throws IOException {
+        Files.deleteIfExists(Paths.get(VALID_DOCKER_FILE));
+        Files.deleteIfExists(Paths.get(DOCKER_COMPOSE_FILE));
     }
 
     @Test
     @DisplayName("Test DockerComposeCommand success scenario")
-    void testDockerComposeCommandSuccess() {
+    void testDockerComposeCommandSuccess(List<ILoggingEvent> logs) {
         CommandLine cmd = new CommandLine(command);
-        int exitCode = cmd.execute("--ports", "8080:8080", "--volumes", "./data:/app/data", "--cpu", "2", "--memory", "512m", "--dockerfile", "./ValidDockerFile");
+        int exitCode = cmd.execute("--ports", "8080:8080", "--volumes", "./data:/app/data", "--cpu", "2", "--memory", "512m", "--dockerfile", VALID_DOCKER_FILE);
 
         assertEquals(0, exitCode);
 
-        List<ILoggingEvent> logs = testAppender.list;
         assertTrue(logs.stream().anyMatch(event -> event.getFormattedMessage().equals("docker-compose.yml created successfully!")));
     }
 
@@ -66,7 +65,7 @@ class DockerComposeCommandTest {
         System.setErr(new PrintStream(errContent));
 
         CommandLine cmd = new CommandLine(command);
-        int exitCode = cmd.execute("--ports", "8080:8080", "--volumes", "./data:/app/data", "--cpu", "2", "--memory", "512m", "--dockerfile", invalidDockerFilePath);
+        int exitCode = cmd.execute("--ports", "8080:8080", "--volumes", "./data:/app/data", "--cpu", "2", "--memory", "512m", "--dockerfile", INVALID_DOCKER_FILE);
 
         System.setErr(originalErr);
 
@@ -80,7 +79,7 @@ class DockerComposeCommandTest {
     @DisplayName("Test run() failure scenario - catch block throws ExecutionException")
     void testRunFailureException() {
 
-        command.setDockerFilePath(invalidDockerFilePath);
+        command.setDockerFilePath(INVALID_DOCKER_FILE);
 
         CommandLine.ExecutionException thrown = assertThrows(CommandLine.ExecutionException.class,
                 command::run,

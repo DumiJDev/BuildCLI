@@ -1,19 +1,19 @@
 package dev.buildcli.cli.commands.run;
 
-import ch.qos.logback.classic.Logger;
-import dev.buildcli.cli.utilsForTest.TestAppender;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import dev.buildcli.cli.utilsForTest.LogbackExtension;
+import dev.buildcli.cli.utilsForTest.LogbackLogger;
 import dev.buildcli.core.exceptions.DockerException;
 import dev.buildcli.core.utils.DockerManager;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -21,10 +21,9 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
 @DisplayName("OrchestrationUpCommand Tests")
-@ExtendWith(MockitoExtension.class)
+@LogbackLogger(OrchestrationUpCommand.class)
+@ExtendWith({MockitoExtension.class, LogbackExtension.class})
 class OrchestrationUpCommandTest {
-
-    private TestAppender testAppender;
 
     @Mock
     private DockerManager dockerManagerMock;
@@ -32,42 +31,27 @@ class OrchestrationUpCommandTest {
     @InjectMocks
     private OrchestrationUpCommand command;
 
-    @BeforeEach
-    void setUp() {
-        testAppender = new TestAppender();
-        testAppender.start();
-        Logger logger = (Logger) LoggerFactory.getLogger(OrchestrationUpCommand.class);
-        logger.addAppender(testAppender);
-    }
-
-    @AfterEach
-    void tearDown() {
-        testAppender.stop();
-        Logger logger = (Logger) LoggerFactory.getLogger(DockerManager.class);
-        logger.detachAndStopAllAppenders();
-    }
-
     @Test
     @DisplayName("Test run() success - Start all containers")
-    void testRunSuccessStartAllContainers() throws DockerException {
+    void testRunSuccessStartAllContainers(List<ILoggingEvent> logs) throws DockerException {
 
         command.run();
         verify(dockerManagerMock).upContainer(false);
-        assertTrue(testAppender.list
+        assertTrue(logs
                 .stream()
                 .anyMatch(event -> event.getFormattedMessage().equals("All containers have been successfully started.")));
     }
 
     @Test
     @DisplayName("Test run() success - Start all containers with rebuild")
-    void testRunSuccessStartAllContainersWithRebuild() throws DockerException {
+    void testRunSuccessStartAllContainersWithRebuild(List<ILoggingEvent> logs) throws DockerException {
 
         CommandLine cmd = new CommandLine(command);
         int exitCode = cmd.execute("--build");
 
         assertEquals(0, exitCode);
         verify(dockerManagerMock).upContainer(true);
-        assertTrue(testAppender.list
+        assertTrue(logs
                 .stream()
                 .anyMatch(event -> event.getFormattedMessage().equals("All containers have been successfully started.")));
     }
