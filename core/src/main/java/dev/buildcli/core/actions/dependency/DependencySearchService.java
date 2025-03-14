@@ -13,6 +13,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.stream.StreamSupport;
 
+import static dev.buildcli.core.utils.input.InteractiveInputUtils.options;
+
 public class DependencySearchService {
 
     Dependency dependency;
@@ -40,6 +42,10 @@ public class DependencySearchService {
         } catch (IOException | InterruptedException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public String promptOptionsToAdd(List<String> dependencies){
+        return options("Which dependency do you wanna add?",dependencies);
     }
 
     public List<String> sendSearchRequest(String dependencyName) {
