@@ -21,15 +21,16 @@ import java.util.logging.Logger;
 public class DockerfileCommand implements BuildCLICommand {
   private Logger logger = Logger.getLogger(DockerfileCommand.class.getName());
 
-  @Option(names = {"--name", "-n"}, description = "", defaultValue = "Dockerfile")
+  @Option(names = {"--name", "-n"}, description = "Name of the file to write docker build instructions.", defaultValue = "Dockerfile")
   private String name;
-  @Option(names = {"--from", "-f"}, description = "", defaultValue = "openjdk:17-jdk-slim")
+  @Option(names = {"--from", "-f"}, description = "Specifies the base image for the docker build.", defaultValue = "openjdk:17-jdk-slim")
   private String fromImage;
-  @Option(names = {"--port", "-p"}, description = "", defaultValue = "8080", split = ",")
+  @Option(names = {"--port", "-p"}, description = "Specifies the port used to run the docker application", defaultValue = "8080", split = ",")
   private List<Integer> ports;
-  @Option(names = {"--env", "-e"}, description = "", defaultValue = "")
+  @Option(names = {"--env", "-e"}, description = "Environment variables for docker build and runtime usage. "
+         + "Multiple variables can be passed as key=value pairs separated by ';'", defaultValue = "")
   private String envVariable;
-  @Option(names = {"--force"}, description = "", defaultValue = "false")
+  @Option(names = {"--force"}, description = "Use to overwrite existing dockerfile specified by name option.", defaultValue = "false")
   private Boolean force;
 
   @Override
