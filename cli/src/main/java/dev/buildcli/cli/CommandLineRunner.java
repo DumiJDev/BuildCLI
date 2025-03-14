@@ -3,11 +3,9 @@ package dev.buildcli.cli;
 import dev.buildcli.core.domain.configs.BuildCLIConfig;
 import dev.buildcli.core.log.config.LoggingConfig;
 import dev.buildcli.core.utils.BuildCLIService;
-import dev.buildcli.plugin.BuildCLICommandPlugin;
+import dev.buildcli.hooks.HookManager;
 import dev.buildcli.plugin.utils.PluginManager;
 import picocli.CommandLine;
-
-import java.util.List;
 
 public class CommandLineRunner {
 
@@ -23,9 +21,12 @@ public class CommandLineRunner {
 
     PluginManager.registerPlugins(commandLine);
 
-    int exitCode = commandLine.execute(args);
+    HookManager hook = new HookManager(commandLine);
+
+    hook.executeHook(args, commandLine);
+
     BuildCLIService.checkUpdatesBuildCLIAndUpdate();
 
-    System.exit(exitCode);
+    System.exit(0);
   }
 }
