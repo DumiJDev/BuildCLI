@@ -2,6 +2,7 @@ package dev.buildcli.cli.commands;
 
 import dev.buildcli.cli.commands.plugin.AddCommand;
 import dev.buildcli.cli.commands.plugin.InitCommand;
+import dev.buildcli.cli.commands.plugin.RmCommand;
 import picocli.CommandLine.Command;
 
 @Command(name = "plugin", aliases = {"plg"}, description = "", mixinStandardHelpOptions = true,

@@ -77,7 +77,7 @@ public class RunCommand implements BuildCLICommand {
     System.out.println("Active Profile: " + activeProfile);
     System.out.println(profileMessage);
 
-    MavenProcess.createPackageProcessor().run();
+    MavenProcess.createPackageProcessor(file).run();
     var jarPath = findJar();
 
     return JavaProcess.createRunJarProcess(jarPath);

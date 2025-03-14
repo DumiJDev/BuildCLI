@@ -78,6 +78,8 @@ public final class PluginManager {
           commandLine.getCommandSpec().removeSubcommand(commandName);
           commandLine.addSubcommand(command);
         }
+      } else {
+        commandLine.addSubcommand(command);
       }
     }
   }

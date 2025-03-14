@@ -9,10 +9,7 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
 import java.io.File;
-import java.util.Optional;
 import java.util.logging.Logger;
-
-import static java.util.Optional.ofNullable;
 
 @Command(name = "build", aliases = {"b"}, description = "Builds the project, either compiling or packaging, and logs the result.", mixinStandardHelpOptions = true)
 public class BuildCommand implements BuildCLICommand {
@@ -21,13 +18,13 @@ public class BuildCommand implements BuildCLICommand {
   @Option(names = {"--compileOnly", "--compile", "-c"}, description = "Indicator to only compile project, e.g, mvn clean compile", defaultValue = "false")
   private boolean compileOnly;
 
-  @Option(names = {"--path", "-p"}, description = "Path to project")
+  @Option(names = {"--path", "-p"}, description = "Path to project", defaultValue = ".")
   private File path;
 
-  private final String projectBuild = ToolChecks.checkIsMavenOrGradle(ofNullable(path).orElse(new File(".")));
 
   @Override
   public void run() {
+    final var projectBuild = ToolChecks.checkIsMavenOrGradle(path);
 
     if (projectBuild.equals("Neither")) {
       logger.severe("Neither Maven nor Gradle project detected. Please ensure one of these build files (pom.xml or build.gradle) exists.");

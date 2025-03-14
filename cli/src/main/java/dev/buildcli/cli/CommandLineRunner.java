@@ -18,7 +18,6 @@ public class CommandLineRunner {
       BuildCLIService.welcome();
     }
 
-
     BuildCLIConfig.initialize();
     var commandLine = new CommandLine(new BuildCLI());
 
@@ -28,9 +27,5 @@ public class CommandLineRunner {
     BuildCLIService.checkUpdatesBuildCLIAndUpdate();
 
     System.exit(exitCode);
-  }
-
-  private static void register(CommandLine commandLine, List<BuildCLICommandPlugin> plugins) {
-
   }
 }
