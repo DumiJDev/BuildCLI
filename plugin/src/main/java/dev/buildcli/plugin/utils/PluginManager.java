@@ -3,7 +3,6 @@ package dev.buildcli.plugin.utils;
 import dev.buildcli.core.domain.jar.Jar;
 import dev.buildcli.core.utils.config.ConfigContextLoader;
 import dev.buildcli.core.utils.filesystem.FindFilesUtils;
-import dev.buildcli.core.utils.input.InteractiveInputUtils;
 import dev.buildcli.plugin.BuildCLICommandPlugin;
 import dev.buildcli.plugin.BuildCLIPlugin;
 import dev.buildcli.plugin.factories.CommandFactory;
@@ -16,6 +15,7 @@ import java.util.function.Predicate;
 
 import static dev.buildcli.core.constants.ConfigDefaultConstants.PLUGIN_PATHS;
 import static dev.buildcli.core.utils.BeautifyShell.blueFg;
+import static dev.buildcli.core.utils.input.InteractiveInputUtils.confirm;
 
 public final class PluginManager {
   private static final Map<Class<? extends BuildCLIPlugin>, List<? extends BuildCLIPlugin>> PLUGINS = new HashMap<>();
@@ -73,7 +73,7 @@ public final class PluginManager {
 
       var commandName = command.getCommandName();
       if (subcommands.containsKey(commandName)) {
-        var confirm = InteractiveInputUtils.confirm("Do you want override the subcommand \"%s\"".formatted(blueFg(commandName)));
+        var confirm = confirm("Do you want override the subcommand \"%s\"".formatted(blueFg(commandName)));
         if (confirm) {
           commandLine.getCommandSpec().removeSubcommand(commandName);
           commandLine.addSubcommand(command);

@@ -35,7 +35,7 @@ public class AddCommand implements BuildCLICommand {
   private static final Logger logger = LoggerFactory.getLogger("AddPluginCommand");
   private static final String PLUGINS_DIR = Path.of(System.getProperty("user.home"), ".buildcli", "plugins").toString();
 
-  @Option(names = {"--file", "-f"})
+  @Option(names = {"--file", "-f"}, description = "File can b, a project or jar locally or remote")
   private String file;
 
   private final BuildCLIConfig globalConfig = ConfigContextLoader.getAllConfigs();

@@ -22,6 +22,6 @@ public final class ProjectUtils {
   }
 
   private static boolean containsProjectFiles(File file) {
-    return List.of("pom.xml", "build.gradle").contains(file.getName());
+    return List.of("pom.xml", "build.gradle", "build.gradle.kts").contains(file.getName());
   }
 }
