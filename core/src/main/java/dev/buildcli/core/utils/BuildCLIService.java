@@ -4,7 +4,6 @@ import dev.buildcli.core.actions.commandline.CommandLineProcess;
 import dev.buildcli.core.actions.commandline.MavenProcess;
 import dev.buildcli.core.domain.git.GitCommandExecutor;
 import dev.buildcli.core.log.SystemOutLogger;
-import dev.buildcli.core.utils.tools.CLIInteractions;
 
 import java.io.File;
 import java.io.InputStream;
@@ -13,6 +12,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.jar.Attributes;
 import java.util.jar.Manifest;
+
+import static dev.buildcli.core.utils.input.InteractiveInputUtils.confirm;
 
 /*
 *
@@ -55,9 +56,9 @@ public class BuildCLIService {
     }
 
     Map<String, List<String>> commandAliases = Map.of(
-            "p", List.of("p", "project"),
-            "about", List.of("a", "about"),
-            "help", List.of("help", "h")
+        "p", List.of("p", "project"),
+        "about", List.of("a", "about"),
+        "help", List.of("help", "h")
     );
 
     String mainCommand = args[0];
@@ -108,7 +109,7 @@ public class BuildCLIService {
   }
 
   private static boolean updateRepository() {
-    if (CLIInteractions.getConfirmation("update BuildCLI")) {
+    if (confirm("update BuildCLI?")) {
       gitExec.updateLocalRepositoryFromUpstream(localRepository, "https://github.com/BuildCLI/BuildCLI.git");
       return true;
     }
