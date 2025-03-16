@@ -19,6 +19,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -138,7 +139,7 @@ public class AddCommand implements BuildCLICommand {
     Files.createDirectories(destPath.getParent());
     if (jar.getFile().exists()) {
       if (confirm("Do you want to overwrite existing plugin file?")) {
-        Files.copy(jar.getFile().toPath(), destPath);
+        Files.copy(jar.getFile().toPath(), destPath, StandardCopyOption.REPLACE_EXISTING);
       }
     } else {
       Files.copy(jar.getFile().toPath(), destPath);
