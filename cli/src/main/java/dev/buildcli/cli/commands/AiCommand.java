@@ -11,7 +11,7 @@ public class AiCommand {
   @Option(names = {"--model", "-m"}, description = "LLM model. If absent, properties file will be used.")
   private String model;
 
-  @Option(names = {"--vendor", "-V"}, description = "LLM vendor. If absent, properties file will be used.")
+  @Option(names = {"--vendor", "-v"}, description = "LLM vendor. If absent, properties file will be used.")
   private String vendor;
 
   @Option(names = {"--host", "-H"}, description = "LLM host. If absent, properties file will be used.")
