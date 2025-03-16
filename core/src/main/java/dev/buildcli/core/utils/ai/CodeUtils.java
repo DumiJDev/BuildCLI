@@ -1,4 +1,4 @@
-package dev.buildcli.core.utils.ia;
+package dev.buildcli.core.utils.ai;
 
 public abstract class CodeUtils {
   public static int endCode(String content) {
