@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import static dev.buildcli.core.utils.input.InteractiveInputUtils.confirm;
 import static dev.buildcli.core.utils.input.InteractiveInputUtils.question;
 
 @Command(
@@ -34,11 +35,9 @@ import static dev.buildcli.core.utils.input.InteractiveInputUtils.question;
 public class AddCommand implements BuildCLICommand {
   private static final Logger logger = LoggerFactory.getLogger("AddPluginCommand");
   private static final String PLUGINS_DIR = Path.of(System.getProperty("user.home"), ".buildcli", "plugins").toString();
-
+  private final BuildCLIConfig globalConfig = ConfigContextLoader.getAllConfigs();
   @Option(names = {"--file", "-f"}, description = "File can b, a project or jar locally or remote")
   private String file;
-
-  private final BuildCLIConfig globalConfig = ConfigContextLoader.getAllConfigs();
 
   @Override
   public void run() {
@@ -137,7 +136,13 @@ public class AddCommand implements BuildCLICommand {
     logger.info("Copying jar {}...", jar.getFile());
     Path destPath = Path.of(PLUGINS_DIR, jar.getFile().getName());
     Files.createDirectories(destPath.getParent());
-    Files.copy(jar.getFile().toPath(), destPath);
+    if (jar.getFile().exists()) {
+      if (confirm("Do you want to overwrite existing plugin file?")) {
+        Files.copy(jar.getFile().toPath(), destPath);
+      }
+    } else {
+      Files.copy(jar.getFile().toPath(), destPath);
+    }
     logger.info("Jar copied to {}...", destPath);
   }
 
