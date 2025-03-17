@@ -14,15 +14,13 @@ import java.util.List;
 import java.util.stream.StreamSupport;
 
 import static dev.buildcli.core.utils.input.InteractiveInputUtils.options;
+import static dev.buildcli.core.constants.DependencyConstants.DEPENDENCIES;
 
 public class DependencySearchService {
 
-    Dependency dependency;
-
     private static final String API_MAVEN = "https://search.maven.org/solrsearch/select?q=";
-    private static final String ROWS = "&rows=5";
+    private static final String ROWS = "&rows=7";
     private static final String OUTPUT ="&wt=json";
-
 
     public HttpRequest createSearchGetRequest(String groupOrArtifactID){
         return HttpRequest.newBuilder()
@@ -44,8 +42,19 @@ public class DependencySearchService {
         }
     }
 
-    public String promptOptionsToAdd(List<String> dependencies){
-        return options("Which dependency do you wanna add?",dependencies);
+    public List<String> promptOptionsToAdd(List<String> dependencies){
+        return List.of(options("Which dependency do you wanna add?",dependencies));
+    }
+
+    public boolean isAlreadyConfigured(String dependency){
+        return DEPENDENCIES.containsKey(dependency);
+    }
+
+    public List<String> searchDependecy(String dependencyName){
+        if(isAlreadyConfigured(dependencyName)){
+            return DEPENDENCIES.get(dependencyName);
+        }
+        return promptOptionsToAdd(sendSearchRequest(dependencyName));
     }
 
     public List<String> sendSearchRequest(String dependencyName) {
