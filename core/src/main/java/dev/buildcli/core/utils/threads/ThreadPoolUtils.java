@@ -15,7 +15,7 @@ public final class ThreadPoolUtils {
     }
 
     if (fixedInstance == null) {
-      fixedInstance = Executors.newFixedThreadPool(numThreads);
+      fixedInstance = Executors.newFixedThreadPool(Math.min(numThreads, Runtime.getRuntime().availableProcessors() - 1));
     }
 
     return fixedInstance;
