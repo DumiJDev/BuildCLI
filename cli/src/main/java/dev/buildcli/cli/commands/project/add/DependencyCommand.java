@@ -5,16 +5,17 @@ import dev.buildcli.core.constants.MavenConstants;
 import dev.buildcli.core.domain.BuildCLICommand;
 import dev.buildcli.core.log.SystemOutLogger;
 import dev.buildcli.core.utils.tools.maven.PomReader;
+import picocli.CommandLine.Option;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Parameters;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.stream.Stream;
 
 @Command(name = "dependency", aliases = {"d"}, description = "Adds a new dependency to the project. Alias: 'd'. "
         + "This command allows adding dependencies.", mixinStandardHelpOptions = true)
@@ -22,6 +23,8 @@ public class DependencyCommand implements BuildCLICommand {
   private static final Logger logger = Logger.getLogger(DependencyCommand.class.getName());
   @Parameters
   private String dependency;
+  @Option(names = {"--manual", "-m"}, description = "Defines if dependency will be added manually or not.")
+  Boolean manually;
 
   @Override
   public void run() {
@@ -29,8 +32,11 @@ public class DependencyCommand implements BuildCLICommand {
       DependencySearchService service = new DependencySearchService();
       var pom = PomReader.read(MavenConstants.FILE);
       var pomData = PomReader.readAsString(MavenConstants.FILE);
-      List<String> dependencies = service.searchDependecy(dependency);
+      List<String> dependencies =  List.of(dependency);
 
+      if(manually==null) {
+       dependencies = service.searchDependecy(dependency);
+      }
       dependencies.forEach(pom::addDependency);
 
       try {
