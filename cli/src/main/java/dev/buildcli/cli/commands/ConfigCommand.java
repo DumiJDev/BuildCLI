@@ -20,7 +20,7 @@ import picocli.CommandLine.Option;
  *   buildcli config rm <key>            - Remove a configuration key.
  */
 @Command(name = "config", aliases = {"c"}, description = "Manage configuration settings.", mixinStandardHelpOptions = true,
-    subcommands = {SetCommand.class, ClearCommand.class, InitCommand.class, PrintCommand.class, RmCommand.class})
+    subcommands = {SetCommand.class, ClearCommand.class, InitCommand.class, ListCommand.class, RmCommand.class})
 public class ConfigCommand {
 
   /**

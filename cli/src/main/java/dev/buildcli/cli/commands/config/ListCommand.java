@@ -21,8 +21,8 @@ import static dev.buildcli.core.utils.config.ConfigContextLoader.getLocalConfig;
  *   buildcli config print   - Prints the local configuration by default.
  *   buildcli config print --global  - Prints the global configuration.
  */
-@Command(name = "print", aliases = {"p", "show", "list"}, description = "Prints the current configuration.")
-public class PrintCommand implements BuildCLICommand {
+@Command(name = "list", aliases = {"ls"}, description = "Prints the current configuration (local or global).")
+public class ListCommand implements BuildCLICommand {
 
   /**
    * Parent command providing context for local or global configuration.
