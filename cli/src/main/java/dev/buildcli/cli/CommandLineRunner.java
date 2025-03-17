@@ -10,7 +10,6 @@ import dev.buildcli.plugin.PluginManager;
 import dev.buildcli.hooks.HookManager;
 import picocli.CommandLine;
 
-import java.util.Arrays;
 import java.util.List;
 
 public class CommandLineRunner {
@@ -30,8 +29,7 @@ public class CommandLineRunner {
     register(commandLine, commandPlugins);
 
     HookManager hook = new HookManager(commandLine);
-    String[] parameters = new String[]{"project", "add", "dependency", Arrays.toString(args)};
-    hook.executeHook(parameters, commandLine);
+    hook.executeHook(args, commandLine);
 
     BuildCLIService.checkUpdatesBuildCLIAndUpdate();
 

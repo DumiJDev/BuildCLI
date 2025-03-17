@@ -29,9 +29,9 @@ public class DependencyCommand implements BuildCLICommand {
       DependencySearchService service = new DependencySearchService();
       var pom = PomReader.read(MavenConstants.FILE);
       var pomData = PomReader.readAsString(MavenConstants.FILE);
-      String dependencies = service.promptOptionsToAdd(service.sendSearchRequest(dependency));
+      List<String> dependencies = service.searchDependecy(dependency);
 
-      Stream.of(dependencies).forEach(pom::addDependency);
+      dependencies.forEach(pom::addDependency);
 
       try {
         String pomContent = pomData.replace(MavenConstants.DEPENDENCIES_PATTERN, pom.getDependencyFormatted());
