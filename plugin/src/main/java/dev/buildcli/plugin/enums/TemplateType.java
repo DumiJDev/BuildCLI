@@ -4,7 +4,8 @@ public enum TemplateType {
   PIPELINE("CI/CD Pipeline"),
   PROJECT("Project Scaffold"),
   DOCKER("Docker/Generic Container Setup"),
-  KUBERNETES("Kubernetes Resources");
+  KUBERNETES("Kubernetes Resources"),
+  QUICKSTART("Quickstart"),;
 
   private final String label;
 
