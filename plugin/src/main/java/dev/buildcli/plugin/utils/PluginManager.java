@@ -18,6 +18,7 @@ import java.util.function.Predicate;
 import static dev.buildcli.core.constants.ConfigDefaultConstants.PLUGIN_PATHS;
 import static dev.buildcli.core.utils.BeautifyShell.blueFg;
 import static dev.buildcli.core.utils.input.InteractiveInputUtils.confirm;
+import static java.util.Objects.nonNull;
 
 public final class PluginManager {
   private static final Map<Class<? extends BuildCLIPlugin>, List<? extends BuildCLIPlugin>> PLUGINS = new HashMap<>();
@@ -41,6 +42,7 @@ public final class PluginManager {
         .map(PluginManager::loadCommandPluginFromJar)
         .flatMap(List::stream)
         .filter(plugin -> plugin.getClass().isAnnotationPresent(Command.class))
+        .filter(plugin -> nonNull(plugin.name()) && nonNull(plugin.version()))
         .toList();
 
     PLUGINS.put(BuildCLICommandPlugin.class, commands);
@@ -60,6 +62,7 @@ public final class PluginManager {
         .stream()
         .map(PluginManager::loadTemplatePluginFromJar)
         .flatMap(List::stream)
+        .filter(plugin -> nonNull(plugin.name()) && nonNull(plugin.version()))
         .toList();
 
     PLUGINS.put(BuildCLITemplatePlugin.class, templates);
