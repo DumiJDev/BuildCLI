@@ -33,7 +33,15 @@ import static dev.buildcli.core.constants.AIConstants.GENERATE_TEST_PROMPT;
 import static dev.buildcli.core.utils.BeautifyShell.blueFg;
 import static dev.buildcli.core.utils.input.InteractiveInputUtils.confirm;
 
-@Command(name = "test", aliases = {"t"}, description = "", mixinStandardHelpOptions = true)
+@Command(
+    name = "test",
+    aliases = {"t"},
+    description = "Automatically generates unit tests for source code files using AI. "
+        + "Scans specified files or directories, identifies source files based on provided extensions, "
+        + "and utilizes an AI-powered service to generate corresponding test code. "
+        + "Supports interactive confirmation or auto-acceptance of generated tests.",
+    mixinStandardHelpOptions = true
+)
 public class TestCommand implements BuildCLICommand {
   private static final Logger logger = LoggerFactory.getLogger("AICodeTestCommand");
   private final BuildCLIConfig allConfigs = ConfigContextLoader.getAllConfigs();
