@@ -3,6 +3,7 @@ package dev.buildcli.plugin.utils;
 import dev.buildcli.core.domain.jar.Jar;
 import dev.buildcli.plugin.BuildCLICommandPlugin;
 import dev.buildcli.plugin.BuildCLIPlugin;
+import dev.buildcli.plugin.BuildCLITemplatePlugin;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,6 +17,7 @@ public final class PluginUtils {
     classes = new ArrayList<>();
     classes.add(BuildCLIPlugin.class);
     classes.add(BuildCLICommandPlugin.class);
+    classes.add(BuildCLITemplatePlugin.class);
   }
   public static boolean isValid(Jar jar) {
     Predicate<Class<? extends BuildCLIPlugin>> validate =

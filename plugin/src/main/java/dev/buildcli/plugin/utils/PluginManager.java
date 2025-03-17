@@ -5,6 +5,8 @@ import dev.buildcli.core.utils.config.ConfigContextLoader;
 import dev.buildcli.core.utils.filesystem.FindFilesUtils;
 import dev.buildcli.plugin.BuildCLICommandPlugin;
 import dev.buildcli.plugin.BuildCLIPlugin;
+import dev.buildcli.plugin.BuildCLITemplatePlugin;
+import dev.buildcli.plugin.enums.TemplateType;
 import dev.buildcli.plugin.factories.CommandFactory;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
@@ -46,9 +48,41 @@ public final class PluginManager {
     return commands;
   }
 
+  public static List<BuildCLITemplatePlugin> getTemplates() {
+    if (PLUGINS.containsKey(BuildCLITemplatePlugin.class)) {
+      var templates = PLUGINS.get(BuildCLITemplatePlugin.class);
+      if (templates == null || templates.isEmpty()) {
+        return new ArrayList<>();
+      }
+    }
+
+    var templates = loadJars()
+        .stream()
+        .map(PluginManager::loadTemplatePluginFromJar)
+        .flatMap(List::stream)
+        .toList();
+
+    PLUGINS.put(BuildCLITemplatePlugin.class, templates);
+
+    return templates;
+  }
+
+
+  public static List<BuildCLITemplatePlugin> getTemplatesByType(TemplateType type) {
+    if (type == null) {
+      return getTemplates();
+    }
+
+    return getTemplates().stream()
+        .filter(buildCLITemplatePlugin -> buildCLITemplatePlugin.type().equals(type))
+        .toList();
+  }
+
   private static String[] pluginPaths() {
     var defaultPath = System.getProperty("user.home") + "/.buildcli/plugins";
-    return ConfigContextLoader.getAllConfigs().getProperty(PLUGIN_PATHS).orElse(defaultPath).split(";");
+    var property = ConfigContextLoader.getAllConfigs().getProperty(PLUGIN_PATHS);
+
+    return property.orElse("").concat((property.isPresent() ? "" : ";") + defaultPath).split(";");
   }
 
   private static List<Jar> loadJars() {
@@ -63,6 +97,10 @@ public final class PluginManager {
 
   private static List<BuildCLICommandPlugin> loadCommandPluginFromJar(Jar jar) {
     return PluginLoader.load(BuildCLICommandPlugin.class, jar);
+  }
+
+  private static List<BuildCLITemplatePlugin> loadTemplatePluginFromJar(Jar jar) {
+    return PluginLoader.load(BuildCLITemplatePlugin.class, jar);
   }
 
   public static void registerPlugins(CommandLine commandLine) {
