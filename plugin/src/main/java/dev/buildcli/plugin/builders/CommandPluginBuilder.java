@@ -128,8 +128,8 @@ public class CommandPluginBuilder implements PluginBuilder {
   }
 
   private void writeProjectFiles(File rootDirectory, String pluginName) throws IOException {
-    String normalizedName = pluginName.trim();
-    String pluginPackage = normalizedName.toLowerCase();
+    String normalizedName = pluginName.replaceAll("[^a-zA-Z0-9]", "").trim();
+    String pluginPackage = normalizedName.replaceAll("[^a-zA-Z0-9]", "").toLowerCase();
     String className = capitalizeFirstLetter(normalizedName);
 
     // Write Java class file
