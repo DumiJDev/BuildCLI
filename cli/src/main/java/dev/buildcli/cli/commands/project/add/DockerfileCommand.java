@@ -1,5 +1,6 @@
 package dev.buildcli.cli.commands.project.add;
 
+import dev.buildcli.core.actions.commandline.JavaProcess;
 import dev.buildcli.core.domain.BuildCLICommand;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -40,7 +41,7 @@ public class DockerfileCommand implements BuildCLICommand {
       if (dockerfile.createNewFile() || force) {
         try (FileWriter writer = new FileWriter(dockerfile, false)) {
 
-          String[] envVars = process_env_variables(envVariable);
+          String[] envVars = processEnvVariables(envVariable);
 
           var builder = new StringBuilder("FROM ").append(fromImage).append("\n");
           builder.append("WORKDIR ").append("/app").append("\n");
@@ -69,15 +70,15 @@ public class DockerfileCommand implements BuildCLICommand {
     }
   }
 
-  private String[] process_env_variables(String envVariable) {
+  private String[] processEnvVariables(String envVariable) {
     String[] envVars = null;
-    if (!envVariable.equals("")) {
+    if (!"".equals(envVariable)) {
       envVars = envVariable.split(";");
       for (int i = 0; i < envVars.length; i++) {
         if (envVars[i].contains("JAVA_TOOL_OPTIONS")) {
           String java_tool_options = "";
           java_tool_options = envVars[i].split("=")[1];
-          java_tool_options = validate_jvm_options(java_tool_options);
+          java_tool_options = validateJvmOptions(java_tool_options);
           if (java_tool_options == null) {
             envVars[i] = null;
             continue;
@@ -92,20 +93,17 @@ public class DockerfileCommand implements BuildCLICommand {
     return envVars;
   }
 
-  private String validate_jvm_options(String options) {
-    if (!options.equals("")) {
+  private String validateJvmOptions(String options) {
+    if (!"".equals(options)) {
       try {
         List<String> command = new ArrayList<>();
         command.add("java");
         command.add("--dry-run");
         command.addAll(Arrays.asList(options.split(" ")));
         command.add("-version");
-        var processBuilder = new ProcessBuilder(command);
-        var process = processBuilder.start();
-        var code = process.waitFor();
+        var process = JavaProcess.createProcess("--dry-run", options, "--version");
+        var code = process.run();
         if (code != 0) {
-          BufferedReader br = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-          System.err.println(br.readLine());
           return null;
         }
       } catch (Exception e) {
