@@ -54,13 +54,10 @@ final class PluginLoader {
                 .replace(".class", "");
 
             try {
-              // Carregar a classe
               Class<?> loadedClass = loader.loadClass(className);
-              // Logger apenas para debug
-              logger.debug("Pré-carregada classe: {}", className);
+              logger.debug("Class preloaded: {}", className);
             } catch (ClassNotFoundException | NoClassDefFoundError e) {
-              // Ignorar classes que não podem ser carregadas, mas logar para debug
-              logger.debug("Não foi possível carregar a classe: {}", className, e);
+              logger.debug("Could not load class: {}", className, e);
             }
           }
         }
