@@ -19,7 +19,7 @@ import static dev.buildcli.core.constants.DependencyConstants.DEPENDENCIES;
 public class DependencySearchService {
 
     private static final String API_MAVEN = "https://search.maven.org/solrsearch/select?q=";
-    private static final String ROWS = "&rows=7";
+    private static final String ROWS = "&rows=25";
     private static final String OUTPUT ="&wt=json";
 
     public HttpRequest createSearchGetRequest(String groupOrArtifactID){
