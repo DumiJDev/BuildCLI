@@ -17,9 +17,7 @@ import picocli.CommandLine.Option;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
+import java.nio.file.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -134,17 +132,42 @@ public class AddCommand implements BuildCLICommand {
   }
 
   private void copyJarPlugin(Jar jar) throws IOException {
+    var retries = 5;
     logger.info("Copying jar {}...", jar.getFile());
     Path destPath = Path.of(PLUGINS_DIR, jar.getFile().getName());
     Files.createDirectories(destPath.getParent());
-    if (jar.getFile().exists()) {
+    if (Files.exists(destPath)) {
       if (confirm("Do you want to overwrite existing plugin file?")) {
-        Files.copy(jar.getFile().toPath(), destPath, StandardCopyOption.REPLACE_EXISTING);
+        do {
+          try {
+            Files.delete(destPath);
+            Files.copy(jar.getFile().toPath(), destPath, StandardCopyOption.REPLACE_EXISTING);
+          } catch (Exception e) {
+            printRetryMessages(e, jar, retries);
+          }
+        } while (retries-- > 0);
       }
     } else {
-      Files.copy(jar.getFile().toPath(), destPath);
+      do {
+        try {
+          Files.copy(jar.getFile().toPath(), destPath);
+        } catch (Exception  e) {
+          printRetryMessages(e, jar, retries);
+        }
+      } while (retries-- > 0);
     }
     logger.info("Jar copied to {}...", destPath);
+  }
+
+  private void printRetryMessages(Exception e, Jar jar, int retries) {
+    logger.error("Failed to copy plugin file: {}", jar.getFile(), e);
+    logger.info("Retrying times {}", 5 - retries);
+
+    try {
+      Thread.sleep(2000L);
+    } catch (InterruptedException ex) {
+      throw new RuntimeException(ex);
+    }
   }
 
   private List<Jar> loadPluginFromDirectory(File directory) {

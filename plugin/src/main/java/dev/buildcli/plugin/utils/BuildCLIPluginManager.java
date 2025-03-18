@@ -12,7 +12,10 @@ import picocli.CommandLine;
 import picocli.CommandLine.Command;
 
 import java.io.File;
-import java.util.*;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.function.Predicate;
 
 import static dev.buildcli.core.constants.ConfigDefaultConstants.PLUGIN_PATHS;
@@ -20,54 +23,25 @@ import static dev.buildcli.core.utils.BeautifyShell.blueFg;
 import static dev.buildcli.core.utils.input.InteractiveInputUtils.confirm;
 import static java.util.Objects.nonNull;
 
-public final class PluginManager {
+public final class BuildCLIPluginManager {
   private static final Map<Class<? extends BuildCLIPlugin>, List<? extends BuildCLIPlugin>> PLUGINS = new HashMap<>();
 
   public static List<BuildCLICommandPlugin> getCommands() {
-    if (PLUGINS.containsKey(BuildCLICommandPlugin.class)) {
-      var commands = PLUGINS.get(BuildCLICommandPlugin.class);
 
-      if (commands == null || commands.isEmpty()) {
-        return new ArrayList<>();
-      }
 
-      return commands
-          .stream()
-          .map(command -> (BuildCLICommandPlugin) command)
-          .toList();
-    }
-
-    var commands = loadJars()
-        .stream()
-        .map(PluginManager::loadCommandPluginFromJar)
-        .flatMap(List::stream)
+    return BuildCLIPluginManager.loadCommandPluginFromJar().stream()
         .filter(plugin -> plugin.getClass().isAnnotationPresent(Command.class))
         .filter(plugin -> nonNull(plugin.name()) && nonNull(plugin.version()))
         .toList();
-
-    PLUGINS.put(BuildCLICommandPlugin.class, commands);
-
-    return commands;
   }
 
   public static List<BuildCLITemplatePlugin> getTemplates() {
-    if (PLUGINS.containsKey(BuildCLITemplatePlugin.class)) {
-      var templates = PLUGINS.get(BuildCLITemplatePlugin.class);
-      if (templates == null || templates.isEmpty()) {
-        return new ArrayList<>();
-      }
-    }
 
-    var templates = loadJars()
+
+    return BuildCLIPluginManager.loadTemplatePluginFromJar()
         .stream()
-        .map(PluginManager::loadTemplatePluginFromJar)
-        .flatMap(List::stream)
         .filter(plugin -> nonNull(plugin.name()) && nonNull(plugin.version()))
         .toList();
-
-    PLUGINS.put(BuildCLITemplatePlugin.class, templates);
-
-    return templates;
   }
 
 
@@ -98,15 +72,21 @@ public final class PluginManager {
         .toList();
   }
 
-  private static List<BuildCLICommandPlugin> loadCommandPluginFromJar(Jar jar) {
-    return PluginLoader.load(BuildCLICommandPlugin.class, jar);
+  private static List<BuildCLICommandPlugin> loadCommandPluginFromJar() {
+    var pls = PF4JPluginLoader.getInstance().getPlugins(BuildCLICommandPlugin.class);
+
+    System.out.println(pls);
+
+    return pls;
   }
 
-  private static List<BuildCLITemplatePlugin> loadTemplatePluginFromJar(Jar jar) {
-    return PluginLoader.load(BuildCLITemplatePlugin.class, jar);
+  private static List<BuildCLITemplatePlugin> loadTemplatePluginFromJar() {
+    return PF4JPluginLoader.getInstance().getPlugins(BuildCLITemplatePlugin.class);
   }
 
   public static void registerPlugins(CommandLine commandLine) {
+    //PluginLoader.registerClasses(loadJars());
+    PF4JPluginLoader.getInstance().loadPlugins(loadJars());
     var plugins = getCommands();
     var subcommands = commandLine.getSubcommands();
     for (BuildCLICommandPlugin commandPlugin : plugins) {
