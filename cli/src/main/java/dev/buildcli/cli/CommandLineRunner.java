@@ -11,6 +11,7 @@ public class CommandLineRunner {
 
   public static void main(String[] args) {
     LoggingConfig.configure();
+    //PluginManager.addPluginsToClassPath();
 
     if (BuildCLIService.shouldShowAsciiArt(args)) {
       BuildCLIService.welcome();
