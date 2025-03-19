@@ -40,3 +40,5 @@ dependency-reduced-pom.xml
 app.jar
 buildcli.jar
 Dockefile
+changelog.md
+**/changelog.md
