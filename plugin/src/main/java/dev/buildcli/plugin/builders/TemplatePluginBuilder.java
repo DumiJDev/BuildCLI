@@ -1,11 +1,15 @@
 package dev.buildcli.plugin.builders;
 
+import dev.buildcli.plugin.enums.TemplateType;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
+
+import static dev.buildcli.core.utils.input.InteractiveInputUtils.options;
 
 public class TemplatePluginBuilder implements PluginBuilder {
   private static final String[] PROJECT_DIRECTORIES = {
@@ -16,7 +20,7 @@ public class TemplatePluginBuilder implements PluginBuilder {
       "src/test/resources"
   };
 
-  private static final String COMMAND_TEMPLATE = """
+  private static final String TEMPLATE_TEMPLATE = """
         package dev.buildcli.plugin.%s;
         
         import dev.buildcli.plugin.BuildCLITemplatePlugin;
@@ -155,10 +159,12 @@ public class TemplatePluginBuilder implements PluginBuilder {
     String pluginPackage = normalizedName.replaceAll("[^a-zA-Z0-9]", "").toLowerCase();
     String className = capitalizeFirstLetter(normalizedName);
 
+    var templateType = options("Choose a template type", Arrays.asList(TemplateType.values()));
+
     // Write Java class file
     String commandContent = String.format(
-        COMMAND_TEMPLATE,
-        pluginPackage, pluginPackage, className, pluginPackage, pluginPackage
+        TEMPLATE_TEMPLATE,
+        pluginPackage, className, pluginName, templateType, pluginName
     );
 
     Path javaFilePath = Paths.get(
@@ -167,6 +173,9 @@ public class TemplatePluginBuilder implements PluginBuilder {
         pluginPackage,
         className + "Template.java"
     );
+    if (!Files.exists(javaFilePath.getParent())) {
+      Files.createDirectories(javaFilePath.getParent());
+    }
     Files.writeString(javaFilePath, commandContent);
 
     // Write service provider file
@@ -177,6 +186,9 @@ public class TemplatePluginBuilder implements PluginBuilder {
     );
 
     String serviceContent = String.format("dev.buildcli.plugin.%s.%sTemplate", pluginPackage, className);
+    if (!Files.exists(serviceFilePath.getParent())) {
+      Files.createDirectories(serviceFilePath.getParent());
+    }
     Files.writeString(serviceFilePath, serviceContent);
 
     //Write pf4j file
@@ -184,7 +196,9 @@ public class TemplatePluginBuilder implements PluginBuilder {
         "src/main/resources",
         "plugin.properties"
     );
-
+    if (!Files.exists(pf4jFilePath.getParent())) {
+      Files.createDirectories(pf4jFilePath.getParent());
+    }
     var pf4jContent = String.format("""
         plugin.id=%s
         plugin.version=0.0.1-SNAPSHOT
@@ -195,6 +209,9 @@ public class TemplatePluginBuilder implements PluginBuilder {
 
     // Write POM file
     Path pomFilePath = Paths.get(rootDirectory.getAbsolutePath(), "pom.xml");
+    if (!Files.exists(pomFilePath.getParent())) {
+      Files.createDirectories(pomFilePath.getParent());
+    }
     String pomContent = String.format(POM_TEMPLATE, pluginPackage, pluginPackage, pluginPackage);
     Files.writeString(pomFilePath, pomContent);
   }
