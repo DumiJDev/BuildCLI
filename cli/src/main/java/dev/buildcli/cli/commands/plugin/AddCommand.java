@@ -8,7 +8,7 @@ import dev.buildcli.core.utils.ProjectUtils;
 import dev.buildcli.core.utils.config.ConfigContextLoader;
 import dev.buildcli.core.utils.filesystem.FindFilesUtils;
 import dev.buildcli.core.utils.net.FileDownloader;
-import dev.buildcli.plugin.utils.PluginUtils;
+import dev.buildcli.plugin.utils.BuildCLIPluginUtils;
 import org.eclipse.jgit.api.Git;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,10 +17,13 @@ import picocli.CommandLine.Option;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static dev.buildcli.core.utils.input.InteractiveInputUtils.confirm;
 import static dev.buildcli.core.utils.input.InteractiveInputUtils.question;
@@ -35,7 +38,7 @@ public class AddCommand implements BuildCLICommand {
   private static final Logger logger = LoggerFactory.getLogger("AddPluginCommand");
   private static final String PLUGINS_DIR = Path.of(System.getProperty("user.home"), ".buildcli", "plugins").toString();
   private final BuildCLIConfig globalConfig = ConfigContextLoader.getAllConfigs();
-  @Option(names = {"--file", "-f"}, description = "File can b, a project or jar locally or remote")
+  @Option(names = {"--file", "-f"}, description = "File can be a project or jar locally or remote")
   private String file;
 
   @Override
@@ -81,7 +84,7 @@ public class AddCommand implements BuildCLICommand {
 
     if (isValidJarFile(downloadedFile)) {
       Jar jar = new Jar(downloadedFile);
-      if (PluginUtils.isValid(jar)) {
+      if (BuildCLIPluginUtils.isValid(jar)) {
         copyJarPlugin(jar);
       } else {
         logger.warn("Downloaded JAR is not a valid plugin: {}", downloadedFile);
@@ -111,7 +114,7 @@ public class AddCommand implements BuildCLICommand {
     Jar jar = new Jar(jarFile);
     logger.info("Validating jar: {}", jar.getFile());
 
-    if (PluginUtils.isValid(jar)) {
+    if (BuildCLIPluginUtils.isValid(jar)) {
       logger.info("Jar is a valid plugin");
       copyJarPlugin(jar);
     } else {
@@ -132,41 +135,111 @@ public class AddCommand implements BuildCLICommand {
   }
 
   private void copyJarPlugin(Jar jar) throws IOException {
-    var retries = 5;
+    final int maxRetries = 5;
+    int retries = maxRetries;
+    boolean copied = false;
+
     logger.info("Copying jar {}...", jar.getFile());
     Path destPath = Path.of(PLUGINS_DIR, jar.getFile().getName());
     Files.createDirectories(destPath.getParent());
+
+    // Usar um nome de arquivo temporário para evitar conflitos
+    Path tempDestPath = Path.of(PLUGINS_DIR, jar.getFile().getName() + ".tmp");
+
     if (Files.exists(destPath)) {
-      if (confirm("Do you want to overwrite existing plugin file?")) {
-        do {
-          try {
-            Files.delete(destPath);
-            Files.copy(jar.getFile().toPath(), destPath, StandardCopyOption.REPLACE_EXISTING);
-          } catch (Exception e) {
-            printRetryMessages(e, jar, retries);
-          }
-        } while (retries-- > 0);
+      if (!confirm("Do you want to overwrite existing plugin file?")) {
+        logger.info("Plugin installation cancelled by user");
+        return;
       }
-    } else {
-      do {
-        try {
-          Files.copy(jar.getFile().toPath(), destPath);
-        } catch (Exception  e) {
-          printRetryMessages(e, jar, retries);
-        }
-      } while (retries-- > 0);
     }
-    logger.info("Jar copied to {}...", destPath);
+
+    while (retries > 0 && !copied) {
+      try {
+        // Primeiro copiar para o arquivo temporário
+        Files.copy(jar.getFile().toPath(), tempDestPath, StandardCopyOption.REPLACE_EXISTING);
+
+        // Tentar diferentes abordagens para substituir o arquivo original
+        if (Files.exists(destPath)) {
+          try {
+            // Tentar renomear o arquivo temporário para o destino final
+            Files.move(tempDestPath, destPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            copied = true;
+          } catch (IOException e) {
+            // Se falhar com ATOMIC_MOVE, tentar sem essa opção
+            try {
+              Files.move(tempDestPath, destPath, StandardCopyOption.REPLACE_EXISTING);
+              copied = true;
+            } catch (IOException e2) {
+              // Se ainda falhar, tentar primeiro excluir e depois copiar
+              tryDeleteWithRetries(destPath, 3);
+              Files.move(tempDestPath, destPath);
+              copied = true;
+            }
+          }
+        } else {
+          // Se o arquivo de destino não existir, basta renomear o temporário
+          Files.move(tempDestPath, destPath);
+          copied = true;
+        }
+      } catch (Exception e) {
+        logger.error("Failed to copy plugin file: {}", jar.getFile(), e);
+        logger.info("Retrying ({} attempts left)", retries - 1);
+        retries--;
+
+        // Aumentar o tempo de espera progressivamente entre as tentativas
+        try {
+          TimeUnit.MILLISECONDS.sleep(2000L + (maxRetries - retries) * 1000L);
+        } catch (InterruptedException ex) {
+          Thread.currentThread().interrupt();
+          throw new IOException("Operation interrupted", ex);
+        }
+      }
+    }
+
+    // Limpar arquivo temporário se ainda existir
+    if (Files.exists(tempDestPath)) {
+      try {
+        Files.delete(tempDestPath);
+      } catch (IOException e) {
+        logger.warn("Could not delete temporary file: {}", tempDestPath, e);
+      }
+    }
+
+    if (copied) {
+      logger.info("Jar copied to {}...", destPath);
+    } else {
+      throw new IOException("Failed to copy plugin after " + maxRetries + " attempts. " +
+          "Please ensure the plugin is not in use and try again later.");
+    }
   }
 
-  private void printRetryMessages(Exception e, Jar jar, int retries) {
-    logger.error("Failed to copy plugin file: {}", jar.getFile(), e);
-    logger.info("Retrying times {}", 5 - retries);
+  private void tryDeleteWithRetries(Path path, int retries) throws IOException {
+    IOException lastException = null;
 
-    try {
-      Thread.sleep(2000L);
-    } catch (InterruptedException ex) {
-      throw new RuntimeException(ex);
+    for (int i = 0; i < retries; i++) {
+      try {
+        Files.delete(path);
+        return; // Sucesso, saindo da função
+      } catch (IOException e) {
+        lastException = e;
+        logger.warn("Failed to delete file (attempt {}): {}", i + 1, path);
+
+        try {
+          // Aguardar antes de tentar novamente (tempo crescente)
+          TimeUnit.MILLISECONDS.sleep(1000L * (i + 1));
+        } catch (InterruptedException ie) {
+          Thread.currentThread().interrupt();
+          throw new IOException("Operation interrupted", ie);
+        }
+
+        // Sugerir ao GC que execute para liberar recursos
+        System.gc();
+      }
+    }
+
+    // Se chegou aqui, todas as tentativas falharam
+    if (lastException != null) {
+      throw lastException;
     }
   }
 
@@ -190,7 +263,7 @@ public class AddCommand implements BuildCLICommand {
       Jar jar = new Jar(jarFile);
       logger.info("Validating jar {}", jarFile);
 
-      if (PluginUtils.isValid(jar)) {
+      if (BuildCLIPluginUtils.isValid(jar)) {
         logger.info("Validated jar, is a valid jar plugin");
         validPlugins.add(jar);
       } else {
