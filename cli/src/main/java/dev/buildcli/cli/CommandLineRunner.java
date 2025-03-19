@@ -20,7 +20,6 @@ public class CommandLineRunner {
     PluginManager.registerPlugins(commandLine);
 
     HookManager hook = new HookManager(commandLine);
-
     hook.executeHook(args, commandLine);
 
     BuildCLIService.checkUpdatesBuildCLIAndUpdate();
