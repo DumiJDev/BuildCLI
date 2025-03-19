@@ -2,16 +2,22 @@ package dev.buildcli.core.utils;
 
 import dev.buildcli.core.actions.commandline.CommandLineProcess;
 import dev.buildcli.core.actions.commandline.MavenProcess;
+import dev.buildcli.core.constants.ConfigDefaultConstants;
 import dev.buildcli.core.domain.git.GitCommandExecutor;
 import dev.buildcli.core.log.SystemOutLogger;
+import dev.buildcli.core.utils.config.ConfigContextLoader;
 
-import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.jar.Attributes;
 import java.util.jar.Manifest;
+
+import static dev.buildcli.core.utils.BeautifyShell.content;
 
 import static dev.buildcli.core.utils.input.InteractiveInputUtils.confirm;
 
@@ -38,9 +44,29 @@ public class BuildCLIService {
   }
 
   public static void welcome() {
+    var configs = ConfigContextLoader.getAllConfigs();
+    if (configs.getPropertyAsBoolean(ConfigDefaultConstants.BANNER_ENABLED).orElse(true)) {
+      if (configs.getProperty(ConfigDefaultConstants.BANNER_PATH).isEmpty()) {
+        printOfficialBanner();
+      } else {
+        var path = Path.of(configs.getProperty(ConfigDefaultConstants.BANNER_PATH).get());
+        if (Files.exists(path) && Files.isRegularFile(path)) {
+          try {
+            System.out.println(Files.readString(path));
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
+        } else {
+          printOfficialBanner();
+        }
+      }
+    }
+  }
+
+  private static void printOfficialBanner() {
     System.out.println(",-----.          ,--.,--.   ,--. ,-----.,--.   ,--.");
     System.out.println("|  |) /_ ,--.,--.`--'|  | ,-|  |'  .--./|  |   |  |");
-    System.out.println("|  .-.  \\|  ||  |,--.|  |' .-. ||  |    |  |   |  |       Built by the community, for the community");
+    System.out.printf("|  .-.  \\|  ||  |,--.|  |' .-. ||  |    |  |   |  |       %s%n", content("Built by the community, for the community").blueFg().italic());
     System.out.println("|  '--' /'  ''  '|  ||  |\\ `-' |'  '--'\\|  '--.|  |");
     System.out.println("`------'  `----' `--'`--' `---'  `-----'`-----'`--'");
     System.out.println();
