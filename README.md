@@ -145,7 +145,8 @@ buildcli project run
 Automatically generates inline documentation for a Java file using AI:
 
 ```bash
-buildcli project document-code File.java
+# File or directory
+buildcli ai code document File.java 
 ```
 
 This command sends the specified Java file to the local Ollama server, which generates documentation and comments directly within the code. The modified file with documentation will be saved back to the same location.
