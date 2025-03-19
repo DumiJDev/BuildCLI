@@ -1,6 +1,6 @@
 package dev.buildcli.plugin.builders;
 
-import dev.buildcli.plugin.PluginType;
+import dev.buildcli.plugin.enums.PluginType;
 
 public final class PluginBuilderFactory {
   public static PluginBuilder create(PluginType type) {

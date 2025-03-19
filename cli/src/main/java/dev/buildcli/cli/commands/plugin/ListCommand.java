@@ -5,7 +5,7 @@ import dev.buildcli.core.domain.configs.BuildCLIConfig;
 import dev.buildcli.core.domain.jar.Jar;
 import dev.buildcli.core.utils.config.ConfigContextLoader;
 import dev.buildcli.core.utils.filesystem.FindFilesUtils;
-import dev.buildcli.plugin.utils.PluginUtils;
+import dev.buildcli.plugin.utils.BuildCLIPluginUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine.Command;
@@ -77,7 +77,7 @@ public class ListCommand implements BuildCLICommand {
       for (File jarFile : jarFiles) {
         try {
           Jar jar = new Jar(jarFile);
-          if (PluginUtils.isValid(jar)) {
+          if (BuildCLIPluginUtils.isValid(jar)) {
             plugins.add(extractPluginInfo(jar));
           }
         } catch (Exception e) {
@@ -99,9 +99,9 @@ public class ListCommand implements BuildCLICommand {
     try {
       // These methods would need to be implemented in PluginUtils
       // to extract metadata from the JAR manifest or plugin class
-      name = PluginUtils.getPluginName(jar).orElse(name);
-      version = PluginUtils.getPluginVersion(jar).orElse("Unknown");
-      description = PluginUtils.getPluginDescription(jar).orElse("No description available");
+      name = BuildCLIPluginUtils.getPluginName(jar).orElse(name);
+      version = BuildCLIPluginUtils.getPluginVersion(jar).orElse("Unknown");
+      description = BuildCLIPluginUtils.getPluginDescription(jar).orElse("No description available");
     } catch (Exception e) {
       logger.debug("Failed to extract detailed info from plugin {}: {}", name, e.getMessage());
     }
