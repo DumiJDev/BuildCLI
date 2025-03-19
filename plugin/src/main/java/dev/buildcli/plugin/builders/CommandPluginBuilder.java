@@ -23,7 +23,7 @@ public class CommandPluginBuilder implements PluginBuilder {
         import picocli.CommandLine.Command;
         
         @Command(name = "%s", mixinStandardHelpOptions = true)
-        public class %sCommand implements BuildCLICommandPlugin {
+        public class %sCommand extends BuildCLICommandPlugin {
           @Override
           public void run() {
             // Plugin implementation
@@ -53,45 +53,69 @@ public class CommandPluginBuilder implements PluginBuilder {
         """;
 
   private static final String POM_TEMPLATE = """
-        <?xml version="1.0" encoding="UTF-8"?>
-        <project xmlns="http://maven.apache.org/POM/4.0.0"
-                          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-                          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-          <modelVersion>4.0.0</modelVersion>
-          <groupId>dev.buildcli.plugin</groupId>
-          <artifactId>buildcli-plugin-%s</artifactId>
-          <version>0.0.1-SNAPSHOT</version>
-        
-          <dependencies>
-            <dependency>
-              <groupId>dev.buildcli</groupId>
-              <artifactId>buildcli-plugin</artifactId>
-              <version>0.14.0</version>
-            </dependency>
-            <dependency>
-              <groupId>dev.buildcli</groupId>
-              <artifactId>buildcli-core</artifactId>
-              <version>0.14.0</version>
-            </dependency>
-            <dependency>
-              <groupId>info.picocli</groupId>
-              <artifactId>picocli</artifactId>
-              <version>4.7.6</version>
-            </dependency>
-          </dependencies>
-        
-          <build>
-            <finalName>%s</finalName>
-            <plugins>
-              <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.13.0</version>
-              </plugin>
-            </plugins>
-           </build>
-        </project>
-        """;
+      <?xml version="1.0" encoding="UTF-8"?>
+      <project xmlns="http://maven.apache.org/POM/4.0.0"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+        <modelVersion>4.0.0</modelVersion>
+        <groupId>dev.buildcli.plugin</groupId>
+        <artifactId>buildcli-plugin-%s</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+      
+        <properties>
+          <java.version>21</java.version>
+          <maven.compiler.target>21</maven.compiler.target>
+          <maven.compiler.source>21</maven.compiler.source>
+        </properties>
+      
+        <dependencies>
+          <dependency>
+            <groupId>dev.buildcli</groupId>
+            <artifactId>buildcli-plugin</artifactId>
+            <version>0.14.0</version>
+            <scope>provided</scope>
+          </dependency>
+          <dependency>
+            <groupId>dev.buildcli</groupId>
+            <artifactId>buildcli-core</artifactId>
+            <version>0.14.0</version>
+            <scope>provided</scope>
+          </dependency>
+          <dependency>
+            <groupId>info.picocli</groupId>
+            <artifactId>picocli</artifactId>
+            <version>4.7.6</version>
+            <scope>provided</scope>
+          </dependency>
+        </dependencies>
+      
+        <build>
+          <finalName>%s</finalName>
+          <plugins>
+            <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-assembly-plugin</artifactId>
+              <configuration>
+                <descriptorRefs>
+                  <descriptorRef>jar-with-dependencies</descriptorRef>
+                </descriptorRefs>
+                <appendAssemblyId>false</appendAssemblyId>
+                <finalName>%s</finalName>
+              </configuration>
+              <executions>
+                <execution>
+                  <id>make-assembly</id>
+                  <phase>package</phase>
+                  <goals>
+                    <goal>single</goal>
+                  </goals>
+                </execution>
+              </executions>
+            </plugin>
+          </plugins>
+        </build>
+      </project>
+      """;
 
   private static final String SERVICE_FILE = "dev.buildcli.plugin.BuildCLICommandPlugin";
 
@@ -128,8 +152,8 @@ public class CommandPluginBuilder implements PluginBuilder {
   }
 
   private void writeProjectFiles(File rootDirectory, String pluginName) throws IOException {
-    String normalizedName = pluginName.trim();
-    String pluginPackage = normalizedName.toLowerCase();
+    String normalizedName = pluginName.replaceAll("[^a-zA-Z0-9]", "").trim();
+    String pluginPackage = normalizedName.replaceAll("[^a-zA-Z0-9]", "").toLowerCase();
     String className = capitalizeFirstLetter(normalizedName);
 
     // Write Java class file
@@ -147,17 +171,32 @@ public class CommandPluginBuilder implements PluginBuilder {
     Files.writeString(javaFilePath, commandContent);
 
     // Write service provider file
-    Path serviceFilePath = Paths.get(
+    var serviceFilePath = Paths.get(
         rootDirectory.getAbsolutePath(),
         "src/main/resources/META-INF/services",
         SERVICE_FILE
     );
+
     String serviceContent = String.format("dev.buildcli.plugin.%s.%sCommand", pluginPackage, className);
     Files.writeString(serviceFilePath, serviceContent);
 
+    //Write pf4j file
+    var pf4jFilePath = Paths.get(rootDirectory.getAbsolutePath(),
+        "src/main/resources",
+        "plugin.properties"
+    );
+
+    var pf4jContent = String.format("""
+        plugin.id=%s
+        plugin.version=0.0.1-SNAPSHOT
+        plugin.class=dev.buildcli.plugin.%s.%sCommand
+        """, className.toLowerCase(), pluginPackage, className);
+
+    Files.writeString(pf4jFilePath, pf4jContent);
+
     // Write POM file
     Path pomFilePath = Paths.get(rootDirectory.getAbsolutePath(), "pom.xml");
-    String pomContent = String.format(POM_TEMPLATE, pluginPackage, pluginPackage);
+    String pomContent = String.format(POM_TEMPLATE, pluginPackage, pluginPackage, pluginPackage);
     Files.writeString(pomFilePath, pomContent);
   }
 
