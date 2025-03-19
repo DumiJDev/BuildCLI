@@ -109,7 +109,7 @@ public class BuildCLIService {
         "It allows you to create, compile, manage dependencies, and run Java projects directly from the terminal, simplifying the development process.\n");
     SystemOutLogger.log("Visit the repository for more details: https://github.com/BuildCLI/BuildCLI\n");
 
-    gitExec.showContributors();
+    SystemOutLogger.log(gitExec.showContributors());
   }
 
   private static void updateBuildCLI() {
