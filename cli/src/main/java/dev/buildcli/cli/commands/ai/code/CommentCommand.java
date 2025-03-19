@@ -1,16 +1,15 @@
-package dev.buildcli.cli.commands.code;
+package dev.buildcli.cli.commands.ai.code;
 
 import dev.buildcli.core.actions.ai.AIChat;
-import dev.buildcli.core.actions.ai.AIServiceParams;
 import dev.buildcli.core.actions.ai.factories.GeneralAIServiceFactory;
-import dev.buildcli.core.actions.ai.params.JlamaAIServiceParams;
-import dev.buildcli.core.actions.ai.params.OllamaAIServiceParams;
 import dev.buildcli.core.constants.AIConstants;
-import dev.buildcli.core.constants.ConfigDefaultConstants;
 import dev.buildcli.core.domain.BuildCLICommand;
 import dev.buildcli.core.domain.configs.BuildCLIConfig;
+import dev.buildcli.core.utils.async.Async;
 import dev.buildcli.core.utils.config.ConfigContextLoader;
 import dev.buildcli.core.utils.filesystem.FindFilesUtils;
+import dev.buildcli.core.utils.ai.IAParamsUtils;
+import dev.buildcli.core.utils.markdown.MarkdownInterpreter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine.Command;
@@ -22,19 +21,16 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import static java.util.concurrent.CompletableFuture.supplyAsync;
+import static dev.buildcli.core.utils.BeautifyShell.blueFg;
+import static dev.buildcli.core.utils.BeautifyShell.brightGreenFg;
 
 @Command(name = "comment", aliases = {"c"}, description = "Comments out the selected code.",mixinStandardHelpOptions = true)
 public class CommentCommand implements BuildCLICommand {
-  private final ExecutorService executorService = Executors.newVirtualThreadPerTaskExecutor();
-  private final Logger logger = LoggerFactory.getLogger("CodeCommentCommand");
+  private final Logger logger = LoggerFactory.getLogger("AICodeCommentCommand");
 
   @Parameters(description = "Set of files or directories to comment sources")
   private List<File> files;
@@ -46,7 +42,6 @@ public class CommentCommand implements BuildCLICommand {
   private String context;
 
   private final BuildCLIConfig allConfigs = ConfigContextLoader.getAllConfigs();
-
 
   @Override
   public void run() {
@@ -63,16 +58,16 @@ public class CommentCommand implements BuildCLICommand {
 
     logger.info("Found {} files with extensions: {}.", targetFiles.size(), Arrays.toString(getExtensions()));
 
-    var execsAsync = new CompletableFuture[targetFiles.size()];
+    var execsAsync = Async.group(targetFiles.size());
 
     logger.info("Commenting files {}...", targetFiles.size());
     for (int i = 0; i < targetFiles.size(); i++) {
-      execsAsync[i] = supplyAsync(createCodeCommenter(targetFiles.get(i)), executorService)
-          .thenAccept(printCommentedCode(targetFiles.get(i)))
-          .exceptionally(catchAnyError(targetFiles.get(i)));
+      execsAsync[i] = Async.run(createCodeCommenter(targetFiles.get(i)))
+          .consumeAsync(printCommentedCode(targetFiles.get(i)))
+          .catchAny(catchAnyError(targetFiles.get(i)));
     }
 
-    CompletableFuture.allOf(execsAsync).join();
+    Async.awaitAll(execsAsync);
   }
 
   private Supplier<String> createCodeCommenter(File source) {
@@ -81,7 +76,7 @@ public class CommentCommand implements BuildCLICommand {
       var sourceCode = Files.readString(source.toPath());
       logger.info("Source file read: {}", source.getAbsolutePath());
 
-      var aiParams = createAIParamsFromConfigs();
+      var aiParams = IAParamsUtils.createAIParams();
       var iaService = new GeneralAIServiceFactory().create(aiParams);
 
       logger.info("Commenting with IA...");
@@ -95,29 +90,14 @@ public class CommentCommand implements BuildCLICommand {
     }
   }
 
-  private AIServiceParams createAIParamsFromConfigs() {
-    var aiVendor = allConfigs.getProperty(ConfigDefaultConstants.AI_VENDOR).orElse("jlama");
-
-    return switch (aiVendor.toLowerCase()) {
-      case "ollama" -> {
-        var url = allConfigs.getProperty(ConfigDefaultConstants.AI_URL).orElse(null);
-        var model = allConfigs.getProperty(ConfigDefaultConstants.AI_MODEL).orElse(null);
-
-        yield new OllamaAIServiceParams(url, model);
-      }
-      case "jlama" -> new JlamaAIServiceParams(allConfigs.getProperty(ConfigDefaultConstants.AI_MODEL).orElse(null));
-      default -> throw new IllegalStateException("Unexpected AI Vendor: " + aiVendor);
-    };
-  }
-
   private Consumer<String> printCommentedCode(File file) {
     return comment -> {
-      System.out.println("=".repeat(130));
-      System.out.printf("Commented file: %s%n%n", file.getAbsolutePath());
+      System.out.println(brightGreenFg("=").repeat(130));
+      System.out.printf("Commented file: %s%n%n", blueFg(file.getAbsolutePath()));
 
-      System.out.println(comment);
+      System.out.println(new MarkdownInterpreter().interpret(comment));
 
-      System.out.println("=".repeat(130));
+      System.out.println(brightGreenFg("=").repeat(130));
     };
   }
 

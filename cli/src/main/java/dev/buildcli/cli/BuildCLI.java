@@ -1,7 +1,7 @@
 package dev.buildcli.cli;
 
 import dev.buildcli.cli.commands.*;
-import dev.buildcli.cli.commands.project.AiCommand;
+import dev.buildcli.cli.commands.AiCommand;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.HelpCommand;
