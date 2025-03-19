@@ -12,9 +12,7 @@ public class CommandLineRunner {
   public static void main(String[] args) {
     LoggingConfig.configure();
 
-    if (BuildCLIService.shouldShowAsciiArt(args)) {
-      BuildCLIService.welcome();
-    }
+    BuildCLIService.welcome();
 
     BuildCLIConfig.initialize();
     var commandLine = new CommandLine(new BuildCLI());
