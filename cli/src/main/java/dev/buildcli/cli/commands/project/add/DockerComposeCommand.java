@@ -12,8 +12,8 @@ import picocli.CommandLine.Option;
 
 import java.util.List;
 
-@Command( name = "dockerCompose",
-    aliases =  {"dockerCompose", "dc"},
+@Command( name = "docker-compose",
+    aliases =  {"dc"},
     description = "Manager Docker Compose configurations and lifecycle.",
     mixinStandardHelpOptions = true
 )
@@ -21,12 +21,12 @@ public class DockerComposeCommand implements BuildCLICommand {
 
     private static final Logger logger = LoggerFactory.getLogger(DockerComposeCommand.class.getName());
 
-    @Option(names = {"--ports", "-p"},
+    @Option(names = {"--port", "-p"},
             description = "Port mappings (ex: 8080:8080)")
     private List<String> ports;
 
-    @Option(names = {"--volumes", "-v"},
-            description = "Volumes mapping (ex: ./data:/app/data)")
+    @Option(names = {"--volume", "-v"},
+            description = "Volume mapping (ex: ./data:/app/data)")
     private List<String> volumes;
 
     @Option(names = {"--cpu", "-c"},

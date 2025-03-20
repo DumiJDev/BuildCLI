@@ -1,4 +1,4 @@
-package dev.buildcli.cli.utilsForTest;
+package utilsfortest;
 
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;

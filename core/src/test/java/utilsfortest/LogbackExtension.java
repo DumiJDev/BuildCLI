@@ -1,4 +1,4 @@
-package utilsForTest;
+package utilsfortest;
 
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;

@@ -1,8 +1,8 @@
 package dev.buildcli.cli.commands.project.add;
 
 import ch.qos.logback.classic.spi.ILoggingEvent;
-import dev.buildcli.cli.utilsForTest.LogbackExtension;
-import dev.buildcli.cli.utilsForTest.LogbackLogger;
+import dev.buildcli.cli.utilsfortest.LogbackExtension;
+import dev.buildcli.cli.utilsfortest.LogbackLogger;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

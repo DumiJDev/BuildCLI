@@ -1,4 +1,4 @@
-package utilsForTest;
+package utilsfortest;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

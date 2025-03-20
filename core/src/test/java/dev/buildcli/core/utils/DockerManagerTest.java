@@ -15,8 +15,8 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
-import utilsForTest.LogbackExtension;
-import utilsForTest.LogbackLogger;
+import utilsfortest.LogbackExtension;
+import utilsfortest.LogbackLogger;
 
 import java.io.IOException;
 import java.nio.file.Files;

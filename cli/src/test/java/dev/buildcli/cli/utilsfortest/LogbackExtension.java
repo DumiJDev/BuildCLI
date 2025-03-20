@@ -1,4 +1,4 @@
-package dev.buildcli.cli.utilsForTest;
+package dev.buildcli.cli.utilsfortest;
 
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;

@@ -1,8 +1,8 @@
 package dev.buildcli.cli.commands.run;
 
 import ch.qos.logback.classic.spi.ILoggingEvent;
-import dev.buildcli.cli.utilsForTest.LogbackExtension;
-import dev.buildcli.cli.utilsForTest.LogbackLogger;
+import dev.buildcli.cli.utilsfortest.LogbackExtension;
+import dev.buildcli.cli.utilsfortest.LogbackLogger;
 import dev.buildcli.core.exceptions.DockerException;
 import dev.buildcli.core.utils.DockerManager;
 import org.junit.jupiter.api.DisplayName;
