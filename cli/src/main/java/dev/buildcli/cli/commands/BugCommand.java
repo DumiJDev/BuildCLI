@@ -1,23 +1,24 @@
-package dev.buildcli.cli.commands.bug;
+package dev.buildcli.cli.commands;
 
-import picocli.CommandLine;
+import dev.buildcli.core.domain.BuildCLICommand;
+import picocli.CommandLine.Command;
 import java.awt.Desktop;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.Callable;
 
-@CommandLine.Command(
+@Command(
         name = "bug",
         description = "Opens a GitHub issue template pre-filled with system and version info, helping you report a bug in BuildCLI.",
         mixinStandardHelpOptions = true
 )
-public class BugCommand implements Callable<Integer> {
+public class BugCommand implements BuildCLICommand {
 
     private static final String ISSUE_URL = "https://github.com/BuildCLI/BuildCLI/issues/new?body=";
 
     @Override
-    public Integer call() throws Exception {
+    public void run() {
         String buildCliVersion = getBuildCliVersion();
         String os = System.getProperty("os.name");
         String arch = System.getProperty("os.arch");
@@ -53,8 +54,6 @@ public class BugCommand implements Callable<Integer> {
 
         System.out.println("Opened GitHub issue template in your browser. If it didn’t open, please visit:");
         System.out.println(fullUrl);
-
-        return 0;
     }
 
     private String getBuildCliVersion() {
