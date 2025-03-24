@@ -20,7 +20,7 @@ import java.util.jar.Manifest;
 
 import static dev.buildcli.core.utils.BeautifyShell.content;
 
-import static dev.buildcli.core.utils.input.InteractiveInputUtils.confirm;
+import static dev.buildcli.core.utils.console.input.InteractiveInputUtils.confirm;
 
 /*
 *
