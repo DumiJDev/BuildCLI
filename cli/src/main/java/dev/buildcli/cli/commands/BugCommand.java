@@ -1,6 +1,7 @@
 package dev.buildcli.cli.commands;
 
 import dev.buildcli.core.domain.BuildCLICommand;
+import dev.buildcli.core.utils.JavaUtils;
 import dev.buildcli.core.utils.OS;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine.Command;
@@ -43,7 +44,7 @@ public class BugCommand implements BuildCLICommand {
                 - OS: %s
                 - Architecture: %s
                 - Java Version: %s
-                """.formatted(buildCliVersion, OS.getOSName(), OS.getArchitecture(), OS.getJavaVersion());
+                """.formatted(buildCliVersion, OS.getOSName(), OS.getArchitecture(), JavaUtils.getJavaVersion());
 
         String encodedBody = URLEncoder.encode(body, StandardCharsets.UTF_8);
         String fullUrl = ISSUE_URL + encodedBody;
