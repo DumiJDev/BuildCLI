@@ -20,6 +20,18 @@ public abstract class OS {
     return OS.contains("linux") || OS.contains("nix") || OS.contains("nux") || OS.contains("aix");
   }
 
+    public static String getOSName() {
+        return System.getProperty("os.name");
+    }
+
+    public static String getArchitecture() {
+        return System.getProperty("os.arch");
+    }
+
+    public static String getJavaVersion() {
+        return System.getProperty("java.version");
+    }
+
   public static void cdDirectory(String path){
     try {
         String[] command;
@@ -70,5 +82,4 @@ public abstract class OS {
       }
 
   }
-
 }

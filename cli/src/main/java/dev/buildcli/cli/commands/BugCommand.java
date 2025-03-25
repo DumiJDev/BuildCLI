@@ -1,6 +1,7 @@
 package dev.buildcli.cli.commands;
 
 import dev.buildcli.core.domain.BuildCLICommand;
+import dev.buildcli.core.utils.OS;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine.Command;
 import java.awt.Desktop;
@@ -21,10 +22,6 @@ public class BugCommand implements BuildCLICommand {
     @Override
     public void run() {
         String buildCliVersion = getBuildCliVersion();
-        String os = System.getProperty("os.name");
-        String arch = System.getProperty("os.arch");
-        String javaVersion = System.getProperty("java.version");
-
         String body = """
                 ### Describe the bug
 
@@ -46,7 +43,7 @@ public class BugCommand implements BuildCLICommand {
                 - OS: %s
                 - Architecture: %s
                 - Java Version: %s
-                """.formatted(buildCliVersion, os, arch, javaVersion);
+                """.formatted(buildCliVersion, OS.getOSName(), OS.getArchitecture(), OS.getJavaVersion());
 
         String encodedBody = URLEncoder.encode(body, StandardCharsets.UTF_8);
         String fullUrl = ISSUE_URL + encodedBody;
