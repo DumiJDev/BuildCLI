@@ -50,11 +50,19 @@ class DockerComposeCommandTest {
     @DisplayName("Test DockerComposeCommand success scenario")
     void testDockerComposeCommandSuccess(List<ILoggingEvent> logs) {
         CommandLine cmd = new CommandLine(command);
-        int exitCode = cmd.execute("--ports", "8080:8080", "--volumes", "./data:/app/data", "--cpu", "2", "--memory", "512m", "--dockerfile", VALID_DOCKER_FILE);
+        String[] options = {
+                "--dockerfile", VALID_DOCKER_FILE,
+                "--cpu", "2",
+                "--memory", "512m",
+                "--port", "8080:8080",
+                "--volume", "./data:/app/data"
+        };
+        int exitCode = cmd.execute(options);
 
         assertEquals(0, exitCode);
-
-        assertTrue(logs.stream().anyMatch(event -> event.getFormattedMessage().equals("docker-compose.yml created successfully!")));
+        assertTrue(logs.stream()
+                .anyMatch(event -> event.getFormattedMessage()
+                        .equals("docker-compose.yml created successfully!")));
     }
 
     @Test
@@ -65,7 +73,14 @@ class DockerComposeCommandTest {
         System.setErr(new PrintStream(errContent));
 
         CommandLine cmd = new CommandLine(command);
-        int exitCode = cmd.execute("--ports", "8080:8080", "--volumes", "./data:/app/data", "--cpu", "2", "--memory", "512m", "--dockerfile", INVALID_DOCKER_FILE);
+        String[] options = {
+                "--dockerfile", INVALID_DOCKER_FILE,
+                "--cpu", "2",
+                "--memory", "512m",
+                "--port", "8080:8080",
+                "--volume", "./data:/app/data"
+        };
+        int exitCode = cmd.execute(options);
 
         System.setErr(originalErr);
 

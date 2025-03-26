@@ -7,7 +7,7 @@ import picocli.CommandLine;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 @DisplayName("OrchestrationCommand Tests")
 class OrchestrationCommandTest {
@@ -15,26 +15,41 @@ class OrchestrationCommandTest {
     @Test
     @DisplayName("Test that the run() method displays the correct usage message.")
     void testRunDisplaysUsage() {
-
         ByteArrayOutputStream outContent = new ByteArrayOutputStream();
-        PrintStream ps = new PrintStream(outContent);
+        ByteArrayOutputStream errContent = new ByteArrayOutputStream();
         PrintStream originalOut = System.out;
-        System.setOut(ps);
+        PrintStream originalErr = System.err;
 
-        CommandLine cmd = new CommandLine(new OrchestrationCommand());
-        cmd.execute();
+        try {
+            System.setOut(new PrintStream(outContent));
+            System.setErr(new PrintStream(errContent));
 
-        System.setOut(originalOut);
+            CommandLine cmd = new CommandLine(new OrchestrationCommand());
+            int exitCode = cmd.execute(new String[]{});
 
-        String output = outContent.toString().trim();
+            String output = outContent.toString() + errContent.toString();
 
-        assertTrue(output.contains("Usage: orchestration"));
-        assertTrue(output.contains("Manage container orchestration using Docker Compose."));
-        assertTrue(output.contains("-h, --help"));
-        assertTrue(output.contains("-V, --version"));
-        assertTrue(output.contains("Commands:"));
-        assertTrue(output.contains("up"));
-        assertTrue(output.contains("down"));
+            assertAll(
+                    () -> assertEquals(2, exitCode, "Should return error exit code"),
+                    () -> assertTrue(output.contains("Usage: orchestration"), "Should show command name"),
+                    () -> assertTrue(output.contains("Missing required subcommand"), "Should show error message"),
+                    () -> assertTrue(output.contains("Manage container orchestration using Docker Compose."), "Should show description")
+            );
+
+            assertAll(
+                    () -> assertTrue(output.contains("-h, --help"), "Should show help option"),
+                    () -> assertTrue(output.contains("-V, --version"), "Should show version option")
+            );
+
+            assertAll(
+                    () -> assertTrue(output.contains("Commands:"), "Should show commands section"),
+                    () -> assertTrue(output.contains("up"), "Should show up command"),
+                    () -> assertTrue(output.contains("down"), "Should show down command")
+            );
+        } finally {
+            System.setOut(originalOut);
+            System.setErr(originalErr);
+        }
     }
 
     @Test
