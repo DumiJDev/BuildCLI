@@ -1,6 +1,4 @@
-package dev.buildcli.cli.utils;
-
-import dev.buildcli.core.utils.PomUtils;
+package dev.buildcli.core.utils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
