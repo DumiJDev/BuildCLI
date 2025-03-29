@@ -44,9 +44,6 @@ import static dev.buildcli.core.utils.input.InteractiveInputUtils.confirm;
 )
 public class TestCommand implements BuildCLICommand {
   private static final Logger logger = LoggerFactory.getLogger("AICodeTestCommand");
-  private final BuildCLIConfig allConfigs = ConfigContextLoader.getAllConfigs();
-  @ParentCommand
-  private CodeCommand parent;
   @Parameters(description = "Set of files or directories to comment sources")
   private List<File> files;
   @Option(names = {"--extensions", "--ext"}, description = "To filter files by", defaultValue = "java, kt, scala, groovy", paramLabel = "java, kt, scala, groovy")
@@ -134,7 +131,7 @@ public class TestCommand implements BuildCLICommand {
       var sourceCode = Files.readString(source.toPath());
       logger.info("Source file read: {}", source.getAbsolutePath());
 
-      var aiParams = IAParamsUtils.createAIParams(parent.getModel(), parent.getVendor());
+      var aiParams = IAParamsUtils.createAIParams();
       var iaService = new GeneralAIServiceFactory().create(aiParams);
 
       var lang = LanguageDetector.detectLanguage(source.getName());

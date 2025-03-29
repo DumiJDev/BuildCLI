@@ -6,7 +6,6 @@ import dev.buildcli.core.domain.BuildCLICommand;
 import dev.buildcli.core.log.SystemOutLogger;
 import dev.buildcli.core.utils.PomUtils;
 import dev.buildcli.core.utils.tools.maven.PomReader;
-import org.jetbrains.annotations.NotNull;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Parameters;
@@ -45,7 +44,6 @@ public class DependencyCommand implements BuildCLICommand {
     }
   }
 
-  @NotNull
   private String getPomWithAddedDependencies() {
     DependencySearchService service = new DependencySearchService();
     List<String> dependencies =  List.of(dependency);

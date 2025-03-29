@@ -3,9 +3,11 @@ package dev.buildcli.core;
 import dev.buildcli.core.project.ProjectUpdater;
 import dev.buildcli.core.utils.PomUtils;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -32,11 +34,28 @@ class ProjectUpdaterTest {
 		Files.move(Paths.get(backupPom), Paths.get(targetPom));
 	}
 
-	@Test
-	void shouldUpdatePomDependencies() {
-
+	@BeforeAll
+	static void setUpBeforeClass() throws Exception {
 		targetPom = "src/test/resources/pom-core-test/pom.xml";
 		backupPom = "src/test/resources/pom-core-test/pom.xml.versionsBackup";
+
+		PomUtils.create(new File(targetPom));
+		PomUtils.create(new File(backupPom));
+	}
+
+	@Test
+	void shouldUpdatePomDependencies() throws IOException {
+
+
+		if (!Files.exists(Paths.get(targetPom))) {
+			Files.createDirectories(Paths.get(targetPom).getParent());
+			Files.createFile(Paths.get(targetPom));
+		}
+
+		if (!Files.exists(Paths.get(backupPom))) {
+			Files.createDirectories(Paths.get(backupPom).getParent());
+			Files.createFile(Paths.get(backupPom));
+		}
 
 		this.updater.setAdditionalParameters(List.of("-f", targetPom));
 		this.updater.updateNow(true).execute();

@@ -5,6 +5,7 @@ import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.buildcli.core.actions.ai.AIChat;
 import dev.buildcli.core.actions.ai.AIService;
+import dev.langchain4j.model.chat.request.ChatRequest;
 
 public abstract class AbstractLangchain4jAIService implements AIService {
   private final ChatLanguageModel model;
@@ -19,11 +20,11 @@ public abstract class AbstractLangchain4jAIService implements AIService {
 
   @Override
   public String generate(AIChat chat) {
-    var aiMessageResponse = model.generate(
+    var aiMessageResponse = model.chat(
         new SystemMessage(chat.getSystemMessage()),
         new UserMessage(chat.getUserMessage())
     );
 
-    return aiMessageResponse.content().text();
+    return aiMessageResponse.aiMessage().text();
   }
 }

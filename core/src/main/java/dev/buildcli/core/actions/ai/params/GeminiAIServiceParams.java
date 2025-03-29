@@ -5,11 +5,13 @@ import dev.buildcli.core.actions.ai.AIServiceParams;
 import java.util.Objects;
 import java.util.Optional;
 
-public class JlamaAIServiceParams implements AIServiceParams {
+public class GeminiAIServiceParams implements AIServiceParams {
   private final String model;
+  private final String token;
 
-  public JlamaAIServiceParams(String model) {
+  public GeminiAIServiceParams(String model, String token) {
     this.model = Objects.requireNonNull(model);
+    this.token = Objects.requireNonNull(token);
   }
 
   @Override
@@ -19,13 +21,11 @@ public class JlamaAIServiceParams implements AIServiceParams {
 
   @Override
   public String vendor() {
-    return "jlama";
+    return "gemini";
   }
 
   @Override
-  public String toString() {
-    return "JlamaAIServiceParams{" +
-        "model='" + model + '\'' +
-        '}';
+  public Optional<String> token() {
+    return Optional.of(token);
   }
 }

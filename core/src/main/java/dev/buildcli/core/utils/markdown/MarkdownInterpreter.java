@@ -1,6 +1,7 @@
 package dev.buildcli.core.utils.markdown;
 
 import dev.buildcli.core.utils.BeautifyShell;
+import dev.buildcli.core.utils.markdown.highlighter.SyntaxHighlighter;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
