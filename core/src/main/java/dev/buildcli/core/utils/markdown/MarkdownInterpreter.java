@@ -43,7 +43,7 @@ public class MarkdownInterpreter {
 
     for (String line : lines) {
       // Check for code blocks
-      if (line.startsWith("```") || (inCodeBlock && line.contains("```"))) {
+      if (line.trim().startsWith("```") || (inCodeBlock && line.trim().contains("```"))) {
         if (inCodeBlock) {
           // End of code block
           inCodeBlock = false;
@@ -154,7 +154,6 @@ public class MarkdownInterpreter {
     Matcher matcher = pattern.matcher(line);
 
     if (matcher.find()) {
-      String marker = matcher.group(1);
       String content = matcher.group(2);
 
       // Process any inline formatting in the content
@@ -271,7 +270,7 @@ public class MarkdownInterpreter {
   private String processCodeSpans(String text) {
     Pattern pattern = Pattern.compile("`([^`]+)`");
     Matcher matcher = pattern.matcher(text);
-    StringBuffer result = new StringBuffer();
+    StringBuilder result = new StringBuilder();
 
     while (matcher.find()) {
       String code = matcher.group(1);
@@ -288,7 +287,7 @@ public class MarkdownInterpreter {
     // Process ***text*** or ___text___
     Pattern pattern = Pattern.compile("(\\*{3}|_{3})([^*_]+)(\\*{3}|_{3})");
     Matcher matcher = pattern.matcher(text);
-    StringBuffer result = new StringBuffer();
+    StringBuilder result = new StringBuilder();
 
     while (matcher.find()) {
       String content = matcher.group(2);
@@ -305,7 +304,7 @@ public class MarkdownInterpreter {
     // Process **text** or __text__
     Pattern pattern = Pattern.compile("(\\*{2}|_{2})([^*_]+)(\\*{2}|_{2})");
     Matcher matcher = pattern.matcher(text);
-    StringBuffer result = new StringBuffer();
+    StringBuilder result = new StringBuilder();
 
     while (matcher.find()) {
       String content = matcher.group(2);
@@ -322,7 +321,7 @@ public class MarkdownInterpreter {
     // Process *text* or _text_
     Pattern pattern = Pattern.compile("([*_])([^*_]+)([*_])");
     Matcher matcher = pattern.matcher(text);
-    StringBuffer result = new StringBuffer();
+    StringBuilder result = new StringBuilder();
 
     while (matcher.find()) {
       String content = matcher.group(2);
@@ -339,7 +338,7 @@ public class MarkdownInterpreter {
     // Process ~~text~~
     Pattern pattern = Pattern.compile("~~([^~]+)~~");
     Matcher matcher = pattern.matcher(text);
-    StringBuffer result = new StringBuffer();
+    StringBuilder result = new StringBuilder();
 
     while (matcher.find()) {
       String content = matcher.group(1);
@@ -356,7 +355,7 @@ public class MarkdownInterpreter {
     // Process [text](url)
     Pattern pattern = Pattern.compile("\\[([^]]+)]\\(([^)]+)\\)");
     Matcher matcher = pattern.matcher(text);
-    StringBuffer result = new StringBuffer();
+    StringBuilder result = new StringBuilder();
 
     while (matcher.find()) {
       String linkText = matcher.group(1);
