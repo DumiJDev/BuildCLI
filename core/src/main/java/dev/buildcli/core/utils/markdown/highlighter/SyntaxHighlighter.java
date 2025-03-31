@@ -21,7 +21,6 @@ public final class SyntaxHighlighter {
     // Register default language highlighters
     registerHighlighter("java", new JavaHighlighter());
     registerHighlighter("kotlin", new KotlinHighlighter());
-    /*
     registerHighlighter("python", new PythonHighlighter());
     registerHighlighter("json", new JsonHighlighter());
     registerHighlighter("xml", new XmlHighlighter());
@@ -45,7 +44,6 @@ public final class SyntaxHighlighter {
     registerHighlighter("html", new HtmlHighlighter());
     registerHighlighter("css", new CssHighlighter());
     registerHighlighter("swift", new SwiftHighlighter());
-    */
   }
 
   private SyntaxHighlighter() {

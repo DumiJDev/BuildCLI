@@ -3,6 +3,7 @@ package dev.buildcli.core.utils.markdown;
 import dev.buildcli.core.utils.BeautifyShell;
 import dev.buildcli.core.utils.markdown.highlighter.SyntaxHighlighter;
 
+import java.util.Arrays;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -205,7 +206,7 @@ public class MarkdownInterpreter {
     if (content.startsWith("LANGUAGE:")) {
       int newlineIndex = content.indexOf('\n');
       if (newlineIndex > 0) {
-        language = content.substring(9, newlineIndex).trim();
+        language = content.substring(9, newlineIndex).replace("`", "").trim();
         content = content.substring(newlineIndex + 1);
       }
     }
@@ -221,6 +222,7 @@ public class MarkdownInterpreter {
 
     // Style the code block with a background and padding
     String[] lines = highlightedContent.split("\n");
+    /*
     int maxLength = 0;
     for (String line : lines) {
       // Remove ANSI codes when calculating length
@@ -240,7 +242,11 @@ public class MarkdownInterpreter {
     }
 
     String horizontalBottomBorder = "└" + "─".repeat(maxLength + 2) + "┘";
-    result.append(brightBlackFg(horizontalBottomBorder));
+    result.append(brightBlackFg(horizontalBottomBorder));*/
+
+    var table = table(Arrays.asList(lines));
+
+    result.append(table);
 
     return result.toString();
   }
