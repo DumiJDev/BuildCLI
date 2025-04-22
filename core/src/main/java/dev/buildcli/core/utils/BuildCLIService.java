@@ -20,7 +20,7 @@ import java.util.jar.Manifest;
 
 import static dev.buildcli.core.utils.BeautifyShell.content;
 
-import static dev.buildcli.core.utils.input.InteractiveInputUtils.confirm;
+import static dev.buildcli.core.utils.console.input.InteractiveInputUtils.confirm;
 
 /*
 *
@@ -107,14 +107,6 @@ public class BuildCLIService {
 
   private static boolean matchesCommand(String input, List<String> validCommands) {
     return validCommands != null && validCommands.contains(input);
-  }
-
-  public static void about() {
-    SystemOutLogger.log("BuildCLI is a command-line interface (CLI) tool for managing and automating common tasks in Java project development.\n" +
-        "It allows you to create, compile, manage dependencies, and run Java projects directly from the terminal, simplifying the development process.\n");
-    SystemOutLogger.log("Visit the repository for more details: https://github.com/BuildCLI/BuildCLI\n");
-
-    SystemOutLogger.log(gitExec.showContributors());
   }
 
   private static void updateBuildCLI() {
