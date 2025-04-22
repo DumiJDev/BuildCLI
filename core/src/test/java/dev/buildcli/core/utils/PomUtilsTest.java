@@ -3,20 +3,23 @@ package dev.buildcli.core.utils;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class PomUtilsTest {
+  static Path pom;
+  static Path nonPom;
 
   @BeforeAll
   static void setup() throws IOException {
-    var pom = "src/test/resources/pom-utils-test/pom.xml";
-    var nonPom = "src/test/resources/pom-utils-test/non-dependencies-pom.xml";
+    pom = Files.createTempFile("pom", ".xml");
+    nonPom = Files.createTempFile("non-dependencies-pom", ".xml");
 
-    PomUtils.create(new File(pom));
-    PomUtils.create(new File(nonPom));
+    PomUtils.create(pom.toFile().getAbsoluteFile());
+    PomUtils.create(nonPom.toFile().getAbsoluteFile());
 
   }
 
@@ -24,7 +27,7 @@ class PomUtilsTest {
   void shouldRemoveExistingDependency() {
     var groupId = "info.picocli";
     var artifactId = "picocli";
-    var changedPom = PomUtils.rmDependencyToPom("src/test/resources/pom-utils-test/pom.xml",
+    var changedPom = PomUtils.rmDependencyToPom(pom.toFile().getAbsolutePath(),
         new String[]{groupId.concat(":").concat(artifactId)});
     assertFalse(changedPom.hasDependency(groupId, artifactId));
     assertFalse(changedPom.hasDependency("org.junit", "junit-bom"));
