@@ -41,7 +41,6 @@ public class DocumentCommand implements BuildCLICommand {
   @Option(names = {"--context"}, description = "Overwrite the default AI command")
   private String context;
 
-  private final BuildCLIConfig allConfigs = ConfigContextLoader.getAllConfigs();
 
 
   @Override
@@ -81,7 +80,7 @@ public class DocumentCommand implements BuildCLICommand {
       var sourceCode = Files.readString(source.toPath());
       logger.info("Source file read: {}", source.getAbsolutePath());
 
-      var aiParams = IAParamsUtils.createAIParams(parent.getModel(), parent.getVendor());;
+      var aiParams = IAParamsUtils.createAIParams();
       var iaService = new GeneralAIServiceFactory().create(aiParams);
 
       logger.info("Commenting with IA...");

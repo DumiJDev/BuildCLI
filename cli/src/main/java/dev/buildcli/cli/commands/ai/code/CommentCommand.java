@@ -3,6 +3,7 @@ package dev.buildcli.cli.commands.ai.code;
 import dev.buildcli.core.actions.ai.AIChat;
 import dev.buildcli.core.actions.ai.factories.GeneralAIServiceFactory;
 import dev.buildcli.core.constants.AIConstants;
+import dev.buildcli.core.constants.ConfigDefaultConstants;
 import dev.buildcli.core.domain.BuildCLICommand;
 import dev.buildcli.core.domain.configs.BuildCLIConfig;
 import dev.buildcli.core.utils.async.Async;
@@ -25,6 +26,8 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import static dev.buildcli.core.constants.ConfigDefaultConstants.AI_MODEL;
+import static dev.buildcli.core.constants.ConfigDefaultConstants.AI_VENDOR;
 import static dev.buildcli.core.utils.BeautifyShell.blueFg;
 import static dev.buildcli.core.utils.BeautifyShell.brightGreenFg;
 
@@ -40,8 +43,6 @@ public class CommentCommand implements BuildCLICommand {
 
   @Option(names = {"--context"}, description = "Overwrite the default AI command")
   private String context;
-
-  private final BuildCLIConfig allConfigs = ConfigContextLoader.getAllConfigs();
 
   @Override
   public void run() {
