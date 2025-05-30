@@ -3,7 +3,7 @@ package dev.buildcli.core.domain.docker.file;
 public record From(String baseImage, String alias) implements DockerfileResource {
   @Override
   public String toString() {
-    return "FROM " + baseImage + (alias != null ? " AS " + alias : "");
+    return "FROM " + baseImage + (alias != null && !alias.isEmpty() ? " AS " + alias : "");
   }
 
   @Override

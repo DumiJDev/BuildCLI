@@ -13,7 +13,7 @@ import picocli.CommandLine.HelpCommand;
     subcommands = {
         AboutCommand.class, AiCommand.class, AutocompleteCommand.class, ChangelogCommand.class, ConfigCommand.class,
         DoctorCommand.class, HookCommand.class, ProjectCommand.class, PluginCommand.class, RunCommand.class,
-        VersionCommand.class, HelpCommand.class, BugCommand.class, ManCommand.class
+        VersionCommand.class, HelpCommand.class, BugCommand.class, ManCommand.class, OpsCommand.class
     }
 )
 public class BuildCLI {
