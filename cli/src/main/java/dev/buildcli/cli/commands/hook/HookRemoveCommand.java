@@ -1,6 +1,6 @@
 package dev.buildcli.cli.commands.hook;
 
-import dev.buildcli.cli.BuildCLI;
+import dev.buildcli.cli.CommandLineRunner;
 import dev.buildcli.core.domain.BuildCLICommand;
 
 import dev.buildcli.hooks.HookManager;
@@ -31,7 +31,7 @@ public class HookRemoveCommand implements BuildCLICommand {
 
     @Override
     public void run() {
-        HookManager hookManager = new HookManager(new CommandLine(new BuildCLI()));
+        HookManager hookManager = new HookManager(new CommandLine(new CommandLineRunner()));
 
         hookManager.removeHook(command, phase);
     }
