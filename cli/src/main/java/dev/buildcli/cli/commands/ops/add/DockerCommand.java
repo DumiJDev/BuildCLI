@@ -20,8 +20,8 @@ import java.nio.file.Files;
 import java.util.*;
 
 import static dev.buildcli.core.domain.docker.compose.NetworkDriver.BRIDGE;
+import static dev.buildcli.core.utils.console.input.InteractiveInputUtils.*;
 import static dev.buildcli.core.utils.docker.DockerHubUtils.searchImagesWithTags;
-import static dev.buildcli.core.utils.input.InteractiveInputUtils.*;
 import static java.util.Optional.ofNullable;
 
 @Command(name = "docker", aliases = {"d"}, description = "Generates a Dockerfile for the project. "

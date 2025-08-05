@@ -1,8 +1,6 @@
-package dev.buildcli.core.utils.markdown.highlighter;
+package dev.buildcli.core.utils.console.markdown;
 
 import dev.buildcli.core.utils.BeautifyShell;
-
-import java.util.Arrays;
 
 import static dev.buildcli.core.utils.BeautifyShell.blueFg;
 

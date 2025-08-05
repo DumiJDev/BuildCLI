@@ -7,7 +7,7 @@ import java.util.Arrays;
 
 final class KeyDetector {
   public enum KeyType {
-    UP, DOWN, ENTER, CTRL_C, SPACE, OTHER
+    UP, DOWN, ENTER, CTRL_C, SPACE, OTHER, A, D
   }
 
   // Read a potential escape sequence from the reader

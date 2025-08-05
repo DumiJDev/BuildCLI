@@ -116,79 +116,93 @@ public abstract class InteractiveInputUtils {
    */
   public static <T> T options(String prompt, List<T> options, Function<T, String> formatter) {
     if (options == null || options.isEmpty()) {
-      throw new IllegalArgumentException("Options list cannot be empty");
+        throw new IllegalArgumentException("Options list cannot be empty");
     }
 
-    // Define the display function, using the provided formatter or defaulting to Object::toString
     Function<T, String> display = formatter != null ? formatter : Object::toString;
     int selectedIndex = 0;
     int startIndex = 0;
     int maxVisibleOptions = Math.min(options.size(), 10);
+    int visibleLines = 0;
 
-    boolean first = true;
+    // Initial display
+    println(prompt);
+    println("(Use arrow keys ↑↓ to navigate, Enter to select, Ctrl+C to cancel)");
 
     while (true) {
-      if (!first) {
-        // Clear the previous display area
-        clearLines(maxVisibleOptions + 4);
-      }
+        // Clear only the options area
+        if (visibleLines > 0) {
+            clearLines(visibleLines);
+        }
 
-      // Display the prompt and initial instructions
-      println(prompt);
-      println("(Use arrow keys ↑↓ to navigate, Enter to select, Ctrl+C to cancel)");
+        // Track number of lines we're displaying
+        visibleLines = 0;
 
-      first = false;
-
-      // Render the currently visible options
-      renderOptions(options, display, selectedIndex, startIndex, maxVisibleOptions);
-
-      // Display scroll indicators if needed
-      if (startIndex > 0) {
-        print("↑ more options above\r");
-      }
-      if (startIndex + maxVisibleOptions < options.size()) {
-        println();
-        print("↓ more options below\r");
-      }
-
-      try {
-        var key = KeyDetector.detectKey(terminal.reader());
-        switch (key) {
-          case UP:
-            if (selectedIndex > 0) {
-              selectedIndex--;
-              if (selectedIndex < startIndex) {
-                startIndex = selectedIndex;
-              }
+        // Render visible options
+        for (int i = startIndex; i < Math.min(startIndex + maxVisibleOptions, options.size()); i++) {
+            T option = options.get(i);
+            String prefix = (i == selectedIndex) ? "› " : "  ";
+            var item = BeautifyShell.content(prefix + display.apply(option));
+            
+            if (i == selectedIndex) {
+                item.blueFg().underline();
             }
-            break;
-          case DOWN:
-            if (selectedIndex < options.size() - 1) {
-              selectedIndex++;
-              if (selectedIndex >= startIndex + maxVisibleOptions) {
-                startIndex = selectedIndex - maxVisibleOptions + 1;
-              }
+            
+            println(item);
+            visibleLines++;
+        }
+
+        // Show scroll indicators if needed
+        if (startIndex > 0) {
+            print("↑ more options above");
+            println();
+            visibleLines++;
+        }
+        if (startIndex + maxVisibleOptions < options.size()) {
+            print("↓ more options below");
+            println();
+            visibleLines++;
+        }
+
+        try {
+            var key = KeyDetector.detectKey(terminal.reader());
+            switch (key) {
+                case UP:
+                    if (selectedIndex > 0) {
+                        selectedIndex--;
+                        if (selectedIndex < startIndex) {
+                            startIndex = selectedIndex;
+                        }
+                    }
+                    break;
+                case DOWN:
+                    if (selectedIndex < options.size() - 1) {
+                        selectedIndex++;
+                        if (selectedIndex >= startIndex + maxVisibleOptions) {
+                            startIndex = selectedIndex - maxVisibleOptions + 1;
+                        }
+                    }
+                    break;
+                case ENTER:
+                    // Clear only the options area before returning
+                    clearLines(visibleLines + 2);
+                    return options.get(selectedIndex);
+                case CTRL_C:
+                    // Clear only the options area before canceling
+                    clearLines(visibleLines);
+                    println("Operation canceled");
+                    return null;
+                default:
+                    // Ignore other keys
+                    break;
             }
-            break;
-          case ENTER:
-            clearLines(maxVisibleOptions + 4);
-            return options.get(selectedIndex);
-          case CTRL_C:
-            clearLines(maxVisibleOptions + 4);
+        } catch (UserInterruptException | IOException e) {
+            clearLines(visibleLines);
             println("Operation canceled");
             return null;
-          default:
-            System.out.println(key);
-            // Ignore other keys
-            break;
         }
-      } catch (UserInterruptException | IOException e) {
-        clearLines(maxVisibleOptions + 4);
-        println("Operation canceled");
-        return null;
-      }
     }
-  }
+}
 
   private static void println() {
     terminal.writer().println();
@@ -315,7 +329,7 @@ public abstract class InteractiveInputUtils {
 
       // Display the prompt and instructions
       println(prompt);
-      println("(Use arrow keys ↑↓ to navigate, Space to select/deselect, Enter to confirm, Ctrl+C to cancel)");
+      println("(Use arrow keys ↑↓ to navigate, Space to select/deselect, 'a' to select all, 'd' to deselect all, Enter to confirm, Ctrl+C to cancel)");
 
       first = false;
 
