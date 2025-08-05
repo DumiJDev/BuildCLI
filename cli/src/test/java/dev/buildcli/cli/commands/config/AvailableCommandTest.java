@@ -23,7 +23,7 @@ class AvailableCommandTest {
 
     Assertions.assertEquals(0, result.exitCode);
     ConfigKeys.ALL_KEYS.forEach(
-            key -> Assertions.assertTrue(result.output.contains(key), "Key not found: " + key));
+        key -> Assertions.assertTrue(result.output.contains(key), "Key not found: " + key));
   }
 
   @ParameterizedTest

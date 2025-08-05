@@ -8,7 +8,9 @@ import java.util.logging.Logger;
 public abstract class OS {
   private static final Logger logger = Logger.getLogger(OS.class.getName());
   private static RuntimeCommandExecutor runtimeCommandExecutor = new RuntimeCommandExecutor();
-  private OS() {}
+
+  private OS() {
+  }
 
   public static void setCommandExecutor(RuntimeCommandExecutor executor) {
     runtimeCommandExecutor = executor;
@@ -26,25 +28,25 @@ public abstract class OS {
     return getOSName().contains("linux") || getOSName().contains("nix") || getOSName().contains("nux") || getOSName().contains("aix");
   }
 
-    public static String getOSName() {
-        return System.getProperty("os.name").toLowerCase();
-    }
+  public static String getOSName() {
+    return System.getProperty("os.name").toLowerCase();
+  }
 
-    public static String getArchitecture() {
-        return System.getProperty("os.arch");
-    }
+  public static String getArchitecture() {
+    return System.getProperty("os.arch");
+  }
 
-  public static void cdDirectory(String path){
+  public static void cdDirectory(String path) {
     try {
       CommandMan command = CommandMan.create()
-                .addCommand("cd " + path);
-        executeCommand(command);
+          .addCommand("cd " + path);
+      executeCommand(command);
     } catch (Exception e) {
       logger.severe("Error changing directory: " + e.getMessage());
     }
   }
 
-  public static void cpDirectoryOrFile(String source, String destination){
+  public static void cpDirectoryOrFile(String source, String destination) {
     try {
       CommandMan command;
       if (isWindows()) {
@@ -60,14 +62,14 @@ public abstract class OS {
     }
   }
 
-  public static String getHomeBinDirectory(){
-      String homeBin="";
-      if(isWindows()){
-          homeBin= System.getenv("HOMEPATH")+"//bin";
-      }else {
-            homeBin= System.getenv("HOME")+"/bin";
-      }
-      return homeBin;
+  public static String getHomeBinDirectory() {
+    String homeBin = "";
+    if (isWindows()) {
+      homeBin = System.getenv("HOMEPATH") + "//bin";
+    } else {
+      homeBin = System.getenv("HOME") + "/bin";
+    }
+    return homeBin;
   }
 
   public static void chmodX(String path) {
@@ -86,7 +88,7 @@ public abstract class OS {
     try {
       for (String cmd : commandMan.getCommands()) {
         String[] command = isLinux() ? new String[]{"sh", "-c", cmd}
-                                     : new String[]{"cmd", "/c", cmd};
+            : new String[]{"cmd", "/c", cmd};
         runtimeCommandExecutor.execute(command);
       }
     } catch (Exception e) {

@@ -12,5 +12,6 @@ public interface LanguageHighlighter {
    * @return Highlighted code with ANSI color codes
    */
   String highlight(String code);
+
   String[] keywords();
 }

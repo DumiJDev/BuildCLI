@@ -21,11 +21,11 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class FileDownloaderTest {
 
-  private MockedStatic<HttpClient> httpClientStatic;
   private final String url = "http://localhost/teste.txt";
   private final String filename = "test.txt";
   private final byte[] fakeContent = "test file".getBytes();
   private final ByteArrayInputStream inputStream = new ByteArrayInputStream(fakeContent);
+  private MockedStatic<HttpClient> httpClientStatic;
 
   @AfterEach
   void cleanup() throws IOException {
