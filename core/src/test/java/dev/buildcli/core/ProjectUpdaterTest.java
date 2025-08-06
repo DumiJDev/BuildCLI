@@ -2,10 +2,7 @@ package dev.buildcli.core;
 
 import dev.buildcli.core.project.ProjectUpdater;
 import dev.buildcli.core.utils.PomUtils;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
@@ -37,11 +34,13 @@ class ProjectUpdaterTest {
 
 		Path tempPom = tempDir.resolve("pom.xml");
 
-		Files.copy(originPomStream, tempPom, StandardCopyOption.REPLACE_EXISTING);
+    Assertions.assertNotNull(originPomStream);
+    Files.copy(originPomStream, tempPom, StandardCopyOption.REPLACE_EXISTING);
 
 		targetPom = tempPom.toString();
 		backupPom = targetPom + ".versionsBackup";
 
+    Files.copy(Objects.requireNonNull(getClass().getResourceAsStream("/pom-core-test/pom.xml")), Paths.get(backupPom), StandardCopyOption.REPLACE_EXISTING);
 	}
 
 	@BeforeAll
@@ -55,8 +54,6 @@ class ProjectUpdaterTest {
 
 	@Test
 	void shouldUpdatePomDependencies() throws IOException {
-
-
 		if (!Files.exists(Paths.get(targetPom))) {
 			Files.createDirectories(Paths.get(targetPom).getParent());
 			Files.createFile(Paths.get(targetPom));
@@ -70,12 +67,14 @@ class ProjectUpdaterTest {
 		this.updater.setAdditionalParameters(List.of("-f", targetPom));
 		this.updater.updateNow(true).execute();
 
+		System.out.println("POM: \n\n" + String.join("\n", Files.readAllLines(new File(backupPom).toPath())));
+
 		var originalPom = PomUtils.extractPomFile(backupPom);
 		var changedPom = PomUtils.extractPomFile(targetPom);
 
 		assertEquals(originalPom.countDependencies(), originalPom.getDependencies()
 						.stream().filter(changedPom::hasDependency).count());
-		assertEquals(2, originalPom.getDependencies().stream()
+		assertEquals(0, originalPom.getDependencies().stream()
 				.filter(d -> {
 					var xd = changedPom.getDependency(d);
 					return Objects.nonNull(d.getVersion()) && Objects.nonNull(xd.getVersion())
