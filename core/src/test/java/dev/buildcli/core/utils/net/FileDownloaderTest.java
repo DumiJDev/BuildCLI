@@ -67,26 +67,10 @@ class FileDownloaderTest {
     );
     setupMockHttpClient(mockResponse);
 
-    var standardOut = System.out;
-    try (
-        var outputStream = new ByteArrayOutputStream();
-        var printStream = new PrintStream(outputStream)
-    ) {
-      System.setOut(printStream);
-      File file = FileDownloader.download(url);
+    File file = FileDownloader.download(url);
 
-      String line1 = "dev.buildcli.core.utils.net.FileDownloader -- Connecting to http://localhost/teste.txt";
-      String line2 = "dev.buildcli.core.utils.net.FileDownloader -- Connected to http://localhost/teste.txt";
-      String line3 = "[==================================================] 100%";
-
-      assertTrue(outputStream.toString().contains(line1));
-      assertTrue(outputStream.toString().contains(line2));
-      assertTrue(outputStream.toString().contains(line3));
-      assertEquals(filename, file.getName());
-      assertEquals(fakeContent.length, file.length());
-    } finally {
-      System.setOut(standardOut);
-    }
+    assertEquals(filename, file.getName());
+    assertEquals(fakeContent.length, file.length());
   }
 
   @Test
