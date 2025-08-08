@@ -20,8 +20,6 @@ public abstract class InteractiveInputUtils {
   private static final Terminal terminal;
   private static final LineReader reader;
 
-  private InteractiveInputUtils() {}
-
   static {
     try {
       terminal = TerminalBuilder.builder()
@@ -41,6 +39,9 @@ public abstract class InteractiveInputUtils {
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
+  }
+
+  private InteractiveInputUtils() {
   }
 
   public static boolean confirm(String message, List<String> yesOptions, List<String> noOptions, Boolean defaultValue) {
@@ -101,7 +102,7 @@ public abstract class InteractiveInputUtils {
   }
 
   public static boolean confirm(String message) {
-    return confirm(message, of("yes","y"), of("no", "n"), null);
+    return confirm(message, of("yes", "y"), of("no", "n"), null);
   }
 
   /**
@@ -116,7 +117,7 @@ public abstract class InteractiveInputUtils {
    */
   public static <T> T options(String prompt, List<T> options, Function<T, String> formatter) {
     if (options == null || options.isEmpty()) {
-        throw new IllegalArgumentException("Options list cannot be empty");
+      throw new IllegalArgumentException("Options list cannot be empty");
     }
 
     Function<T, String> display = formatter != null ? formatter : Object::toString;
@@ -130,79 +131,79 @@ public abstract class InteractiveInputUtils {
     println("(Use arrow keys ↑↓ to navigate, Enter to select, Ctrl+C to cancel)");
 
     while (true) {
-        // Clear only the options area
-        if (visibleLines > 0) {
-            clearLines(visibleLines);
+      // Clear only the options area
+      if (visibleLines > 0) {
+        clearLines(visibleLines);
+      }
+
+      // Track number of lines we're displaying
+      visibleLines = 0;
+
+      // Render visible options
+      for (int i = startIndex; i < Math.min(startIndex + maxVisibleOptions, options.size()); i++) {
+        T option = options.get(i);
+        String prefix = (i == selectedIndex) ? "› " : "  ";
+        var item = BeautifyShell.content(prefix + display.apply(option));
+
+        if (i == selectedIndex) {
+          item.blueFg().underline();
         }
 
-        // Track number of lines we're displaying
-        visibleLines = 0;
+        println(item);
+        visibleLines++;
+      }
 
-        // Render visible options
-        for (int i = startIndex; i < Math.min(startIndex + maxVisibleOptions, options.size()); i++) {
-            T option = options.get(i);
-            String prefix = (i == selectedIndex) ? "› " : "  ";
-            var item = BeautifyShell.content(prefix + display.apply(option));
-            
-            if (i == selectedIndex) {
-                item.blueFg().underline();
+      // Show scroll indicators if needed
+      if (startIndex > 0) {
+        print("↑ more options above");
+        println();
+        visibleLines++;
+      }
+      if (startIndex + maxVisibleOptions < options.size()) {
+        print("↓ more options below");
+        println();
+        visibleLines++;
+      }
+
+      try {
+        var key = KeyDetector.detectKey(terminal.reader());
+        switch (key) {
+          case UP:
+            if (selectedIndex > 0) {
+              selectedIndex--;
+              if (selectedIndex < startIndex) {
+                startIndex = selectedIndex;
+              }
             }
-            
-            println(item);
-            visibleLines++;
-        }
-
-        // Show scroll indicators if needed
-        if (startIndex > 0) {
-            print("↑ more options above");
-            println();
-            visibleLines++;
-        }
-        if (startIndex + maxVisibleOptions < options.size()) {
-            print("↓ more options below");
-            println();
-            visibleLines++;
-        }
-
-        try {
-            var key = KeyDetector.detectKey(terminal.reader());
-            switch (key) {
-                case UP:
-                    if (selectedIndex > 0) {
-                        selectedIndex--;
-                        if (selectedIndex < startIndex) {
-                            startIndex = selectedIndex;
-                        }
-                    }
-                    break;
-                case DOWN:
-                    if (selectedIndex < options.size() - 1) {
-                        selectedIndex++;
-                        if (selectedIndex >= startIndex + maxVisibleOptions) {
-                            startIndex = selectedIndex - maxVisibleOptions + 1;
-                        }
-                    }
-                    break;
-                case ENTER:
-                    // Clear only the options area before returning
-                    clearLines(visibleLines + 2);
-                    return options.get(selectedIndex);
-                case CTRL_C:
-                    // Clear only the options area before canceling
-                    clearLines(visibleLines);
-                    println("Operation canceled");
-                    return null;
-                default:
-                    // Ignore other keys
-                    break;
+            break;
+          case DOWN:
+            if (selectedIndex < options.size() - 1) {
+              selectedIndex++;
+              if (selectedIndex >= startIndex + maxVisibleOptions) {
+                startIndex = selectedIndex - maxVisibleOptions + 1;
+              }
             }
-        } catch (UserInterruptException | IOException e) {
+            break;
+          case ENTER:
+            // Clear only the options area before returning
+            clearLines(visibleLines + 2);
+            return options.get(selectedIndex);
+          case CTRL_C:
+            // Clear only the options area before canceling
             clearLines(visibleLines);
             println("Operation canceled");
             return null;
+          default:
+            // Ignore other keys
+            break;
         }
+      } catch (UserInterruptException | IOException e) {
+        clearLines(visibleLines);
+        println("Operation canceled");
+        return null;
+      }
     }
-}
+  }
 
   private static void println() {
     terminal.writer().println();
@@ -429,9 +430,9 @@ public abstract class InteractiveInputUtils {
   /**
    * Displays an interactive terminal checklist for selecting multiple options.
    *
-   * @param prompt    The prompt to display to the user.
-   * @param options   The list of available options.
-   * @param <T>       The type of the options.
+   * @param prompt  The prompt to display to the user.
+   * @param options The list of available options.
+   * @param <T>     The type of the options.
    * @return The list of selected options or empty list if none selected/canceled.
    */
   public static <T> List<T> checklist(String prompt, List<T> options) {

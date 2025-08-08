@@ -20,9 +20,9 @@ import static org.mockito.Mockito.*;
 
 class OSTest {
 
+  private static final String OS_NAME = System.getProperty("os.name").toLowerCase();
   private Path tempDir;
   private Path secondTempDir;
-  private static final String OS_NAME = System.getProperty("os.name").toLowerCase();
   private RuntimeCommandExecutor mockRuntimeCommandExecutor;
 
   @BeforeEach
@@ -60,7 +60,7 @@ class OSTest {
   @Test
   void shouldReturnKnownArchitecture_whenGetArchitectureIsCalled() {
     String osArchitecture = OS.getArchitecture().toLowerCase();
-    List<String> expectedArchitectures = List.of("amd64", "x86", "x86_64", "aarch64","arch64", "arm", "sd");
+    List<String> expectedArchitectures = List.of("amd64", "x86", "x86_64", "aarch64", "arch64", "arm", "sd");
     boolean matchesKnownArch = expectedArchitectures.stream()
         .anyMatch(osArchitecture::contains);
     assertFalse(osArchitecture.isEmpty());
@@ -70,9 +70,9 @@ class OSTest {
   @Test
   void shouldReturnTrue_whenOSIsWindows() {
     System.setProperty("os.name", "Windows 10");
-    try{
+    try {
       assertTrue(OS.isWindows());
-    }finally {
+    } finally {
       System.setProperty("os.name", OS_NAME);
     }
   }
@@ -87,9 +87,9 @@ class OSTest {
   @Test
   void shouldReturnTrue_whenOSIsMac() {
     System.setProperty("os.name", "mac");
-    try{
+    try {
       assertTrue(OS.isMac());
-    }finally {
+    } finally {
       System.setProperty("os.name", OS_NAME);
     }
   }
@@ -97,7 +97,7 @@ class OSTest {
   @Test
   void shouldReturnHomeBinPath_whenGetHomeBinDirectoryIsCalled() {
     String result = OS.getHomeBinDirectory();
-    String expect = OS.isWindows() ? System.getenv("HOMEPATH")+"//bin" : System.getenv("HOME")+"/bin";
+    String expect = OS.isWindows() ? System.getenv("HOMEPATH") + "//bin" : System.getenv("HOME") + "/bin";
     assertEquals(expect, result);
   }
 
@@ -118,13 +118,13 @@ class OSTest {
   @Test
   void shouldExecuteCdCommand_whenOSIsUnix() throws Exception {
     System.setProperty("os.name", "Linux");
-    try{
+    try {
       doNothing().when(mockRuntimeCommandExecutor).execute(any());
       OS.setCommandExecutor(mockRuntimeCommandExecutor);
       String path = tempDir.toAbsolutePath().toString();
       OS.cdDirectory(path);
       verify(mockRuntimeCommandExecutor).execute(new String[]{"sh", "-c", "cd " + path});
-    }finally {
+    } finally {
       System.setProperty("os.name", OS_NAME);
     }
   }
@@ -139,12 +139,12 @@ class OSTest {
   @Test
   void shouldExecuteCpCommand_whenOSIsUnix() throws Exception {
     System.setProperty("os.name", "Linux");
-    try{
+    try {
       doNothing().when(mockRuntimeCommandExecutor).execute(any());
       OS.setCommandExecutor(mockRuntimeCommandExecutor);
       String path = tempDir.toAbsolutePath().toString();
       OS.cpDirectoryOrFile(path, secondTempDir.toString());
-      verify(mockRuntimeCommandExecutor).execute(new String[]{"sh", "-c", "cp " + path +" "+ secondTempDir.toString()});
+      verify(mockRuntimeCommandExecutor).execute(new String[]{"sh", "-c", "cp " + path + " " + secondTempDir.toString()});
     } finally {
       System.setProperty("os.name", OS_NAME);
     }
@@ -153,7 +153,7 @@ class OSTest {
   @Test
   void shouldExecuteCopyCommand_whenOSIsWindows() throws Exception {
     System.setProperty("os.name", "Windows 10");
-    try{
+    try {
       doNothing().when(mockRuntimeCommandExecutor).execute(any());
       OS.setCommandExecutor(mockRuntimeCommandExecutor);
       String path = tempDir.toAbsolutePath().toString();
@@ -167,7 +167,7 @@ class OSTest {
   @Test
   void shouldNotThrowException_whenCopyCommandFails() throws Exception {
     System.setProperty("os.name", "Windows 10");
-    try{
+    try {
       doThrow(new RuntimeException("Exec falhou")).when(mockRuntimeCommandExecutor).execute(any());
       OS.setCommandExecutor(mockRuntimeCommandExecutor);
       String path = tempDir.toAbsolutePath().toString();

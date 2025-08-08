@@ -16,7 +16,8 @@ import java.time.Duration;
 public final class FileDownloader {
   private static final Logger log = LoggerFactory.getLogger(FileDownloader.class);
 
-  private FileDownloader(){ }
+  private FileDownloader() {
+  }
 
   public static File download(String url) throws DownloadFailedException {
     try (var client = HttpClient.newHttpClient()) {
