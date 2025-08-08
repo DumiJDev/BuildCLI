@@ -8,7 +8,7 @@ public abstract class FindFilesUtils {
   private FindFilesUtils() {
   }
 
-  public static List<File> search(File dir, String...extensions) {
+  public static List<File> search(File dir, String... extensions) {
     List<File> files = new ArrayList<>();
     if (dir.isDirectory()) {
       var listFiles = dir.listFiles();
@@ -38,7 +38,7 @@ public abstract class FindFilesUtils {
   }
 
   public static List<File> searchJavaFiles(File dir) {
-    final String[] extensions = { ".java", ".kt", ".groovy", ".scala" };
+    final String[] extensions = {".java", ".kt", ".groovy", ".scala"};
     return search(dir, extensions);
   }
 
@@ -47,7 +47,7 @@ public abstract class FindFilesUtils {
     return search(dir, extensions);
   }
 
-  private static boolean endsWith(File file, String...suffixes) {
+  private static boolean endsWith(File file, String... suffixes) {
     for (String suffix : suffixes) {
       if (file.getName().endsWith(suffix)) {
         return true;

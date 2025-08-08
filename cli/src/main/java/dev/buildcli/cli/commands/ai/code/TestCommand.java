@@ -1,23 +1,19 @@
 package dev.buildcli.cli.commands.ai.code;
 
-import dev.buildcli.cli.commands.ai.CodeCommand;
 import dev.buildcli.core.actions.ai.AIChat;
 import dev.buildcli.core.actions.ai.factories.GeneralAIServiceFactory;
 import dev.buildcli.core.domain.BuildCLICommand;
-import dev.buildcli.core.domain.configs.BuildCLIConfig;
 import dev.buildcli.core.utils.LanguageDetector;
 import dev.buildcli.core.utils.ai.CodeUtils;
 import dev.buildcli.core.utils.ai.IAParamsUtils;
 import dev.buildcli.core.utils.async.Async;
-import dev.buildcli.core.utils.config.ConfigContextLoader;
-import dev.buildcli.core.utils.filesystem.FindFilesUtils;
 import dev.buildcli.core.utils.console.markdown.MarkdownInterpreter;
+import dev.buildcli.core.utils.filesystem.FindFilesUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
-import picocli.CommandLine.ParentCommand;
 
 import java.io.File;
 import java.io.IOException;

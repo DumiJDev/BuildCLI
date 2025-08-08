@@ -6,7 +6,7 @@ on:
       [ main, develop ]
   workflow_dispatch:
 
-permissions: {}
+permissions: { }
 
 jobs:
   lint-and-review:

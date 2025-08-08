@@ -2,9 +2,9 @@ package dev.buildcli.cli.commands.config;
 
 import dev.buildcli.core.constants.ConfigDefaultConstants;
 import dev.buildcli.core.domain.BuildCLICommand;
+import picocli.CommandLine.Command;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Spec;
-import picocli.CommandLine.Command;
 
 import java.io.PrintWriter;
 

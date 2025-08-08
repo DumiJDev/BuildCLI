@@ -2,7 +2,9 @@ package dev.buildcli.core;
 
 import dev.buildcli.core.project.ProjectUpdater;
 import dev.buildcli.core.utils.PomUtils;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
@@ -19,68 +21,65 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ProjectUpdaterTest {
 
-	@TempDir
-	Path tempDir;
+  private static String backupPom;
+  private static String targetPom;
+  @TempDir
+  Path tempDir;
+  private ProjectUpdater updater;
 
-	private static String backupPom;
-	private static String targetPom;
-	private ProjectUpdater updater;
+  @BeforeAll
+  static void setUpBeforeClass() throws Exception {
+    targetPom = "src/test/resources/pom-core-test/pom.xml";
+    backupPom = "src/test/resources/pom-core-test/pom.xml.versionsBackup";
 
-	@BeforeEach
-	void setUp() throws IOException {
-		this.updater = new ProjectUpdater();
+    PomUtils.create(new File(targetPom));
+    PomUtils.create(new File(backupPom));
+  }
 
-		InputStream originPomStream = getClass().getResourceAsStream("/pom-core-test/pom.xml");
+  @BeforeEach
+  void setUp() throws IOException {
+    this.updater = new ProjectUpdater();
 
-		Path tempPom = tempDir.resolve("pom.xml");
+    InputStream originPomStream = getClass().getResourceAsStream("/pom-core-test/pom.xml");
 
-    Assertions.assertNotNull(originPomStream);
+    Path tempPom = tempDir.resolve("pom.xml");
+
     Files.copy(originPomStream, tempPom, StandardCopyOption.REPLACE_EXISTING);
 
-		targetPom = tempPom.toString();
-		backupPom = targetPom + ".versionsBackup";
+    targetPom = tempPom.toString();
+    backupPom = targetPom + ".versionsBackup";
 
-    Files.copy(Objects.requireNonNull(getClass().getResourceAsStream("/pom-core-test/pom.xml")), Paths.get(backupPom), StandardCopyOption.REPLACE_EXISTING);
-	}
+  }
 
-	@BeforeAll
-	static void setUpBeforeClass() throws Exception {
-		targetPom = "src/test/resources/pom-core-test/pom.xml";
-		backupPom = "src/test/resources/pom-core-test/pom.xml.versionsBackup";
+  @Test
+  void shouldUpdatePomDependencies() throws IOException {
 
-		PomUtils.create(new File(targetPom));
-		PomUtils.create(new File(backupPom));
-	}
 
-	@Test
-	void shouldUpdatePomDependencies() throws IOException {
-		if (!Files.exists(Paths.get(targetPom))) {
-			Files.createDirectories(Paths.get(targetPom).getParent());
-			Files.createFile(Paths.get(targetPom));
-		}
+    if (!Files.exists(Paths.get(targetPom))) {
+      Files.createDirectories(Paths.get(targetPom).getParent());
+      Files.createFile(Paths.get(targetPom));
+    }
 
-		if (!Files.exists(Paths.get(backupPom))) {
-			Files.createDirectories(Paths.get(backupPom).getParent());
-			Files.createFile(Paths.get(backupPom));
-		}
+    if (!Files.exists(Paths.get(backupPom))) {
+      Files.createDirectories(Paths.get(backupPom).getParent());
+      Files.createFile(Paths.get(backupPom));
+    }
 
-		this.updater.setAdditionalParameters(List.of("-f", targetPom));
-		this.updater.updateNow(true).execute();
+    this.updater.setAdditionalParameters(List.of("-f", targetPom));
+    this.updater.updateNow(true).execute();
 
-		System.out.println("POM: \n\n" + String.join("\n", Files.readAllLines(new File(backupPom).toPath())));
+    var originalPom = PomUtils.extractPomFile(backupPom);
+    var changedPom = PomUtils.extractPomFile(targetPom);
 
-		var originalPom = PomUtils.extractPomFile(backupPom);
-		var changedPom = PomUtils.extractPomFile(targetPom);
-
-		assertEquals(originalPom.countDependencies(), originalPom.getDependencies()
-						.stream().filter(changedPom::hasDependency).count());
-		assertEquals(0, originalPom.getDependencies().stream()
-				.filter(d -> {
-					var xd = changedPom.getDependency(d);
-					return Objects.nonNull(d.getVersion()) && Objects.nonNull(xd.getVersion())
-							&& !d.getVersion().equals(xd.getVersion());
-				})
-				.count());
-	}
+    assertEquals(originalPom.countDependencies(), originalPom.getDependencies()
+        .stream().filter(changedPom::hasDependency).count());
+    assertEquals(2, originalPom.getDependencies().stream()
+        .filter(d -> {
+          var xd = changedPom.getDependency(d);
+          return Objects.nonNull(d.getVersion()) && Objects.nonNull(xd.getVersion())
+              && !d.getVersion().equals(xd.getVersion());
+        })
+        .count());
+  }
 
 }

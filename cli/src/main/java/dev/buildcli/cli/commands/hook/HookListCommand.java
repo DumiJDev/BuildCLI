@@ -6,16 +6,16 @@ import dev.buildcli.hooks.HookManager;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 
-@Command(name="list",
-         description = """
-                        List all hooks configured for commands.
-                        Usage: hook list
-                        This will display all registered hooks and their associated commands.
-                        """)
+@Command(name = "list",
+    description = """
+        List all hooks configured for commands.
+        Usage: hook list
+        This will display all registered hooks and their associated commands.
+        """)
 public class HookListCommand implements BuildCLICommand {
 
-    @Override
-    public void run(){
-     new HookManager(new CommandLine(new CommandLineRunner())).listHooks();
-    }
+  @Override
+  public void run() {
+    new HookManager(new CommandLine(new CommandLineRunner())).listHooks();
+  }
 }

@@ -13,7 +13,7 @@ public class Pom {
 
   public static final String XML_ELEMENT = "project";
   private static final Logger logger = Logger.getLogger(Pom.class.getName());
-  
+
   @XmlElementWrapper
   @XmlElement(name = "dependency")
   private final List<Dependency> dependencies;
