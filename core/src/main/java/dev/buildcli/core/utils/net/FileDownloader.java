@@ -15,7 +15,10 @@ import java.time.Duration;
 public final class FileDownloader {
   private static final Logger log = LoggerFactory.getLogger(FileDownloader.class);
 
-  public static File download(String url) {
+  private FileDownloader() {
+  }
+
+  public static File download(String url) throws DownloadFailedException {
     try (var client = HttpClient.newHttpClient()) {
       var request = HttpRequest.newBuilder().GET().uri(URI.create(url)).timeout(Duration.ofMinutes(30)).build();
 

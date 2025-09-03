@@ -19,7 +19,6 @@ import java.util.jar.Attributes;
 import java.util.jar.Manifest;
 
 import static dev.buildcli.core.utils.BeautifyShell.content;
-
 import static dev.buildcli.core.utils.console.input.InteractiveInputUtils.confirm;
 
 /*
@@ -36,10 +35,9 @@ import static dev.buildcli.core.utils.console.input.InteractiveInputUtils.confir
 
 public class BuildCLIService {
 
-  private static GitCommandExecutor gitExec = new GitCommandExecutor();
-
   private static final String buildCLIDirectory = getBuildCLIBuildDirectory();
-  private static  String localRepository = gitExec.findGitRepository(buildCLIDirectory);
+  private static GitCommandExecutor gitExec = new GitCommandExecutor();
+  private static String localRepository = gitExec.findGitRepository(buildCLIDirectory);
 
   public BuildCLIService() {
   }
