@@ -1,5 +1,6 @@
 package dev.buildcli.core.utils.net;
 
+import dev.buildcli.core.exceptions.DownloadFailedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -74,7 +75,7 @@ public final class FileDownloader {
 
       return file;
     } catch (IOException | InterruptedException e) {
-      throw new RuntimeException(e);
+      throw new DownloadFailedException(e.getMessage());
     }
   }
 }

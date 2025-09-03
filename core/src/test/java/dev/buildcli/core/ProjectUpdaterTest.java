@@ -2,6 +2,7 @@ package dev.buildcli.core;
 
 import dev.buildcli.core.project.ProjectUpdater;
 import dev.buildcli.core.utils.PomUtils;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

@@ -1,5 +1,6 @@
 package dev.buildcli.core.utils.net;
 
+import dev.buildcli.core.exceptions.DownloadFailedException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -60,7 +61,7 @@ class FileDownloaderTest {
   }
 
   @Test
-  void shouldDownloadFileSuccessfully_whenHttpRequestIsValid() throws IOException, InterruptedException {
+  void shouldDownloadFileSuccessfully_whenHttpRequestIsValid() throws IOException, InterruptedException, DownloadFailedException {
     HttpResponse<InputStream> mockResponse = setupMockHttpResponse(
         String.valueOf(fakeContent.length),
         "attachment; filename=\"" + filename + "\""
@@ -137,6 +138,8 @@ class FileDownloaderTest {
       System.out.println(result);
       assertTrue(outputStream.toString().contains("Thread was interrupted. Cleanup performed."));
       assertNull(result);
+    } catch (DownloadFailedException e) {
+      throw new RuntimeException(e);
     } finally {
       System.setOut(standardOut);
     }
