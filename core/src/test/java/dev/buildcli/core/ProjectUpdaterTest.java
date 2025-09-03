@@ -5,11 +5,9 @@ import dev.buildcli.core.utils.PomUtils;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -23,37 +21,22 @@ class ProjectUpdaterTest {
 
   private static String backupPom;
   private static String targetPom;
-  @TempDir
-  Path tempDir;
+
   private ProjectUpdater updater;
 
-  @BeforeAll
-  static void setUpBeforeClass() throws Exception {
-    targetPom = "src/test/resources/pom-core-test/pom.xml";
-    backupPom = "src/test/resources/pom-core-test/pom.xml.versionsBackup";
-
-    PomUtils.create(new File(targetPom));
-    PomUtils.create(new File(backupPom));
+  @BeforeEach
+  public void setUp() {
+    this.updater = new ProjectUpdater();
   }
 
-  @BeforeEach
-  void setUp() throws IOException {
-    this.updater = new ProjectUpdater();
-
-    InputStream originPomStream = getClass().getResourceAsStream("/pom-core-test/pom.xml");
-
-    Path tempPom = tempDir.resolve("pom.xml");
-
-    Files.copy(originPomStream, tempPom, StandardCopyOption.REPLACE_EXISTING);
-
-    targetPom = tempPom.toString();
-    backupPom = targetPom + ".versionsBackup";
-
+  @AfterEach
+  public void tearDown() throws IOException {
+    Files.delete(Paths.get(targetPom));
+    Files.move(Paths.get(backupPom), Paths.get(targetPom));
   }
 
   @Test
   void shouldUpdatePomDependencies() throws IOException {
-
 
     if (!Files.exists(Paths.get(targetPom))) {
       Files.createDirectories(Paths.get(targetPom).getParent());
@@ -81,5 +64,4 @@ class ProjectUpdaterTest {
         })
         .count());
   }
-
 }

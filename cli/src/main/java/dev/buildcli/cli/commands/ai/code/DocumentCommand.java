@@ -5,6 +5,10 @@ import dev.buildcli.core.actions.ai.AIChat;
 import dev.buildcli.core.actions.ai.factories.GeneralAIServiceFactory;
 import dev.buildcli.core.constants.AIConstants;
 import dev.buildcli.core.domain.BuildCLICommand;
+import dev.buildcli.core.domain.configs.BuildCLIConfig;
+import dev.buildcli.core.utils.async.Async;
+import dev.buildcli.core.utils.config.ConfigContextLoader;
+import dev.buildcli.core.utils.filesystem.FindFilesUtils;
 import dev.buildcli.core.utils.ai.CodeUtils;
 import dev.buildcli.core.utils.ai.IAParamsUtils;
 import dev.buildcli.core.utils.async.Async;
@@ -24,6 +28,8 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+
+import static java.util.concurrent.CompletableFuture.supplyAsync;
 
 @Command(name = "document", aliases = {"docs"}, description = "Generates documentation for the project code. Alias: 'docs'. This command scans the specified files and extracts structured documentation.", mixinStandardHelpOptions = true)
 public class DocumentCommand implements BuildCLICommand {
@@ -59,7 +65,6 @@ public class DocumentCommand implements BuildCLICommand {
     logger.info("Found {} files with extensions: {}.", targetFiles.size(), Arrays.toString(getExtensions()));
 
     var execsAsync = Async.group(targetFiles.size());
-    ;
 
     logger.info("Documenting files {}...", targetFiles.size());
     for (int i = 0; i < targetFiles.size(); i++) {

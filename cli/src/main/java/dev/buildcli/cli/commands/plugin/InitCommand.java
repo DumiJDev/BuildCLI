@@ -44,6 +44,8 @@ public class InitCommand implements BuildCLICommand {
   )
   private String outputDirectory;
 
+  private final BuildCLIConfig globalConfig = ConfigContextLoader.getAllConfigs();
+
   @Override
   public void run() {
     String pluginName = getPluginName();

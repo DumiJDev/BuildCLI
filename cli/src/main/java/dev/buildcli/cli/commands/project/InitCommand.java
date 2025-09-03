@@ -137,7 +137,7 @@ public class InitCommand implements BuildCLICommand {
                         </plugins>
                     </build>
                 </project>
-            """.formatted(basePackage, projectName, jdkVersion, basePackage));
+            """.formatted(projectName.toLowerCase(), projectName, jdkVersion, basePackage));
       }
       SystemOutLogger.log("pom.xml file created with default configuration.");
     }
@@ -154,6 +154,9 @@ public class InitCommand implements BuildCLICommand {
       projectName = projectName == null || projectName.isEmpty() ? question("Enter project name") : projectName;
       jdkVersion = jdkVersion == null || jdkVersion.isEmpty() ? question("Enter jdk version") : jdkVersion;
       var basePackage = question("Enter base-package");
+      if (basePackage == null || basePackage.trim().isEmpty()) {
+        basePackage = "org." + projectName.toLowerCase();
+      }
 
       String[] dirs = {
           "src/main/java/" + basePackage.replace('.', '/'),

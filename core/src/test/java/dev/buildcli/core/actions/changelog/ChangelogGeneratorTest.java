@@ -38,7 +38,6 @@ class ChangelogGeneratorTest {
     makeCommit("fix(auth): resolve login issue");
   }
 
-
   @AfterEach
   void tearDown() {
     git.close();
@@ -58,13 +57,9 @@ class ChangelogGeneratorTest {
 
   private void makeCommit(String message) throws GitAPIException, IOException {
     File newFile = new File(tempRepo, UUID.randomUUID().toString() + ".txt");
-    Files.writeString(newFile.toPath(), "Test content\n");
+    Files.writeString(newFile.toPath(), "Test content");
     git.add().addFilepattern(".").call();
-    git.commit()
-        .setMessage(message)
-        .setAllowEmpty(false)
-        .setNoVerify(true)
-        .call();
+    git.commit().setMessage(message).call();
   }
 
   private void deleteDirectory(File file) {
@@ -75,4 +70,5 @@ class ChangelogGeneratorTest {
     }
     file.delete();
   }
+
 }

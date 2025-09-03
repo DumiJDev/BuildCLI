@@ -1,8 +1,5 @@
 package dev.buildcli.core.utils;
 
-import dev.buildcli.core.domain.man.CommandMan;
-import dev.buildcli.core.exceptions.CommandExecutorRuntimeException;
-
 import java.util.logging.Logger;
 
 public abstract class OS {
@@ -12,25 +9,29 @@ public abstract class OS {
   private OS() {
   }
 
-  public static void setCommandExecutor(RuntimeCommandExecutor executor) {
-    runtimeCommandExecutor = executor;
-  }
+  private static final String OS = System.getProperty("os.name").toLowerCase();
 
   public static boolean isWindows() {
-    return getOSName().contains("win");
+    return OS.contains("win");
   }
 
   public static boolean isMac() {
-    return getOSName().contains("mac");
+    return OS.contains("mac");
   }
 
   public static boolean isLinux() {
-    return getOSName().contains("linux") || getOSName().contains("nix") || getOSName().contains("nux") || getOSName().contains("aix");
+    return OS.contains("linux") || OS.contains("nix") || OS.contains("nux") || OS.contains("aix");
   }
 
+<<<<<<< HEAD
   public static String getOSName() {
     return System.getProperty("os.name").toLowerCase();
   }
+=======
+    public static String getOSName() {
+        return System.getProperty("os.name");
+    }
+>>>>>>> 5f864b19d7c788254b0fa7d6e2ab9cabbf137083
 
   public static String getArchitecture() {
     return System.getProperty("os.arch");
@@ -38,9 +39,19 @@ public abstract class OS {
 
   public static void cdDirectory(String path) {
     try {
+<<<<<<< HEAD
       CommandMan command = CommandMan.create()
           .addCommand("cd " + path);
       executeCommand(command);
+=======
+        String[] command;
+        if (isWindows()) {
+            command = new String[]{"cmd", "/c", "cd", path};
+        } else {
+            command = new String[]{"sh", "-c", "cd", path};
+        }
+        Runtime.getRuntime().exec(command);
+>>>>>>> 5f864b19d7c788254b0fa7d6e2ab9cabbf137083
     } catch (Exception e) {
       logger.severe("Error changing directory: " + e.getMessage());
     }
@@ -48,15 +59,13 @@ public abstract class OS {
 
   public static void cpDirectoryOrFile(String source, String destination) {
     try {
-      CommandMan command;
+      String[] command;
       if (isWindows()) {
-        command = CommandMan.create()
-            .addCommand("copy" + " " + source + " " + destination);
+        command = new String[]{"cmd", "/c", "copy", source, destination};
       } else {
-        command = CommandMan.create()
-            .addCommand("cp" + " " + source + " " + destination);
+        command = new String[]{"sh", "-c", "cp",  source, destination};
       }
-      executeCommand(command);
+      Runtime.getRuntime().exec(command);
     } catch (Exception e) {
       logger.severe("Error copying directory: " + e.getMessage());
     }
@@ -72,18 +81,18 @@ public abstract class OS {
     return homeBin;
   }
 
-  public static void chmodX(String path) {
-    if (!isWindows()) {
-      try {
-        CommandMan commandMan = CommandMan.create()
-            .addCommand("chmod +x " + path);
-        executeCommand(commandMan);
-      } catch (Exception e) {
-        logger.severe("Error changing permissions: " + e.getMessage());
+  public static void chmodX(String path){
+      if(!isWindows()){
+            try {
+                String chmodCommand = "chmod +x " + path;
+                String[] command = new String[]{"sh", "-c", chmodCommand};
+                Runtime.getRuntime().exec(command);
+            } catch (Exception e) {
+                logger.severe("Error changing directory: " + e.getMessage());
+            }
       }
-    }
-  }
 
+<<<<<<< HEAD
   private static void executeCommand(CommandMan commandMan) throws CommandExecutorRuntimeException {
     try {
       for (String cmd : commandMan.getCommands()) {
@@ -96,5 +105,7 @@ public abstract class OS {
       logger.severe(errorMessage);
       throw new CommandExecutorRuntimeException(e.getMessage());
     }
+=======
+>>>>>>> 5f864b19d7c788254b0fa7d6e2ab9cabbf137083
   }
 }

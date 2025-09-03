@@ -1,16 +1,11 @@
 package dev.buildcli.core.constants;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.io.PrintWriter;
 import java.nio.file.Path;
 import java.util.Map;
 
 import static dev.buildcli.core.utils.BeautifyShell.*;
 
 public abstract class ConfigDefaultConstants {
-
   public static final String BUILD_CLI_CONFIG_FILE_NAME = "buildcli.properties";
   public static final Path BUILD_CLI_CONFIG_GLOBAL_FILE = Path.of(System.getProperty("user.home"), ".buildcli", BUILD_CLI_CONFIG_FILE_NAME);
   //Logs
@@ -64,12 +59,11 @@ public abstract class ConfigDefaultConstants {
     return builder.toString();
   }
 
-  public static void listAll(PrintWriter out) {
-    log.info("List of all configs:");
+  public static void listAll() {
+    System.out.println("List of all configs:");
     for (var entry : configs.entrySet()) {
       var line = content(entry.getKey()).blueFg().bold() + " - " + italic(entry.getValue());
-      out.println("  " + line);
-      log.info("  {}", line);
+      System.out.println("  " + line);
     }
   }
 }

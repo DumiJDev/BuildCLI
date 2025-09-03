@@ -90,7 +90,7 @@ class ChangelogManagerTest {
     makeCommit("feat(api): add new endpoint");
     makeCommit("fix(auth): resolve login issue");
 
-    String version = null;  // Version is null
+    String version = null; // Version is null
     String outputFile = "changelog.md";
     String format = "markdown";
     List<String> includeTypes = Arrays.asList("feat", "fix");

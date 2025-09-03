@@ -86,7 +86,9 @@ public class RunCommand implements BuildCLICommand {
     System.out.println(profileMessage);
 
     MavenProcess.createPackageProcessor(file).run();
-    return JavaProcess.createRunJarProcess(findJar());
+    var jarPath = findJar();
+
+    return JavaProcess.createRunJarProcess(jarPath);
   }
 
   private Properties loadProfileProperties(String profile) {

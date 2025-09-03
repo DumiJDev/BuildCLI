@@ -3,6 +3,7 @@ package dev.buildcli.cli.commands.ai.code;
 import dev.buildcli.core.actions.ai.AIChat;
 import dev.buildcli.core.actions.ai.factories.GeneralAIServiceFactory;
 import dev.buildcli.core.domain.BuildCLICommand;
+import dev.buildcli.core.domain.configs.BuildCLIConfig;
 import dev.buildcli.core.utils.LanguageDetector;
 import dev.buildcli.core.utils.ai.CodeUtils;
 import dev.buildcli.core.utils.ai.IAParamsUtils;
