@@ -50,6 +50,7 @@ class BuildCLIServiceTest {
     }
   }
 
+
   @Test
   void testShouldShowAsciiArt() {
     assertFalse(BuildCLIService.shouldShowAsciiArt(new String[]{}));
