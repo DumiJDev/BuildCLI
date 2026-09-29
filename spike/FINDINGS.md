@@ -10,7 +10,7 @@ Ollama + `qwen2.5:3b` (the only model installed). TamboUI 0.5.0, LangChain4j 1.2
 | Handoff scenario completes with a local model in ≥ 8 of 10 runs | **Partly.** 5/5 runs OK, but see caveat 1: not a meaningful statistic yet |
 | Approval view works in TamboUI on Linux, macOS, Windows | **Linux only** (tmux, shaded JAR). macOS/Windows not tested |
 | TamboUI and DB decisions documented | Done below |
-| `main` builds in CI on Linux/macOS/Windows | Not started (spike is on its own branch) |
+| Builds in CI on Linux/macOS/Windows | **Done for the spike.** `Spike CI` passes on ubuntu, macos and windows (17 tests, SQLite native loads on each). See caveat 7 |
 
 ## What the spike proves (all working)
 
@@ -74,3 +74,10 @@ Works and is usable: layout, dialog overlay, key handling, tick-driven redraw fr
    argv *prefix*, so an entry like `["cat"]` would allow any file; no secret redaction; commands still run project
    code. The command policy is not a sandbox, as the RFC already says.
 6. Windows/macOS untested for everything (process spawning, paths, glob matching with `\`).
+7. CI on Windows passes, but the tests run real `cat`/`ls` processes and GitHub's Windows runners ship Git for
+   Windows (which provides them). A plain Windows machine will not have them: M2 needs a cross-platform command
+   fixture. CI only proves build + tests; the TamboUI TUI itself still has not been driven on macOS/Windows.
+8. The repo's pre-existing workflows fail on this PR for reasons unrelated to the spike: the legacy `core` test
+   `EnvironmentConfigManagerTest` does not compile (`CI Workflow` also fails on `main`/`develop`), Checkstyle
+   `sun_checks` fails repo-wide (thousands of errors), and `labeler.yml` is malformed for the labeler version in use.
+   The spike is not in the root Maven reactor, so it does not affect the legacy build.
