@@ -11,11 +11,11 @@ import java.util.concurrent.Callable;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
-@Command(name = "init", description = "Create a sample team (architect, developer, reviewer) in .buildcli/ and an AGENTS.md")
+@Command(name = "init", description = "Create three sample agents (architect, developer, reviewer), a group with them, and an AGENTS.md")
 final class InitCommand implements Callable<Integer> {
     private final CliContext ctx;
 
-    @Option(names = "--model", description = "Default model for the team as provider:model (default: ${DEFAULT-VALUE})",
+    @Option(names = "--model", description = "Default model for the agents as provider:model (default: ${DEFAULT-VALUE})",
             defaultValue = "ollama:qwen2.5:7b")
     String model;
 
@@ -37,8 +37,20 @@ final class InitCommand implements Callable<Integer> {
         created += write(base.resolve("agents/ana.md"), ANA);
         created += write(base.resolve("agents/bruno.md"), BRUNO);
         created += write(base.resolve("agents/carla.md"), CARLA);
-        created += write(base.resolve("teams/backend.yaml"), team(ref));
         created += write(ctx.cwd.resolve("AGENTS.md"), AGENTS_MD);
+
+        // the group and the model are this machine's choices for this project: kept in its state directory, not the repo
+        var groups = new dev.buildcli.infrastructure.FileChatStore(ctx.projectStateDir());
+        if (groups.load().isEmpty()) {
+            groups.save(java.util.List.of(new dev.buildcli.domain.Chat("#backend", "backend", true, java.util.List.of("ana", "bruno", "carla"),
+                    java.util.List.of("ana"))));
+            ctx.out.println("created  group 'backend' with ana (admin), bruno and carla");
+        }
+        var settings = new dev.buildcli.application.Settings(new dev.buildcli.infrastructure.FileSettingsStore(ctx.globalDir(), ctx.projectStateDir()));
+        if (settings.stored(dev.buildcli.ports.SettingsStore.Scope.PROJECT, dev.buildcli.application.Settings.DEFAULT_MODEL) == null) {
+            settings.set(dev.buildcli.ports.SettingsStore.Scope.PROJECT, dev.buildcli.application.Settings.DEFAULT_MODEL, ref.provider() + ":" + ref.model());
+            ctx.out.println("set      default model " + ref.provider() + ":" + ref.model() + " for this project");
+        }
 
         ConfigRepository config = ctx.loadConfig();
         if (config == null) {
@@ -50,12 +62,12 @@ final class InitCommand implements Callable<Integer> {
         }
         ctx.out.println();
         ctx.out.println("Next steps:");
-        ctx.out.println("  1. buildcli doctor                                  check Java, git, the model provider and the config");
-        ctx.out.println("  2. edit AGENTS.md and .buildcli/agents/*.md          describe your project and tune each agent's permissions");
-        ctx.out.println("  3. buildcli run --team backend \"<what to do>\"       or just run 'buildcli' for the terminal UI");
+        ctx.out.println("  1. buildcli doctor                            check Java, git, the model provider and the config");
+        ctx.out.println("  2. edit AGENTS.md and .buildcli/agents/*.md    describe your project and tune each agent's permissions");
+        ctx.out.println("  3. buildcli                                    open the chat (F2 for settings: models, providers, agents)");
         ctx.out.println();
-        ctx.out.println("The team uses " + ref.provider() + " / " + ref.model() + ". Change runtime.default in .buildcli/teams/backend.yaml"
-                + " to use another model; small models (3B) are unreliable for tool use.");
+        ctx.out.println("The agents use " + ref.provider() + ":" + ref.model() + " unless you choose another model per agent in the settings"
+                + " (F2 > Models); small models (3B) are unreliable for tool use.");
         return 0;
     }
 
@@ -71,21 +83,6 @@ final class InitCommand implements Callable<Integer> {
         return 1;
     }
 
-    private static String team(ModelRef ref) {
-        return """
-                schema: 1
-                name: backend
-                description: Architect, developer and reviewer.
-                lead: ana
-                agents: [ana, bruno, carla]
-                runtime:
-                  default: { provider: %s, model: %s }
-                limits:
-                  max_retries: 3
-                  max_tokens_per_task: 30000
-                """.formatted(ref.provider(), ref.model());
-    }
-
     private static final String ANA = """
             ---
             schema: 1
@@ -97,7 +94,7 @@ final class InitCommand implements Callable<Integer> {
               filesystem:
                 read: ["**"]
             ---
-            You are the software architect and the lead of this team.
+            You are the software architect and the admin of the backend group.
             You do not implement production code yourself: read the code, decide how the work should be done, and delegate
             the implementation to a teammate with a handoff. Give a short brief (decisions, constraints, relevant paths), not
             a transcript. When teammates report back, check that the result answers the request, then give the user a short

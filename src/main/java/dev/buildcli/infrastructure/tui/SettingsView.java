@@ -136,7 +136,7 @@ final class SettingsView {
                             () -> confirm("Delete agent " + a.name() + "? This deletes " + a.file(), () -> {
                                 try {
                                     services.deleteAgent(a.name());
-                                    ok("Deleted " + a.name() + ". It leaves the chats the next time BuildCLI starts.");
+                                    ok("Deleted " + a.name() + "; it left every group.");
                                 } catch (Exception e) {
                                     fail(e.getMessage());
                                 }
@@ -246,7 +246,7 @@ final class SettingsView {
                                     try {
                                         String file = services.createAgent(name.strip(), role.strip(), how.strip(),
                                                 Arrays.stream(caps.split(",")).map(String::strip).filter(c -> !c.isEmpty()).toList(), scope == Scope.GLOBAL);
-                                        ok("Created " + file + ". It joins the chats the next time BuildCLI starts.");
+                                        ok("Created " + file + ". You can chat with " + name.strip() + " now.");
                                     } catch (Exception e) {
                                         fail(e.getMessage());
                                     }
@@ -512,6 +512,12 @@ final class SettingsView {
     }
 
     // ---- input ----
+
+    /** Opens the Agents section on the "new agent" questions (from the empty chat screen). */
+    void startNewAgent() {
+        select(Section.AGENTS);
+        newAgent();
+    }
 
     private void select(Section s) {
         section = s;

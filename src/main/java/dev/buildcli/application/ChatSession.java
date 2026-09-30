@@ -4,6 +4,7 @@ import dev.buildcli.domain.Agent;
 import dev.buildcli.domain.Attachment;
 import dev.buildcli.domain.Chat;
 import dev.buildcli.domain.Event;
+import dev.buildcli.domain.Limits;
 import dev.buildcli.domain.Task;
 import dev.buildcli.domain.TaskStatus;
 import dev.buildcli.domain.Team;
@@ -171,7 +172,7 @@ public final class ChatSession implements UserInterface {
     private static final int HISTORY_MESSAGES = 10;
     private static final int HISTORY_CHARS = 6000;
 
-    private final Team team;
+    private final Limits limits;
     private final Executor executor;
     private final ChatStore store;
     private final dev.buildcli.ports.ChatLog log;
@@ -182,7 +183,7 @@ public final class ChatSession implements UserInterface {
     private final Map<Long, Long> positions = new ConcurrentHashMap<>();
     private final AtomicLong nextPosition = new AtomicLong();
     private final java.util.function.IntSupplier agentHops;
-    private final Map<String, Agent> contacts = new LinkedHashMap<>();
+    private final Map<String, Agent> contacts = new java.util.concurrent.ConcurrentSkipListMap<>();
     /** Groups by id; the team's own group has the id {@link #TEAM}. Guarded by {@code lock}. */
     private final Map<String, Chat> groups = new LinkedHashMap<>();
     private final java.util.Set<String> directs = new java.util.LinkedHashSet<>();
@@ -192,7 +193,7 @@ public final class ChatSession implements UserInterface {
     private final Object lock = new Object();
     private final List<Message> messages = new ArrayList<>();
     private final List<Event> events = new ArrayList<>();
-    private final Map<String, Actor> actors = new LinkedHashMap<>();
+    private final Map<String, Actor> actors = new java.util.concurrent.ConcurrentSkipListMap<>();
     private final Map<String, String> state = new ConcurrentHashMap<>();
     private final Map<String, StringBuilder> live = new LinkedHashMap<>();
     private final Map<String, String> liveThread = new HashMap<>();
@@ -205,41 +206,88 @@ public final class ChatSession implements UserInterface {
     private final AtomicInteger outputTokens = new AtomicInteger();
     private volatile boolean closed;
 
+    /** A chat with one group made from a team (its id is {@link #TEAM}), for tests and the demo. */
     public ChatSession(Team team, Executor executor) {
         this(team, team.agents(), executor, ChatStore.NONE, () -> 6);
     }
 
-    /**
-     * @param contacts  every agent the user can talk to; each gets an inbox, and a thread only once a message arrives
-     * @param store     the groups the user made or changed
-     * @param agentHops how many messages agents may send each other before they wait for the user
-     */
+    /** A team becomes the group {@link #TEAM}; the groups in {@code store} are added or override it. */
     public ChatSession(Team team, List<Agent> contacts, Executor executor, ChatStore store, java.util.function.IntSupplier agentHops) {
         this(team, contacts, executor, store, agentHops, dev.buildcli.ports.ChatLog.NONE);
     }
 
-    /** @param log where the conversation is kept, so it is there again after a restart */
     public ChatSession(Team team, List<Agent> contacts, Executor executor, ChatStore store, java.util.function.IntSupplier agentHops,
             dev.buildcli.ports.ChatLog log) {
-        this.team = team;
+        this(merge(team.agents(), contacts), withStored(new Chat(TEAM, team.name(), true, team.agents().stream().map(Agent::name).toList(),
+                List.of(team.lead())), store.load()), team.limits(), executor, store, agentHops, log);
+    }
+
+    /**
+     * @param contacts  every agent the user can talk to; each gets an inbox, and a thread only once a message arrives
+     * @param groups    the groups to start with
+     * @param limits    limits for every run (steps, retries, tokens)
+     * @param store     where groups are saved when they change
+     * @param agentHops how many messages agents may send each other before they wait for the user
+     * @param log       where the conversation is kept, so it is there again after a restart
+     */
+    public ChatSession(List<Agent> contacts, List<Chat> groups, Limits limits, Executor executor, ChatStore store,
+            java.util.function.IntSupplier agentHops, dev.buildcli.ports.ChatLog log) {
+        this.limits = limits;
         this.log = log;
         this.executor = executor;
         this.store = store;
         this.agentHops = agentHops;
-        team.agents().forEach(a -> this.contacts.put(a.name(), a));
         contacts.forEach(a -> this.contacts.putIfAbsent(a.name(), a));
         for (Agent a : this.contacts.values()) {
             actors.put(a.name(), new Actor(a.name()));
             state.put(a.name(), "idle");
         }
-        groups.put(TEAM, new Chat(TEAM, team.name(), true, team.agents().stream().map(Agent::name).toList(), List.of(team.lead())));
-        for (Chat g : store.load()) {
+        for (Chat g : groups) {
             List<String> members = g.members().stream().filter(this.contacts::containsKey).distinct().toList();
             List<String> admins = g.admins().stream().filter(members::contains).toList();
-            groups.put(g.id(), new Chat(g.id(), g.id().equals(TEAM) ? team.name() : g.name(), true, members, admins));
+            this.groups.put(g.id(), new Chat(g.id(), g.name(), true, members, admins.isEmpty() && !members.isEmpty() ? List.of(members.get(0)) : admins));
         }
         restore();
         this.writer = log == dev.buildcli.ports.ChatLog.NONE ? null : Thread.ofVirtual().name("chat-history").start(this::writeLoop);
+    }
+
+    private static List<Agent> merge(List<Agent> first, List<Agent> more) {
+        Map<String, Agent> all = new LinkedHashMap<>();
+        first.forEach(a -> all.put(a.name(), a));
+        more.forEach(a -> all.putIfAbsent(a.name(), a));
+        return List.copyOf(all.values());
+    }
+
+    private static List<Chat> withStored(Chat base, List<Chat> stored) {
+        Map<String, Chat> all = new LinkedHashMap<>();
+        all.put(base.id(), base);
+        for (Chat g : stored) {
+            all.put(g.id(), g.id().equals(base.id()) ? new Chat(g.id(), base.name(), true, g.members(), g.admins()) : g);
+        }
+        return List.copyOf(all.values());
+    }
+
+    // ---- contacts that come and go while the chat is open ----
+
+    /** A new agent (created on the settings screen) becomes a contact at once. */
+    public void addContact(Agent agent) {
+        contacts.put(agent.name(), agent);
+        actors.computeIfAbsent(agent.name(), Actor::new);
+        state.putIfAbsent(agent.name(), "idle");
+    }
+
+    /** A deleted agent leaves every group; what it already said stays in the chats. */
+    public void removeContact(String name) {
+        for (Chat g : groups()) {
+            if (g.has(name)) {
+                removeMember(g.id(), name);
+            }
+        }
+        contacts.remove(name);
+        Actor a = actors.get(name);
+        if (a != null && a.thread != null && a.current == null) {
+            a.thread.interrupt();
+        }
     }
 
     /**
@@ -310,10 +358,6 @@ public final class ChatSession implements UserInterface {
         }
     }
 
-    public Team team() {
-        return team;
-    }
-
     // ---- what the user does ----
 
     public long submit(String text) {
@@ -336,7 +380,11 @@ public final class ChatSession implements UserInterface {
         if (clean.isEmpty() && attachments.isEmpty()) {
             return -1;
         }
-        String thread = chat == null || (group(chat) == null && !contacts.containsKey(chat)) ? TEAM : chat;
+        String thread = chat == null || (group(chat) == null && !contacts.containsKey(chat)) ? defaultChat() : chat;
+        if (thread == null) {
+            error("There is nobody to talk to yet. Create an agent in Settings (F2) > Agents, or run 'buildcli init'.");
+            return -1;
+        }
         long id = ids.incrementAndGet();
         add(new Message(id, Kind.USER, "you", clean, Instant.now(), State.QUEUED, List.copyOf(attachments), thread));
         route(id, clean, List.copyOf(attachments), thread);
@@ -429,6 +477,15 @@ public final class ChatSession implements UserInterface {
         synchronized (lock) {
             return List.copyOf(groups.values());
         }
+    }
+
+    /** The chat to open first: the first group, else a direct chat with the first agent; null when there are no agents. */
+    public String defaultChat() {
+        List<Chat> gs = groups();
+        if (!gs.isEmpty()) {
+            return gs.get(0).id();
+        }
+        return contacts.isEmpty() ? null : contacts.keySet().iterator().next();
     }
 
     /** Every agent the user can talk to. */
@@ -931,7 +988,7 @@ public final class ChatSession implements UserInterface {
                 members.add(a);
             }
         }
-        return new Team(g != null ? g.name() : me, me, members, team.limits(), team.routing());
+        return new Team(g != null ? g.name() : me, me, members, limits, dev.buildcli.domain.ModelRouting.unspecified());
     }
 
     private String chatContext(String thread, String me) {

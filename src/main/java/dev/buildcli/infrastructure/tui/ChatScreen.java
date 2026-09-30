@@ -140,6 +140,7 @@ final class ChatScreen implements Element {
             runCommand("/open " + file);
         });
         this.infoView = new ChatInfoView(session, () -> selected, this::select, () -> infoOpen = false, this::modelLabel);
+        ensureSelection();
     }
 
     /** Settings kept in memory, no providers or agent files: for tests and the demo. */
@@ -204,7 +205,11 @@ final class ChatScreen implements Element {
             return own;
         }
         String team = services.teamModel(agent);
-        return team != null ? team : services.settings().defaultModel() == null ? models.getOrDefault(agent, "") : services.settings().defaultModel();
+        if (team != null) {
+            return team;
+        }
+        String def = services.settings().defaultModel();
+        return def != null ? def : models.getOrDefault(agent, "no model: press F2 > Models");
     }
 
     private dev.buildcli.application.Settings settings() {
@@ -217,6 +222,7 @@ final class ChatScreen implements Element {
     public void render(Frame frame, Rect rect, RenderContext ctx) {
         area = rect;
         hits.clear();
+        ensureSelection();
         scrollTrack = Rect.ZERO;
         Theme.use(settings().get(dev.buildcli.application.Settings.THEME));
         Buffer buf = frame.buffer();
@@ -338,6 +344,20 @@ final class ChatScreen implements Element {
             }
         }
         return out;
+    }
+
+    /** Keeps a chat open: the first group or agent, once there is one (for example right after the first agent is created). */
+    private void ensureSelection() {
+        if (session.group(selected) != null || session.contact(selected) != null) {
+            return;
+        }
+        String first = session.defaultChat();
+        if (first != null) {
+            if (session.group(first) == null) {
+                session.openDirect(first);
+            }
+            select(first);
+        }
     }
 
     private void select(String thread) {
@@ -521,11 +541,11 @@ final class ChatScreen implements Element {
         }
         var group = session.group(selected);
         boolean team = group != null;
-        String name = team ? group.name() : selected;
+        String name = team ? group.name() : session.contact(selected) != null ? selected : "Welcome";
         Color c = team ? Theme.ACCENT : Theme.agentColor(selected);
         put(buf, x, r.y(), " " + (name.isEmpty() ? "?" : name.substring(0, 1).toUpperCase(Locale.ROOT)) + " ", st(Theme.BG, c).bold(), r.right());
         int nx = x + 4;
-        put(buf, nx, r.y(), title(selected), base.bold(), r.right() - 30);
+        put(buf, nx, r.y(), team || session.contact(selected) != null ? title(selected) : "Welcome", base.bold(), r.right() - 30);
         String sub;
         Style subStyle = st(Theme.DIM, Theme.PANEL);
         ChatSession.Live live = session.live(selected);
@@ -545,6 +565,8 @@ final class ChatScreen implements Element {
             }
             sb.append(sb.isEmpty() ? "you" : ", you");
             sub = sb.toString() + "   · click for group info";
+        } else if (session.contact(selected) == null) {
+            sub = "create an agent to start";
         } else {
             sub = "online · " + clean(roleOf(selected)) + " · " + clean(modelLabel(selected));
         }
@@ -619,6 +641,10 @@ final class ChatScreen implements Element {
 
     private List<Row> chatRows(int width, List<Message> msgs) {
         List<Row> rows = new ArrayList<>();
+        if (session.group(selected) == null && session.contact(selected) == null) {
+            onboarding(rows, width);
+            return rows;
+        }
         if (msgs.isEmpty() && !session.isActive(selected)) {
             welcome(rows, width);
             return rows;
@@ -699,6 +725,29 @@ final class ChatScreen implements Element {
             spans.add(new Span(state + " ", st(Theme.DIM, Theme.THEM).italic()));
         }
         rows.add(new Row(2, spans));
+    }
+
+    /** No agents yet: BuildCLI is about agents, so the first thing to do is create one. */
+    private void onboarding(List<Row> rows, int width) {
+        centred(rows, width, "No agents yet", st(Theme.TEXT, Theme.BG).bold());
+        rows.add(new Row(0, List.of()));
+        centred(rows, width, "Agents are the people you chat with: each has a role and a model, and does only what you allow.",
+                st(Theme.DIM, Theme.BG));
+        rows.add(new Row(0, List.of()));
+        rows.add(new Row(0, List.of()));
+        int boxW = Math.min(width - 4, 56);
+        int x = Math.max(0, (width - boxW) / 2);
+        String[][] actions = {{"Create your first agent", "agent"}, {"Choose a model and provider", "settings"}};
+        for (String[] a : actions) {
+            Runnable act = a[1].equals("agent") ? () -> {
+                settingsOpen = true;
+                settingsView.startNewAgent();
+            } : () -> settingsOpen = true;
+            String label = "  " + a[0];
+            rows.add(new Row(x, List.of(new Span(label + " ".repeat(Math.max(1, boxW - Wrap.width(label) - 2)) + "› ", st(Theme.TEXT, Theme.PANEL), act))));
+            rows.add(new Row(0, List.of()));
+        }
+        centred(rows, width, "Or run 'buildcli init' in a terminal for three sample agents in a group.", st(Theme.FAINT, Theme.BG));
     }
 
     private void welcome(List<Row> rows, int width) {
