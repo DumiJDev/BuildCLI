@@ -44,3 +44,6 @@ changelog.md
 **/changelog.md
 *.zip
 /cli/logs/build-cli-logs.log
+
+
+.openrouter/key
