@@ -6,7 +6,6 @@ import dev.buildcli.domain.Capability;
 import dev.buildcli.domain.ModelRef;
 import dev.buildcli.domain.Origin;
 import dev.buildcli.domain.Team;
-import dev.buildcli.infrastructure.FileSettingsStore;
 import dev.buildcli.infrastructure.ModelCatalog;
 import dev.buildcli.infrastructure.ProviderProbe;
 import dev.buildcli.infrastructure.ProviderRegistry;
@@ -28,15 +27,23 @@ final class ChatServices implements SettingsServices {
 
     private final CliContext ctx;
     private final ConfigRepository config;
-    private final Team team;
+    private final ChatSetup setup;
     private final Settings settings;
+    private final java.util.Map<String, AgentInfo> created = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.Set<String> deleted = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private volatile ModelCatalog catalog;
+    private volatile dev.buildcli.application.ChatSession session;
 
-    ChatServices(CliContext ctx, ConfigRepository config, Team team) {
+    ChatServices(CliContext ctx, ConfigRepository config, ChatSetup setup) {
         this.ctx = ctx;
         this.config = config;
-        this.team = team;
-        this.settings = new Settings(new FileSettingsStore(ctx.globalDir(), ctx.projectStateDir()));
+        this.setup = setup;
+        this.settings = setup.settings;
+    }
+
+    /** Agents created or deleted on the settings screen join or leave the open chat at once. */
+    void attach(dev.buildcli.application.ChatSession session) {
+        this.session = session;
     }
 
     @Override
@@ -99,11 +106,18 @@ final class ChatServices implements SettingsServices {
 
     @Override
     public List<AgentInfo> agents() {
-        return config.agents().stream().map(a -> new AgentInfo(a.name(), a.role(), switch (a.origin()) {
-            case PROJECT -> "this project";
-            case GLOBAL -> "all projects";
-            default -> "built in";
-        }, a.source(), a.capabilities().stream().sorted().toList())).toList();
+        List<AgentInfo> out = new ArrayList<>();
+        for (Agent a : config.agents()) {
+            if (!deleted.contains(a.name())) {
+                out.add(new AgentInfo(a.name(), a.role(), switch (a.origin()) {
+                    case PROJECT -> "this project";
+                    case GLOBAL -> "all projects";
+                    default -> "built in";
+                }, a.source(), a.capabilities().stream().sorted().toList()));
+            }
+        }
+        created.values().stream().filter(a -> !deleted.contains(a.name())).forEach(out::add);
+        return out;
     }
 
     @Override
@@ -115,42 +129,82 @@ final class ChatServices implements SettingsServices {
         if (!unknown.isEmpty()) {
             throw new IllegalArgumentException("unknown capabilities " + unknown);
         }
-        if (config.agent(name).isPresent()) {
+        if ((config.agent(name).isPresent() || created.containsKey(name)) && !deleted.contains(name)) {
             throw new IllegalArgumentException("there is already an agent named " + name);
         }
         Path file = (global ? ctx.globalDir() : ctx.cwd.resolve(".buildcli")).resolve("agents").resolve(name + ".md");
         Files.createDirectories(file.getParent());
-        Files.writeString(file, AgentCommand.CreateCmd.template(name, role.isBlank() ? "developer" : role,
-                capabilities.isEmpty() ? List.of(Capability.FILESYSTEM_READ, Capability.SEARCH) : capabilities, instructions), StandardCharsets.UTF_8);
+        List<String> caps = capabilities.isEmpty() ? List.of(Capability.FILESYSTEM_READ, Capability.SEARCH) : capabilities;
+        String r = role.isBlank() ? "developer" : role;
+        Files.writeString(file, AgentCommand.CreateCmd.template(name, r, caps, instructions), StandardCharsets.UTF_8);
+        deleted.remove(name);
+        retrust();
+        created.put(name, new AgentInfo(name, r, global ? "all projects" : "this project", file.toString(), caps.stream().sorted().toList()));
+        var s = session;
+        if (s != null) {
+            // the same agent the file describes: read everything, write nothing, run nothing without asking
+            s.addContact(new Agent(name, r, instructions == null || instructions.isBlank() ? "You help the user with this project." : instructions,
+                    java.util.Set.copyOf(caps), new dev.buildcli.domain.Permissions(dev.buildcli.domain.Permissions.READ_EVERYTHING, List.of(),
+                            List.of(), java.time.Duration.ofMinutes(2)), global ? Origin.GLOBAL : Origin.PROJECT, file.toString()));
+        }
         return file.toString();
     }
 
     @Override
     public void deleteAgent(String name) throws Exception {
-        Agent a = config.agent(name).orElseThrow(() -> new IllegalArgumentException("no agent named " + name));
-        if (a.origin() == Origin.BUILTIN || a.source() == null || a.source().isBlank()) {
-            throw new IllegalArgumentException(name + " is built in and cannot be deleted");
+        String source;
+        if (created.containsKey(name)) {
+            source = created.get(name).file();
+        } else {
+            Agent a = config.agent(name).orElseThrow(() -> new IllegalArgumentException("no agent named " + name));
+            if (a.origin() == Origin.BUILTIN || a.source() == null || a.source().isBlank()) {
+                throw new IllegalArgumentException(name + " is built in and cannot be deleted");
+            }
+            source = a.source();
         }
-        Path file = Path.of(a.source()).toAbsolutePath().normalize();
+        Path file = Path.of(source).toAbsolutePath().normalize();
         Path projectAgents = ctx.cwd.resolve(".buildcli").resolve("agents").toAbsolutePath().normalize();
         Path globalAgents = ctx.globalDir().resolve("agents").toAbsolutePath().normalize();
         if (!file.startsWith(projectAgents) && !file.startsWith(globalAgents)) {
             throw new IllegalArgumentException("refusing to delete a file outside the agents folders: " + file);
         }
         Files.deleteIfExists(file);
+        retrust();
+        deleted.add(name);
+        created.remove(name);
+        var s = session;
+        if (s != null) {
+            s.removeContact(name);
+        }
+    }
+
+    /**
+     * The user just made this change on the settings screen, so it is trusted, like the files 'init' writes. Only if
+     * the project was trusted before the change: an untrusted project stays untrusted.
+     */
+    private void retrust() {
+        var trust = new dev.buildcli.infrastructure.FileTrustStore(ctx.trustFile());
+        if (!trust.isTrusted(ctx.projectKey(), config.projectDigest()) && !config.projectDigest().isEmpty()) {
+            return;
+        }
+        try {
+            var fresh = new dev.buildcli.infrastructure.FileConfigRepository(ctx.cwd, ctx.globalDir());
+            if (!fresh.projectDigest().isEmpty()) {
+                trust.trust(ctx.projectKey(), fresh.projectDigest());
+            }
+        } catch (RuntimeException e) {
+            // an invalid project file: nothing is trusted, and the next run reports the problem
+        }
     }
 
     @Override
     public String teamModel(String agent) {
-        ModelRef ref = team.routing().forAgent(agent);
-        if (ref == null) {
-            for (Team t : config.teams()) {
-                if (t.agent(agent).isPresent() && t.routing().forAgent(agent) != null) {
-                    ref = t.routing().forAgent(agent);
-                    break;
-                }
+        for (Team t : config.teams()) {
+            ModelRef ref = t.agent(agent).isPresent() ? t.routing().forAgent(agent) : null;
+            if (ref != null) {
+                return ref.provider() + ":" + ref.model();
             }
         }
-        return ref == null ? null : ref.provider() + ":" + ref.model();
+        return null;
     }
 }

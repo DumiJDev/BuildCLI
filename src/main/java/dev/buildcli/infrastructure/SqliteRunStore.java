@@ -21,7 +21,7 @@ import java.util.List;
  * synchronous=NORMAL: SQLite's default sync mode was ~40x slower per append. The schema version lives in
  * {@code PRAGMA user_version}; each entry of {@link #MIGRATIONS} upgrades it by one.
  */
-public final class SqliteRunStore implements RunStore, AutoCloseable {
+public final class SqliteRunStore implements RunStore, dev.buildcli.ports.ChatLog, AutoCloseable {
     public static final String IN_MEMORY = "jdbc:sqlite::memory:";
 
     /** Index i migrates the schema from version i to version i+1. Never edit a released entry; append a new one. */
@@ -36,7 +36,12 @@ public final class SqliteRunStore implements RunStore, AutoCloseable {
                     "CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL, ts TEXT NOT NULL,"
                             + " type TEXT NOT NULL, task_id INTEGER NOT NULL, agent TEXT, payload TEXT,"
                             + " input_tokens INTEGER NOT NULL DEFAULT 0, output_tokens INTEGER NOT NULL DEFAULT 0)",
-                    "CREATE INDEX events_by_run ON events (run_id, id)"));
+                    "CREATE INDEX events_by_run ON events (run_id, id)"),
+            List.of(
+                    "CREATE TABLE chat_messages (id INTEGER PRIMARY KEY, thread TEXT NOT NULL, kind TEXT NOT NULL,"
+                            + " author TEXT NOT NULL, text TEXT NOT NULL, at TEXT NOT NULL, state TEXT NOT NULL,"
+                            + " attachments TEXT NOT NULL DEFAULT '', position INTEGER NOT NULL DEFAULT 0)",
+                    "CREATE INDEX chat_messages_by_position ON chat_messages (position, id)"));
 
     /** The schema version this build writes. */
     public static final int SCHEMA_VERSION = MIGRATIONS.size();
@@ -108,6 +113,80 @@ public final class SqliteRunStore implements RunStore, AutoCloseable {
                 connection.setAutoCommit(true);
             }
         }
+    }
+
+    // ---- chat history ----
+
+    /** Longest message kept: long replies and pasted logs, but not unbounded. */
+    private static final int MAX_MESSAGE = 200_000;
+
+    @Override
+    public synchronized List<dev.buildcli.domain.ChatEntry> recent(int limit) {
+        List<dev.buildcli.domain.ChatEntry> out = new ArrayList<>();
+        String sql = "SELECT id, thread, kind, author, text, at, state, attachments, position FROM"
+                + " (SELECT * FROM chat_messages ORDER BY position DESC, id DESC LIMIT ?) ORDER BY position, id";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setInt(1, limit);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    out.add(new dev.buildcli.domain.ChatEntry(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getString(4),
+                            rs.getString(5), Instant.parse(rs.getString(6)), rs.getString(7), attachmentsFrom(rs.getString(8)), rs.getLong(9)));
+                }
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("cannot read the chat history: " + e.getMessage(), e);
+        }
+        return out;
+    }
+
+    @Override
+    public synchronized void save(dev.buildcli.domain.ChatEntry e) {
+        run("INSERT OR REPLACE INTO chat_messages (id, thread, kind, author, text, at, state, attachments, position)"
+                + " VALUES (?,?,?,?,?,?,?,?,?)", ps -> {
+            ps.setLong(1, e.id());
+            ps.setString(2, e.thread());
+            ps.setString(3, e.kind());
+            ps.setString(4, e.author());
+            ps.setString(5, e.text().length() > MAX_MESSAGE ? e.text().substring(0, MAX_MESSAGE) + "\n[truncated]" : e.text());
+            ps.setString(6, e.at().toString());
+            ps.setString(7, e.state());
+            ps.setString(8, attachmentsTo(e.attachments()));
+            ps.setLong(9, e.position());
+        });
+    }
+
+    @Override
+    public synchronized void clear(String thread) {
+        run("DELETE FROM chat_messages WHERE thread = ?", ps -> ps.setString(1, thread));
+    }
+
+    /** One line per attachment: kind, mime type, size and path, separated by tabs. */
+    private static String attachmentsTo(List<dev.buildcli.domain.Attachment> list) {
+        StringBuilder sb = new StringBuilder();
+        for (var a : list) {
+            sb.append(a.kind()).append('\t').append(a.mime()).append('\t').append(a.size()).append('\t').append(a.path()).append('\n');
+        }
+        return sb.toString();
+    }
+
+    private static List<dev.buildcli.domain.Attachment> attachmentsFrom(String text) {
+        List<dev.buildcli.domain.Attachment> out = new ArrayList<>();
+        if (text == null) {
+            return out;
+        }
+        for (String line : text.split("\n")) {
+            String[] f = line.split("\t", 4);
+            if (f.length == 4) {
+                try {
+                    java.nio.file.Path p = java.nio.file.Path.of(f[3]);
+                    out.add(new dev.buildcli.domain.Attachment(dev.buildcli.domain.Attachment.Kind.valueOf(f[0]), p,
+                            p.getFileName() == null ? f[3] : p.getFileName().toString(), f[1], Long.parseLong(f[2])));
+                } catch (RuntimeException ignored) {
+                    // a damaged line loses its attachment, not the message
+                }
+            }
+        }
+        return out;
     }
 
     public synchronized int schemaVersion() {

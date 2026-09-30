@@ -310,6 +310,19 @@ class ChatScreenTest {
     }
 
     @Test
+    void withNoAgentsTheScreenOffersToCreateOneAndOpensItsChatOnceItExists() {
+        var s = new ChatSession(List.of(), List.of(), Limits.defaults(), (team, request, ui, cancelled, d) -> null,
+                dev.buildcli.ports.ChatStore.NONE, () -> 6, dev.buildcli.ports.ChatLog.NONE);
+        var screen = screen(s);
+        String out = render(screen, 120, 36);
+        assertTrue(out.contains("No agents yet") && out.contains("Create your first agent"), out);
+        s.addContact(new Agent("lia", "helper", "", Set.of(), Permissions.none()));
+        out = render(screen, 120, 36);
+        assertEquals("lia", screen.selectedForTest());
+        assertTrue(out.contains("Start a conversation with lia"), out);
+    }
+
+    @Test
     void aTinyTerminalGetsAMessageNotACrash() {
         assertTrue(render(screen(session()), 30, 8).contains("Terminal too small"));
     }
