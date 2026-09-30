@@ -1,8 +1,17 @@
 package dev.buildcli.infrastructure;
 
-import static dev.tamboui.toolkit.Toolkit.*;
+import static dev.tamboui.toolkit.Toolkit.column;
+import static dev.tamboui.toolkit.Toolkit.dialog;
+import static dev.tamboui.toolkit.Toolkit.panel;
+import static dev.tamboui.toolkit.Toolkit.row;
+import static dev.tamboui.toolkit.Toolkit.stack;
+import static dev.tamboui.toolkit.Toolkit.text;
+import static dev.tamboui.toolkit.Toolkit.textInput;
 
+import dev.buildcli.domain.Agent;
 import dev.buildcli.domain.Event;
+import dev.buildcli.domain.Task;
+import dev.buildcli.domain.Team;
 import dev.buildcli.ports.ApprovalRequest;
 import dev.buildcli.ports.EscalationChoice;
 import dev.buildcli.ports.UserInterface;
@@ -12,44 +21,70 @@ import dev.tamboui.toolkit.element.Element;
 import dev.tamboui.toolkit.event.EventResult;
 import dev.tamboui.tui.TuiConfig;
 import dev.tamboui.tui.event.KeyEvent;
+import dev.tamboui.widgets.input.TextInputState;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.function.Consumer;
 
 /**
- * TamboUI implementation of the UserInterface port. The orchestrator runs on a worker thread; blocking
- * calls (approve/escalate) park it on a future that a key press completes on the render thread.
+ * The BuildCLI terminal UI (TamboUI): a team panel, the task/handoff tree, the event log, live agent output, approvals
+ * with diffs, escalation and a usage status bar. The orchestrator runs on a worker thread; blocking calls
+ * (approve/escalate) park it on a future that a key press completes on the render thread.
  */
 public final class TamboUiApp extends ToolkitApp implements UserInterface {
+
+    /** The work to run once there is a request. Runs on a worker thread; may block on the UI. */
+    public interface Job {
+        void run(String request, UserInterface ui) throws Exception;
+    }
+
     private sealed interface Pending {
         record Approval(ApprovalRequest request, CompletableFuture<Boolean> answer) implements Pending {}
+
         record Escalation(int taskId, String agent, String objective, String reason,
                           CompletableFuture<EscalationChoice> answer) implements Pending {}
     }
 
-    private static final int LIVE_CHARS = 400;
+    private enum Phase { INPUT, RUNNING, FINISHED }
 
-    private final Consumer<UserInterface> job;
+    private static final int LIVE_CHARS = 400;
+    private static final int DIFF_LINES = 18;
+    private static final int LOG_LINES = 200;
+
+    private final Team team;
+    private final Map<String, String> models;
+    private final Job job;
+    private final TextInputState input = new TextInputState();
     private final List<String> log = new CopyOnWriteArrayList<>();
-    private final Map<Integer, String> tasks = java.util.Collections.synchronizedMap(new LinkedHashMap<>());
-    private final Map<Integer, String> taskStatus = java.util.Collections.synchronizedMap(new LinkedHashMap<>());
-    private volatile Pending pending;
-    private volatile boolean finished;
-    private volatile String outcome = "running";
-    private volatile int inputTokens;
-    private volatile int outputTokens;
+    private final Map<Integer, Task> tasks = Collections.synchronizedMap(new LinkedHashMap<>());
+    private final Map<String, String> agentState = new java.util.concurrent.ConcurrentHashMap<>();
     private final StringBuilder live = new StringBuilder();
     private volatile String liveAgent = "";
+    private volatile Pending pending;
+    private volatile Phase phase;
+    private volatile String outcome = "";
+    private volatile int inputTokens;
+    private volatile int outputTokens;
 
-    /** @param job the run to execute on the worker thread, using this object as its UserInterface */
-    public TamboUiApp(Consumer<UserInterface> job) {
+    /**
+     * @param models         agent name to a short "provider/model" label, for the team panel
+     * @param initialRequest the request to run immediately, or null to ask for it first
+     */
+    public TamboUiApp(Team team, Map<String, String> models, String initialRequest, Job job) {
+        this.team = team;
+        this.models = models;
         this.job = job;
+        this.phase = initialRequest == null ? Phase.INPUT : Phase.RUNNING;
+        this.initialRequest = initialRequest;
+        team.agents().forEach(a -> agentState.put(a.name(), "idle"));
     }
+
+    private final String initialRequest;
 
     @Override
     protected TuiConfig configure() {
@@ -58,16 +93,30 @@ public final class TamboUiApp extends ToolkitApp implements UserInterface {
 
     @Override
     protected void onStart() {
+        if (initialRequest != null) {
+            start(initialRequest);
+        } else {
+            runner().focusManager().setFocus("request");
+        }
+    }
+
+    private void start(String request) {
+        phase = Phase.RUNNING;
         Thread.ofPlatform().daemon().name("orchestrator").start(() -> {
             try {
-                job.accept(this);
-                outcome = "finished";
+                job.run(request, this);
+                outcome = outcome.isEmpty() ? "finished" : outcome;
             } catch (Throwable t) {
                 outcome = "stopped: " + t.getMessage();
             } finally {
-                finished = true;
+                phase = Phase.FINISHED;
             }
         });
+    }
+
+    /** Lets the caller show the result line in the status bar (for example the final report). */
+    public void setOutcome(String text) {
+        outcome = text;
     }
 
     // ---- UserInterface (called from the orchestrator thread) ----
@@ -99,6 +148,16 @@ public final class TamboUiApp extends ToolkitApp implements UserInterface {
     }
 
     @Override
+    public void onTaskChanged(Task t) {
+        // a snapshot: the orchestrator mutates the live object
+        Task copy = new Task(t.id, t.parentId, t.from, t.to, t.objective, t.brief);
+        copy.status = t.status;
+        copy.tokens = t.tokens;
+        copy.attempts = t.attempts;
+        tasks.put(t.id, copy);
+    }
+
+    @Override
     public void onText(int taskId, String agent, String delta) {
         synchronized (live) {
             if (!agent.equals(liveAgent)) {
@@ -124,33 +183,31 @@ public final class TamboUiApp extends ToolkitApp implements UserInterface {
         if (e.type().equals("AgentReplied") || e.type().equals("ToolCalled")) {
             clearLive();
         }
-        log.add(String.format("%-17s #%d %-6s %s", e.type(), e.taskId(), e.agent(), one(e.payload())));
+        log.add(String.format("%-17s #%d %-6s %s", e.type(), e.taskId(), e.agent(), e.payload().replace('\n', ' ')));
+        if (log.size() > LOG_LINES) {
+            log.remove(0);
+        }
         switch (e.type()) {
-            case "TaskCreated" -> {
-                tasks.put(e.taskId(), e.payload());
-                taskStatus.put(e.taskId(), "RUNNING");
-            }
-            case "TaskCompleted" -> taskStatus.put(e.taskId(), "DONE");
-            case "TaskSkipped" -> taskStatus.put(e.taskId(), "SKIPPED");
-            case "TaskRetried" -> taskStatus.put(e.taskId(), "RETRY");
-            case "TaskEscalated" -> taskStatus.put(e.taskId(), "ESCALATED");
-            case "ApprovalRequested" -> taskStatus.put(e.taskId(), "WAITING_APPROVAL");
-            case "ApprovalGranted", "ApprovalDenied" -> taskStatus.put(e.taskId(), "RUNNING");
             case "AgentInvoked" -> {
                 inputTokens += e.inputTokens();
                 outputTokens += e.outputTokens();
+                agentState.put(e.agent(), "working");
             }
-            default -> {}
+            case "ApprovalRequested" -> agentState.put(e.agent(), "waiting for you");
+            case "ApprovalGranted", "ApprovalDenied" -> agentState.put(e.agent(), "working");
+            case "TaskCompleted", "TaskSkipped" -> agentState.put(e.agent(), "idle");
+            case "TaskEscalated" -> agentState.put(e.agent(), "needs you");
+            default -> { }
         }
     }
 
-    private static String one(String s) {
-        return s.replace('\n', ' ');
-    }
-
-    // ---- rendering and keys (render thread) ----
+    // ---- keys (render thread) ----
 
     private EventResult onKey(KeyEvent key) {
+        if (key.isCtrlC()) {
+            quit();
+            return EventResult.HANDLED;
+        }
         Pending p = pending;
         if (p instanceof Pending.Approval a) {
             if (key.isCharIgnoreCase('y') || key.isCharIgnoreCase('n')) {
@@ -170,11 +227,128 @@ public final class TamboUiApp extends ToolkitApp implements UserInterface {
                 esc.answer().complete(choice);
                 return EventResult.HANDLED;
             }
-        } else if (key.isCharIgnoreCase('q') || key.isCtrlC()) {
+        } else if (phase != Phase.INPUT && key.isCharIgnoreCase('q')) {
             quit();
             return EventResult.HANDLED;
         }
         return EventResult.UNHANDLED;
+    }
+
+    private void submitRequest() {
+        String request = input.text().strip();
+        if (!request.isEmpty() && phase == Phase.INPUT) {
+            start(request);
+        }
+    }
+
+    // ---- rendering (render thread) ----
+
+    @Override
+    protected Element render() {
+        Element body = column(
+                row(
+                        column(teamPanel(), tasksPanel()).percent(42),
+                        panel("Events", tail(log, 40).stream().map(l -> (Element) text(l)).toArray(Element[]::new)).rounded().fill()
+                ).fill(),
+                panel(liveTitle(), text(liveText()).dim()).rounded().length(4),
+                bottomBar());
+
+        Element view = body;
+        Pending p = pending;
+        if (p instanceof Pending.Approval a) {
+            view = stack(body, approvalDialog(a.request())).alignment(ContentAlignment.CENTER);
+        } else if (p instanceof Pending.Escalation esc) {
+            view = stack(body, dialog("Task #" + esc.taskId() + " needs you (" + esc.agent() + ")",
+                    text(esc.objective()), text("Failed after the automatic retries: " + esc.reason()).red(),
+                    text("[r] retry   [s] skip this task   [a] abort the run").dim()).width(76).rounded())
+                    .alignment(ContentAlignment.CENTER);
+        }
+        return column(view).id("root").focusable().onKeyEvent(this::onKey);
+    }
+
+    private Element teamPanel() {
+        List<Element> lines = new ArrayList<>();
+        for (Agent a : team.agents()) {
+            String state = agentState.getOrDefault(a.name(), "idle");
+            var line = text((state.equals("idle") ? "○ " : "● ") + a.name() + (a.name().equals(team.lead()) ? " (lead)" : "")
+                    + "  " + a.role() + "  " + models.getOrDefault(a.name(), "") + "  " + state);
+            lines.add(switch (state) {
+                case "working" -> line.cyan();
+                case "waiting for you", "needs you" -> line.yellow();
+                default -> line.dim();
+            });
+        }
+        return panel("Team: " + team.name(), lines.toArray(new Element[0])).rounded().length(team.agents().size() + 2);
+    }
+
+    private Element tasksPanel() {
+        List<Element> lines = new ArrayList<>();
+        List<Task> snapshot;
+        synchronized (tasks) {
+            snapshot = new ArrayList<>(tasks.values());
+        }
+        for (Task t : snapshot) {
+            String indent = "  ".repeat(depth(t, snapshot));
+            var line = text(indent + "#" + t.id + " " + t.status + "  " + t.from + " -> " + t.to + "  " + t.objective);
+            lines.add(switch (t.status) {
+                case DONE -> line.green();
+                case ESCALATED, FAILED -> line.red();
+                case WAITING_APPROVAL -> line.yellow();
+                default -> line;
+            });
+        }
+        return panel("Tasks", lines.toArray(new Element[0])).rounded().fill();
+    }
+
+    private static int depth(Task t, List<Task> all) {
+        int d = 0;
+        Integer parent = t.parentId;
+        while (parent != null && d < 10) {
+            int id = parent;
+            Task up = all.stream().filter(x -> x.id == id).findFirst().orElse(null); // not map(): the root's parentId is null
+            parent = up == null ? null : up.parentId;
+            d++;
+        }
+        return d;
+    }
+
+    private Element approvalDialog(ApprovalRequest r) {
+        List<Element> body = new ArrayList<>();
+        body.add(text(r.summary()).bold());
+        List<String> lines = r.detail().lines().toList();
+        lines.stream().limit(DIFF_LINES).forEach(l -> body.add(diffLine(l)));
+        if (lines.size() > DIFF_LINES) {
+            body.add(text("... " + (lines.size() - DIFF_LINES) + " more lines").dim());
+        }
+        body.add(text("[y] approve   [n] deny").dim());
+        return dialog("Approval requested by " + r.agent(), body.toArray(new Element[0])).width(100).rounded();
+    }
+
+    private static Element diffLine(String l) {
+        var t = text(l);
+        if (l.startsWith("+++") || l.startsWith("---")) {
+            return t.bold();
+        }
+        if (l.startsWith("@@")) {
+            return t.cyan();
+        }
+        if (l.startsWith("+")) {
+            return t.green();
+        }
+        if (l.startsWith("-")) {
+            return t.red();
+        }
+        return t;
+    }
+
+    private Element bottomBar() {
+        if (phase == Phase.INPUT) {
+            return textInput(input).id("request").focusable().rounded().title("What should the '" + team.name() + "' team do?  (Enter to run, Ctrl+C to quit)")
+                    .onSubmit(this::submitRequest).length(3);
+        }
+        String state = phase == Phase.FINISHED ? "done" : "running";
+        return panel(text(String.format("%s   tokens in/out: %d/%d   %s%s", state, inputTokens, outputTokens,
+                outcome.isEmpty() ? "" : outcome + "   ", phase == Phase.FINISHED ? "[q] quit" : "")).dim()).rounded().length(3);
     }
 
     private String liveTitle() {
@@ -187,50 +361,7 @@ public final class TamboUiApp extends ToolkitApp implements UserInterface {
         }
     }
 
-    @Override
-    protected Element render() {
-        List<Element> taskLines = new ArrayList<>();
-        synchronized (tasks) {
-            tasks.forEach((id, desc) -> {
-                String status = taskStatus.getOrDefault(id, "");
-                var t = text("#" + id + " " + status + "  " + desc);
-                taskLines.add(switch (status) {
-                    case "DONE" -> t.green();
-                    case "ESCALATED" -> t.red();
-                    case "WAITING_APPROVAL", "RETRY" -> t.yellow();
-                    default -> t;
-                });
-            });
-        }
-        List<String> snapshot = new ArrayList<>(log);
-        int from = Math.max(0, snapshot.size() - 30);
-        List<Element> logLines = snapshot.subList(from, snapshot.size()).stream().map(l -> (Element) text(l)).toList();
-
-        Element main = column(
-                row(
-                        panel("Tasks", taskLines.toArray(new Element[0])).rounded().percent(40),
-                        panel("Events", logLines.toArray(new Element[0])).rounded().fill()
-                ).fill(),
-                panel(liveTitle(), text(liveText()).dim()).rounded().length(4),
-                panel(text(String.format("run: %s   tokens in/out: %d/%d   %s", outcome, inputTokens, outputTokens,
-                        finished ? "[q] quit" : "")).dim()).rounded().length(3)
-        );
-
-        Element view = main;
-        Pending p = pending;
-        if (p instanceof Pending.Approval a) {
-            List<Element> body = new ArrayList<>();
-            body.add(text(a.request().summary()).bold());
-            a.request().detail().lines().limit(12).forEach(l -> body.add(text(l)));
-            body.add(text("[y] approve   [n] deny").dim());
-            view = stack(main, dialog("Approval requested by " + a.request().agent(), body.toArray(new Element[0]))
-                    .width(70).rounded()).alignment(ContentAlignment.CENTER);
-        } else if (p instanceof Pending.Escalation esc) {
-            view = stack(main, dialog("Task #" + esc.taskId() + " needs you (" + esc.agent() + ")",
-                    text(esc.objective()), text("Failed after 3 retries: " + esc.reason()).red(),
-                    text("[r] retry   [s] skip task   [a] abort run").dim())
-                    .width(70).rounded()).alignment(ContentAlignment.CENTER);
-        }
-        return column(view).id("root").focusable().onKeyEvent(this::onKey);
+    private static <T> List<T> tail(List<T> list, int n) {
+        return new ArrayList<>(list.subList(Math.max(0, list.size() - n), list.size()));
     }
 }
