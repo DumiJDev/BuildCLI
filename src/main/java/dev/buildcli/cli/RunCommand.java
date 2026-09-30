@@ -143,6 +143,7 @@ final class RunCommand implements Callable<Integer> {
                             workspaceLock),
                     setup.store, () -> setup.settings.number(dev.buildcli.application.Settings.AGENT_HOPS, 6), history);
             services.attach(session);
+            session.workspace(ctx.cwd, workspaceLock);
             try {
                 if (!text.isEmpty()) {
                     Chat target = teamName == null ? null : setup.group(teamName);

@@ -73,6 +73,7 @@ public final class WriteFileTool implements Tool {
             }
             Files.createDirectories(file.getParent());
             Files.writeString(file, content, StandardCharsets.UTF_8);
+            ctx.changed(new dev.buildcli.domain.FileChange(agent.name(), rel, exists, before, content));
             return "OK: wrote " + content.length() + " chars to " + rel;
         });
     }

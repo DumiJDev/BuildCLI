@@ -156,9 +156,10 @@ class ChatHistoryTest {
         }
         try (SqliteRunStore db = SqliteRunStore.open(file)) {
             assertEquals(SqliteRunStore.SCHEMA_VERSION, db.schemaVersion());
-            assertEquals(2, SqliteRunStore.SCHEMA_VERSION);
+            assertEquals(3, SqliteRunStore.SCHEMA_VERSION, "a version-1 database goes through every later migration");
             assertEquals("old request", db.listRuns(10).get(0).request());
             assertTrue(db.recent(10).isEmpty());
+            assertTrue(db.changes(1).isEmpty(), "the file_changes table exists after the upgrade");
             db.append("r1", new Event(Instant.now(), "RunStarted", 0, "user", "x"));
             db.startRun(new RunInfo("r2", "backend", "new", Instant.now(), null, "RUNNING", null));
         }
