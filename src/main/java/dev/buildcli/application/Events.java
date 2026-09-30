@@ -1,26 +1,49 @@
 package dev.buildcli.application;
 
 import dev.buildcli.domain.Event;
-import dev.buildcli.ports.EventStore;
+import dev.buildcli.domain.RunInfo;
+import dev.buildcli.domain.Task;
+import dev.buildcli.ports.RunStore;
 import dev.buildcli.ports.UserInterface;
 import java.time.Instant;
 
-/** Appends to the event store and notifies the UI: one log feeds persistence, audit and display. */
+/**
+ * Records everything that happens in one run: appends to the event log, snapshots tasks and notifies the UI.
+ * One log feeds persistence, audit, usage and display.
+ */
 public final class Events {
-    private final EventStore store;
+    private final RunStore store;
     private final String runId;
     private final UserInterface ui;
 
-    public Events(EventStore store, String runId, UserInterface ui) {
+    public Events(RunStore store, String runId, UserInterface ui) {
         this.store = store;
         this.runId = runId;
         this.ui = ui;
     }
 
     public void emit(String type, int taskId, String agent, String payload) {
-        Event e = new Event(Instant.now(), type, taskId, agent, payload == null ? "" : payload);
+        emit(type, taskId, agent, payload, 0, 0);
+    }
+
+    /** For events that consume tokens (the model was called). */
+    public void emit(String type, int taskId, String agent, String payload, int inputTokens, int outputTokens) {
+        Event e = new Event(Instant.now(), type, taskId, agent, payload == null ? "" : payload, inputTokens, outputTokens);
         store.append(runId, e);
         ui.onEvent(e);
+    }
+
+    public void startRun(String team, String request) {
+        store.startRun(new RunInfo(runId, team, request, Instant.now(), null, "RUNNING", null));
+    }
+
+    public void finishRun(String status, String summary) {
+        store.finishRun(runId, status, summary);
+    }
+
+    /** Persists the current state of a task. Call after every status change. */
+    public void taskChanged(Task task) {
+        store.saveTask(runId, task);
     }
 
     public String runId() {

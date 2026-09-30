@@ -92,14 +92,21 @@ public final class ToolRuntime {
             return "DENIED: " + agent.name() + " does not have capability " + capability;
         }
         return switch (call.name()) {
-            case "read_file" -> readFile(call);
+            case "read_file" -> readFile(agent, call);
             case "write_file" -> writeFile(agent, task, call);
             default -> runCommand(agent, task, call);
         };
     }
 
-    private String readFile(ToolCall call) throws IOException {
-        Path file = resolve(str(call, "path"));
+    private String readFile(Agent agent, ToolCall call) throws IOException {
+        String rel = str(call, "path");
+        Path file = resolve(rel);
+        String relNorm = workspace.relativize(file).toString().replace('\\', '/');
+        boolean allowed = agent.permissions().readGlobs().stream()
+                .anyMatch(g -> FileSystems.getDefault().getPathMatcher("glob:" + g).matches(Path.of(relNorm)));
+        if (!allowed) {
+            return "DENIED: " + agent.name() + " may not read '" + relNorm + "' (allowed: " + agent.permissions().readGlobs() + ")";
+        }
         if (!Files.isRegularFile(file)) {
             return "ERROR: not a file: " + str(call, "path");
         }
@@ -153,8 +160,10 @@ public final class ToolRuntime {
         events.emit("ApprovalRequested", task.id, agent.name(), request.summary());
         var previous = task.status;
         task.status = dev.buildcli.domain.TaskStatus.WAITING_APPROVAL;
+        events.taskChanged(task);
         boolean granted = ui.approve(request);
         task.status = previous;
+        events.taskChanged(task);
         events.emit(granted ? "ApprovalGranted" : "ApprovalDenied", task.id, agent.name(), request.summary());
         return granted;
     }

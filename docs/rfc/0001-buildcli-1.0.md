@@ -211,11 +211,11 @@ permissions:
   command:
     allow: [["mvn", "test"], ["./mvnw", "-q", "verify"]]
     timeout: 10m
-  network: false
 ```
 
 Rules for 1.0:
 
+- **No `network` permission in 1.0.** It cannot be enforced without the container sandbox (1.2); an unenforced permission would give a false sense of safety, so the agent schema rejects it.
 - **Commands are structured argv, never a shell string.** No pipes, `;`, `&&` or expansion. The allow list matches the argv prefix.
 - **Approval is the default.** Writes (shown as a diff), `git commit`, and any command not in the allow list need explicit human approval. Relaxing this is a per-policy decision.
 - **Honest limits.** An allowed `mvn test` still runs project code (plugins, test code). The command policy reduces accidents; it is **not a sandbox**. Container/sandbox execution is planned for 1.x, and the docs must say so.
@@ -378,6 +378,10 @@ Each milestone has **acceptance criteria**; a milestone is closed only when they
 **Accept when:** the spike completes a handoff scenario with a local model in ≥ 8 of 10 runs, the approval view works in TamboUI on Linux, macOS and Windows terminals, the TamboUI/DB decisions are documented, and `main` builds in CI on Linux/macOS/Windows.
 
 ### M1: Domain and runtime core
+
+> **Status: implemented** on branch `m1/runtime-core`: strict schema-1 loading of agents/teams (`docs/reference/agents-and-teams.md`),
+> SQLite store with versioned migrations (runs, tasks, events, usage), retry that continues the conversation instead of
+> repeating side effects, recording/replay gateway, `AGENTS.md` as delimited context, read/write/command permissions.
 
 - Domain model, event store with versioned schema, loading of agents/teams/policies (`AGENTS.md` as context, `.buildcli/`), fake/recorded `LlmGateway` and headless `UserInterface` for deterministic tests.
 - Orchestrator with limits (depth, steps, tokens, timeout), sequential task engine, handoff validation, **retry (3) then escalate**.

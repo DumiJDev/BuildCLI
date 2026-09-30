@@ -7,7 +7,7 @@ import dev.buildcli.eval.Scenario;
 import dev.buildcli.application.Orchestrator;
 import dev.buildcli.application.ToolRuntime;
 import dev.buildcli.domain.Limits;
-import dev.buildcli.infrastructure.JdbcEventStore;
+import dev.buildcli.infrastructure.SqliteRunStore;
 import dev.buildcli.infrastructure.ScriptedGateway;
 import dev.buildcli.infrastructure.TamboUiApp;
 import dev.buildcli.ports.LlmGateway;
@@ -76,7 +76,7 @@ public final class Main implements Runnable {
             Path workspace = Files.createTempDirectory("buildcli-");
             LlmGateway llm = fake ? script(escalate) : m.gateway();
             new TamboUiApp(ui -> {
-                try (JdbcEventStore store = new JdbcEventStore(JdbcEventStore.IN_MEMORY)) {
+                try (SqliteRunStore store = new SqliteRunStore(SqliteRunStore.IN_MEMORY)) {
                     Events events = new Events(store, "demo", ui);
                     new Orchestrator(Scenario.team(Limits.defaults()), llm, new ToolRuntime(workspace, ui, events), ui, events)
                             .run(Scenario.REQUEST);
