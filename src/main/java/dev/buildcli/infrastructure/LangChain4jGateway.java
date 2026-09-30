@@ -78,12 +78,12 @@ public final class LangChain4jGateway implements LlmGateway {
 
     /** Any OpenAI-compatible endpoint (OpenAI, vLLM, LM Studio, Ollama's /v1, ...). The key comes from the caller. */
     public static LangChain4jGateway openAiCompatible(String baseUrl, String apiKey, String modelName, double temperature,
-            boolean streaming) {
+            boolean streaming, int maxOutputTokens) {
         ChatModel chat = OpenAiChatModel.builder().baseUrl(baseUrl).apiKey(apiKey).modelName(modelName)
-                .temperature(temperature).maxCompletionTokens(512).timeout(TIMEOUT).build();
+                .temperature(temperature).maxCompletionTokens(maxOutputTokens).timeout(TIMEOUT).build();
         StreamingChatModel stream = streaming
                 ? OpenAiStreamingChatModel.builder().baseUrl(baseUrl).apiKey(apiKey).modelName(modelName)
-                        .temperature(temperature).maxCompletionTokens(512).timeout(TIMEOUT).build()
+                        .temperature(temperature).maxCompletionTokens(maxOutputTokens).timeout(TIMEOUT).build()
                 : null;
         return new LangChain4jGateway(chat, stream);
     }
@@ -163,7 +163,7 @@ public final class LangChain4jGateway implements LlmGateway {
     private static ChatMessage toLc(LlmMessage m) {
         return switch (m) {
             case LlmMessage.System s -> SystemMessage.from(s.text());
-            case LlmMessage.User u -> UserMessage.from(u.text());
+            case LlmMessage.User u -> u.attachments().isEmpty() ? UserMessage.from(u.text()) : UserMessage.from(withAttachments(u));
             case LlmMessage.Assistant a -> a.toolCalls().isEmpty()
                     ? AiMessage.from(a.text() == null ? "" : a.text())
                     : AiMessage.from(a.text() == null ? "" : a.text(), a.toolCalls().stream()
@@ -171,6 +171,23 @@ public final class LangChain4jGateway implements LlmGateway {
                             .toList());
             case LlmMessage.ToolResult r -> ToolExecutionResultMessage.from(r.callId(), r.toolName(), r.text());
         };
+    }
+
+    private static List<dev.langchain4j.data.message.Content> withAttachments(LlmMessage.User u) {
+        List<dev.langchain4j.data.message.Content> parts = new ArrayList<>();
+        parts.add(dev.langchain4j.data.message.TextContent.from(u.text()));
+        for (var a : u.attachments()) {
+            String base64;
+            try {
+                base64 = java.util.Base64.getEncoder().encodeToString(java.nio.file.Files.readAllBytes(a.path()));
+            } catch (java.io.IOException e) {
+                throw new IllegalStateException("cannot read attachment " + a.name() + ": " + e.getMessage(), e);
+            }
+            parts.add(a.kind() == dev.buildcli.domain.Attachment.Kind.IMAGE
+                    ? dev.langchain4j.data.message.ImageContent.from(base64, a.mime())
+                    : dev.langchain4j.data.message.AudioContent.from(base64, a.mime()));
+        }
+        return parts;
     }
 
     private static ToolSpecification toLc(ToolSpec spec) {

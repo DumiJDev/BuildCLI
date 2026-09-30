@@ -1,11 +1,10 @@
 package dev.buildcli.cli;
 
 import dev.buildcli.domain.ModelRef;
-import dev.buildcli.domain.Team;
+import dev.buildcli.application.ChatSession;
 import dev.buildcli.infrastructure.FileConfigRepository;
 import dev.buildcli.infrastructure.ProviderSettings;
 import dev.buildcli.infrastructure.StateLocations;
-import dev.buildcli.infrastructure.TamboUiApp;
 import dev.buildcli.ports.ConfigException;
 import dev.buildcli.ports.ConfigRepository;
 import dev.buildcli.ports.LlmGateway;
@@ -29,9 +28,9 @@ public final class CliContext {
         LlmGateway create(ModelRef ref, ProviderSettings settings);
     }
 
-    /** Opens the terminal UI and blocks until the user quits. */
+    /** Opens the chat UI on a session and blocks until the user quits. */
     public interface TuiLauncher {
-        void launch(Team team, Map<String, String> models, String request, TamboUiApp.Job job) throws Exception;
+        void launch(ChatSession session, Map<String, String> models) throws Exception;
     }
 
     public final Path cwd;
@@ -63,7 +62,13 @@ public final class CliContext {
         return new CliContext(Path.of("").toAbsolutePath(), Path.of(System.getProperty("user.home")), System.getenv(),
                 System.out, System.err, new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8)),
                 isInteractiveTerminal(), (ref, settings) -> settings.gatewayFor(ref),
-                (team, models, request, job) -> new TamboUiApp(team, models, request, job).run());
+                (session, models) -> new dev.buildcli.infrastructure.tui.ChatApp(session, models, Path.of("").toAbsolutePath(),
+                        !"0".equals(System.getenv("BUILDCLI_MOUSE"))).run());
+    }
+
+    /** Providers (built in plus the user's providers.yaml) and the environment their keys are read from. */
+    public ProviderSettings providerSettings() {
+        return ProviderSettings.fromEnvironment(env, globalDir());
     }
 
     public Path globalDir() {
