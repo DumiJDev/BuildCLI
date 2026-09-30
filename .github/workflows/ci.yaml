@@ -41,6 +41,32 @@ jobs:
       - name: Smoke test the packaged jar
         run: java -jar target/buildcli.jar --help
 
+      - name: Smoke test the CLI (init, team list, doctor)
+        shell: bash
+        run: |
+          work="$(mktemp -d)"
+          export BUILDCLI_HOME="$work/home"
+          cd "$work"
+          java -jar "$GITHUB_WORKSPACE/target/buildcli.jar" init
+          java -jar "$GITHUB_WORKSPACE/target/buildcli.jar" team list
+          java -jar "$GITHUB_WORKSPACE/target/buildcli.jar" doctor
+
+      - name: Test the Unix installer
+        if: runner.os != 'Windows'
+        run: |
+          export HOME="$RUNNER_TEMP/installhome"
+          mkdir -p "$HOME"
+          BUILDCLI_BIN_DIR="$HOME/bin" sh scripts/install.sh --from-file target/buildcli.jar
+          "$HOME/bin/buildcli" --version
+
+      - name: Test the Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:BUILDCLI_HOME = Join-Path $env:RUNNER_TEMP "bc"
+          ./scripts/install.ps1 -FromFile target/buildcli.jar
+          & (Join-Path $env:BUILDCLI_HOME "bin/buildcli.cmd") --version
+
       - name: Upload the jar
         if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

@@ -44,6 +44,7 @@ public final class Events {
     /** Persists the current state of a task. Call after every status change. */
     public void taskChanged(Task task) {
         store.saveTask(runId, task);
+        ui.onTaskChanged(task);
     }
 
     public String runId() {
