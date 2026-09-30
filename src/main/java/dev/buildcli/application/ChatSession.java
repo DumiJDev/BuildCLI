@@ -150,6 +150,8 @@ public final class ChatSession implements UserInterface {
                     RUN.remove();
                     current = null;
                     state.put(name, "idle");
+                    pending.decrementAndGet();
+                    touch();
                 }
             }
         }
