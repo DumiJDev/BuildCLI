@@ -70,13 +70,14 @@ Works and is usable: layout, dialog overlay, key handling, tick-driven redraw fr
    (not installed; this machine has ~1 GB free RAM) should be benchmarked before choosing.
 3. The TUI was exercised with the scripted LLM only, not with the real model.
 4. The diff shown for approval is naive (`-` old lines, `+` new lines), not a real diff.
-5. Known security gaps left for M2: no symlink check on workspace paths (use `toRealPath`); allow-list matches an
+5. Known security gaps left for M2: allow-list matches an
    argv *prefix*, so an entry like `["cat"]` would allow any file; no secret redaction; commands still run project
    code. The command policy is not a sandbox, as the RFC already says.
 6. Windows/macOS untested for everything (process spawning, paths, glob matching with `\`).
-7. CI on Windows passes, but the tests run real `cat`/`ls` processes and GitHub's Windows runners ship Git for
-   Windows (which provides them). A plain Windows machine will not have them: M2 needs a cross-platform command
-   fixture. CI only proves build + tests; the TamboUI TUI itself still has not been driven on macOS/Windows.
+7. The unit tests no longer depend on `cat`/`ls`: they run `java -version` (present wherever the tests run), so they
+   are portable to a plain Windows machine. The real-model scenario (`Scenario`, `bench`) still verifies with `cat`, so
+   it is Unix-only for now. CI only proves build + tests; the TamboUI TUI itself has still not been driven on
+   macOS/Windows.
 8. The repo's inherited workflows were built for the legacy CLI and were failing on this PR (legacy `core` test did not
    compile, Checkstyle `sun_checks` reported ~4,750 findings, `labeler.yml` was invalid for labeler v5). Since the
    project starts from scratch they were reworked: one `ci.yaml` (build + test + Checkstyle + smoke test on 3 OSes),
@@ -88,3 +89,7 @@ Works and is usable: layout, dialog overlay, key handling, tick-driven redraw fr
    every request: `/v1` cannot set `num_thread`, so Ollama fell back to 16 threads (the ~50x slowdown from finding 1).
    That is a property of this machine, not of the gateway. Validate it against a 7B+ model on another host, with
    `--temperature` above 0 (the README has the commands).
+10. **A symlink escape was found and fixed.** A test showed that `write_file out/link/x` followed a symlink inside the
+    workspace and wrote outside it (the lexical `startsWith(workspace)` check was not enough). `ToolRuntime.resolve`
+    now resolves the deepest existing ancestor with `toRealPath` and refuses paths that leave the real workspace,
+    before asking the user (`symlinkInsideTheWorkspaceCannotEscapeIt`; skipped where symlinks are unavailable).
