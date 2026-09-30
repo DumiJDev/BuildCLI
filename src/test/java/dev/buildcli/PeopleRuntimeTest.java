@@ -64,7 +64,7 @@ class PeopleRuntimeTest {
     @Test
     void differentAgentsAnswerInParallel() throws Exception {
         CountDownLatch anaMayFinish = new CountDownLatch(1);
-        var session = new ChatSession(TEAM, (request, ui, cancelled, dispatcher) -> {
+        var session = new ChatSession(TEAM, (team, request, ui, cancelled, dispatcher) -> {
             String me = request.target() == null ? "ana" : request.target();
             if (me.equals("ana")) {
                 anaMayFinish.await(10, TimeUnit.SECONDS);
@@ -89,7 +89,7 @@ class PeopleRuntimeTest {
         AtomicInteger inside = new AtomicInteger();
         AtomicInteger maxInside = new AtomicInteger();
         List<String> order = new CopyOnWriteArrayList<>();
-        var session = new ChatSession(TEAM, (request, ui, cancelled, dispatcher) -> {
+        var session = new ChatSession(TEAM, (team, request, ui, cancelled, dispatcher) -> {
             maxInside.accumulateAndGet(inside.incrementAndGet(), Math::max);
             order.add(request.text());
             Thread.sleep(80);
@@ -112,7 +112,7 @@ class PeopleRuntimeTest {
         CountDownLatch brunoBusy = new CountDownLatch(1);
         CountDownLatch anaHandedOff = new CountDownLatch(1);
         Map<String, String> results = new ConcurrentHashMap<>();
-        var session = new ChatSession(TEAM, (request, ui, cancelled, dispatcher) -> {
+        var session = new ChatSession(TEAM, (team, request, ui, cancelled, dispatcher) -> {
             String me = request.target() == null ? "ana" : request.target();
             String other = me.equals("ana") ? "bruno" : "ana";
             if (me.equals("bruno")) {
@@ -144,7 +144,7 @@ class PeopleRuntimeTest {
 
     @Test
     void severalAgentsCanAskForApprovalAtOnceAndAreAnsweredInOrder() throws Exception {
-        var session = new ChatSession(TEAM, (request, ui, cancelled, dispatcher) -> {
+        var session = new ChatSession(TEAM, (team, request, ui, cancelled, dispatcher) -> {
             String me = request.target() == null ? "ana" : request.target();
             boolean ok = ui.approve(new ApprovalRequest(me, "write", "Write " + me + ".txt", ""));
             return done(me, me + (ok ? " approved" : " denied"));

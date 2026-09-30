@@ -45,7 +45,7 @@ class ChatScreenTest {
     boolean quit;
 
     ChatSession session() {
-        return new ChatSession(TEAM, (request, ui, cancelled, dispatcher) -> {
+        return new ChatSession(TEAM, (team, request, ui, cancelled, dispatcher) -> {
             requests.add(request.text());
             targets.add(request.target());
             Task t = new Task(1, null, "user", request.target() == null ? "ana" : request.target(), request.text(), "");
@@ -94,8 +94,8 @@ class ChatScreenTest {
         String out = render(screen, 130, 36);
         assertTrue(out.contains("BuildCLI"), out);
         assertTrue(out.contains("backend"));
-        assertTrue(out.contains("ana") && out.contains("bruno"));
-        assertTrue(out.contains("Start a conversation with the backend team"), out);
+        assertTrue(out.contains("ana, bruno, you"), "the group's members, in its header");
+        assertTrue(out.contains("Start a conversation with backend"), out);
         assertTrue(out.contains("Type a message"));
     }
 
@@ -142,13 +142,21 @@ class ChatScreenTest {
     }
 
     @Test
-    void clickingAnAgentOpensTheirDirectChatAndMessagesGoToThem() throws Exception {
+    void aDirectChatOpensFromTheNewChatListAndMessagesGoToThatAgent() throws Exception {
         var s = session();
         var screen = screen(s);
         String out = render(screen, 120, 36);
-        int row = out.lines().toList().indexOf(out.lines().filter(l -> l.contains(" bruno ") && l.indexOf("bruno") < 20).findFirst().orElseThrow());
-        screen.handleMouseEvent(MouseEvent.press(MouseButton.LEFT, 8, row));
-        assertEquals("bruno", screen.selectedForTest());
+        int plus = out.lines().findFirst().orElseThrow().indexOf("＋");
+        screen.handleMouseEvent(MouseEvent.press(MouseButton.LEFT, plus, 0));
+        out = render(screen, 120, 36);
+        assertTrue(out.contains("New chat") && out.contains("New group"), out);
+        int row = out.lines().toList().indexOf(out.lines().filter(l -> l.contains("bruno") && l.contains("Message")).findFirst().orElseThrow());
+        type(screen, "");
+        for (int i = 0; i < 2; i++) {
+            key(screen, KeyCode.DOWN);
+        }
+        key(screen, KeyCode.ENTER);
+        assertEquals("bruno", screen.selectedForTest(), "row " + row);
         render(screen, 120, 36);
         type(screen, "hi");
         key(screen, KeyCode.ENTER);
@@ -156,12 +164,13 @@ class ChatScreenTest {
         assertEquals("bruno", targets.get(0));
         out = render(screen, 120, 36);
         assertTrue(out.contains("reply to hi"), out);
+        assertTrue(out.lines().limit(12).anyMatch(l -> l.contains("bruno") && l.indexOf("bruno") < 20), "the direct chat is now in the list");
     }
 
     @Test
     void messagesTypedWhileTheTeamWorksAreQueued() throws Exception {
         var gate = new java.util.concurrent.CountDownLatch(1);
-        var s = new ChatSession(TEAM, (request, ui, cancelled, dispatcher) -> {
+        var s = new ChatSession(TEAM, (team, request, ui, cancelled, dispatcher) -> {
             gate.await(5, TimeUnit.SECONDS);
             Task t = new Task(1, null, "user", "ana", request.text(), "");
             t.status = TaskStatus.DONE;
@@ -267,6 +276,37 @@ class ChatScreenTest {
         screen.handleKeyEvent(KeyEvent.ofKey(KeyCode.ENTER, KeyModifiers.ALT), true);
         idle(s);
         assertEquals(List.of("a\nb"), requests);
+    }
+
+    @Test
+    void newGroupCommandCreatesAGroupThatShowsInTheListAndGetsTheMessages() throws Exception {
+        var s = session();
+        var screen = screen(s);
+        render(screen, 120, 36);
+        type(screen, "/newgroup Reviewers @bruno");
+        key(screen, KeyCode.ENTER);
+        String out = render(screen, 120, 36);
+        assertTrue(out.contains("Reviewers") && out.contains("bruno, you"), out);
+        assertEquals("#reviewers", screen.selectedForTest());
+        type(screen, "please review");
+        key(screen, KeyCode.ENTER);
+        idle(s);
+        assertEquals(List.of("bruno"), targets, "the only member, and so the admin, answers");
+    }
+
+    @Test
+    void groupInfoLetsYouMakeSomeoneAdminWithOneKey() {
+        var s = session();
+        var screen = screen(s);
+        render(screen, 120, 36);
+        type(screen, "/info");
+        key(screen, KeyCode.ENTER);
+        String out = render(screen, 120, 36);
+        assertTrue(out.contains("Group info") && out.contains("Make admin"), out);
+        key(screen, KeyCode.DOWN);
+        type(screen, "a");
+        assertTrue(s.group(ChatSession.TEAM).isAdmin("bruno"));
+        key(screen, KeyCode.ESCAPE);
     }
 
     @Test

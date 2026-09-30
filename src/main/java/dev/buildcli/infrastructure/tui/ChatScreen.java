@@ -67,6 +67,14 @@ final class ChatScreen implements Element {
             new Command("retry", "", "Send the last failed message again", ""),
             new Command("queue", "[clear]", "Show or drop messages waiting their turn", ""),
             new Command("settings", "", "Providers, models, agents, theme and more", "F2"),
+            new Command("dm", "@agent", "Open a direct chat with an agent", ""),
+            new Command("newgroup", "<name> [@agents]", "Create a group with some agents", ""),
+            new Command("add", "@agent", "Add an agent to this group", ""),
+            new Command("remove", "@agent", "Remove an agent from this group", ""),
+            new Command("admin", "@agent", "Make an agent admin of this group", ""),
+            new Command("dismiss", "@agent", "Dismiss an admin of this group", ""),
+            new Command("rename", "<name>", "Rename this group", ""),
+            new Command("info", "", "Group or contact info", ""),
             new Command("team", "", "Show or hide the chat list", "Ctrl+B"),
             new Command("clear", "", "Clear the conversation from the screen", "Ctrl+L"),
             new Command("help", "", "Keys, commands and tips", ""),
@@ -112,6 +120,8 @@ final class ChatScreen implements Element {
     private final SettingsServices services;
     private final SettingsView settingsView;
     private boolean settingsOpen;
+    private ChatInfoView infoView;
+    private boolean infoOpen;
 
     ChatScreen(ChatSession session, Map<String, String> models, Path cwd, Runnable quit) {
         this(session, models, cwd, quit, basicServices(session, models));
@@ -127,6 +137,7 @@ final class ChatScreen implements Element {
             settingsOpen = false;
             runCommand("/open " + file);
         });
+        this.infoView = new ChatInfoView(session, () -> selected, this::select, () -> infoOpen = false, this::modelLabel);
     }
 
     /** Settings kept in memory, no providers or agent files: for tests and the demo. */
@@ -165,7 +176,7 @@ final class ChatScreen implements Element {
 
             @Override
             public List<AgentInfo> agents() {
-                return session.team().agents().stream().map(a -> new AgentInfo(a.name(), a.role(), "built in", "", List.copyOf(a.capabilities()))).toList();
+                return session.contacts().stream().map(a -> new AgentInfo(a.name(), a.role(), "built in", "", List.copyOf(a.capabilities()))).toList();
             }
 
             @Override
@@ -225,6 +236,9 @@ final class ChatScreen implements Element {
         Rect pane = new Rect(rect.x() + sideW + (sideW > 0 ? 1 : 0), rect.y(), rect.width() - sideW - (sideW > 0 ? 1 : 0), rect.height());
         if (settingsOpen) {
             settingsView.render(buf, pane);
+            frame.clearCursor();
+        } else if (infoOpen) {
+            infoView.render(buf, pane);
             frame.clearCursor();
         } else if (view != null) {
             drawViewer(buf, pane);
@@ -304,13 +318,14 @@ final class ChatScreen implements Element {
     /** The chats in the list: the team first, then one direct chat per agent. */
     private List<String> threads() {
         List<String> out = new ArrayList<>();
-        out.add(ChatSession.TEAM);
-        session.team().agents().forEach(a -> out.add(a.name()));
+        session.groups().forEach(g -> out.add(g.id()));
+        out.addAll(session.directChats());
         return out;
     }
 
     private String title(String thread) {
-        return thread.equals(ChatSession.TEAM) ? clean(session.team().name()) : clean(thread);
+        var g = session.group(thread);
+        return g != null ? clean(g.name()) : clean(thread);
     }
 
     private List<Message> inThread(List<Message> all, String thread) {
@@ -339,6 +354,8 @@ final class ChatScreen implements Element {
         put(buf, r.x() + 2, r.y() + 1, "local AI engineering team", st(Theme.DIM, Theme.PANEL), r.right() - 4);
         put(buf, r.right() - 4, r.y(), " ⚙ ", st(Theme.DIM, Theme.PANEL), r.right());
         hits.add(new Hit(new Rect(r.right() - 4, r.y(), 3, 2), () -> settingsOpen = true));
+        put(buf, r.right() - 8, r.y(), " ＋ ", st(Theme.DIM, Theme.PANEL), r.right() - 4);
+        hits.add(new Hit(new Rect(r.right() - 8, r.y(), 4, 2), () -> openInfo(ChatInfoView.Mode.NEW_CHAT)));
         int y = r.y() + 3;
         int limit = r.right() - 1;
         List<String> threads = threads();
@@ -366,22 +383,23 @@ final class ChatScreen implements Element {
             String preview;
             Style ps = st(Theme.DIM, bg);
             ChatSession.Live live = session.live(t);
-            String busyIn = t.equals(ChatSession.TEAM) ? null : session.agentThread(t);
+            boolean isGroup = session.group(t) != null;
+            String busyIn = isGroup ? null : session.agentThread(t);
             if (live != null) {
-                preview = (t.equals(ChatSession.TEAM) ? clean(live.agent()) + " is " : "") + "typing…";
+                preview = (isGroup ? clean(live.agent()) + " is " : "") + "typing…";
                 ps = st(Theme.GREEN, bg);
             } else if (session.isActive(t)) {
                 String who = busyAgentIn(t);
-                preview = t.equals(ChatSession.TEAM) && !who.isEmpty() ? clean(who) + " is " + session.agentState(who) + "…"
+                preview = isGroup && !who.isEmpty() ? clean(who) + " is " + session.agentState(who) + "…"
                         : session.agentState(t) + "…";
                 ps = st(Theme.GREEN, bg);
             } else if (busyIn != null) {
                 preview = "busy in the " + title(busyIn) + " chat";
                 ps = st(Theme.AMBER, bg);
             } else if (last == null) {
-                preview = t.equals(ChatSession.TEAM) ? session.team().agents().size() + " agents and you" : clean(roleOf(t));
+                preview = isGroup ? session.group(t).members().size() + " agents and you" : clean(roleOf(t));
             } else {
-                preview = previewOf(last, t.equals(ChatSession.TEAM));
+                preview = previewOf(last, isGroup);
             }
             int badge = unread(msgs, t);
             String b = badge > 0 ? " " + badge + " " : "";
@@ -396,10 +414,24 @@ final class ChatScreen implements Element {
         int q = session.queued();
         String foot = (q > 0 ? q + " queued · " : "") + tokens(session.inputTokens() + (long) session.outputTokens()) + " tokens";
         put(buf, r.x() + 2, r.bottom() - 1, foot, q > 0 ? st(Theme.AMBER, Theme.SIDEBAR) : st(Theme.FAINT, Theme.SIDEBAR), limit);
+        List<String> idle = session.idleContacts();
+        if (!idle.isEmpty()) {
+            String warn = "⚠ " + String.join(", ", idle) + (idle.size() == 1 ? " is" : " are") + " in no chat";
+            put(buf, r.x() + 2, r.bottom() - 3, warn, st(Theme.AMBER, Theme.SIDEBAR), limit);
+            put(buf, r.x() + 2, r.bottom() - 2, "loaded and idle · click to add", st(Theme.FAINT, Theme.SIDEBAR), limit);
+            hits.add(new Hit(new Rect(r.x(), r.bottom() - 3, r.width(), 2), () -> openInfo(ChatInfoView.Mode.NEW_CHAT)));
+        }
+    }
+
+    private void openInfo(ChatInfoView.Mode mode) {
+        infoView.open(mode);
+        infoOpen = true;
+        settingsOpen = false;
     }
 
     private String roleOf(String agent) {
-        return session.team().agent(agent).map(Agent::role).orElse("");
+        Agent a = session.contact(agent);
+        return a == null ? "" : a.role();
     }
 
     private static String previewOf(Message m, boolean group) {
@@ -429,8 +461,9 @@ final class ChatScreen implements Element {
 
     /** A coloured initial, like a profile picture. */
     private void avatar(Buffer buf, int x, int y, String thread) {
-        boolean team = thread.equals(ChatSession.TEAM);
-        String name = team ? session.team().name() : thread;
+        var g = session.group(thread);
+        boolean team = g != null;
+        String name = team ? g.name() : thread;
         String initial = name.isEmpty() ? "?" : name.substring(0, 1).toUpperCase(Locale.ROOT);
         Color c = team ? Theme.ACCENT : Theme.agentColor(thread);
         put(buf, x, y, " " + initial + " ", st(Theme.ON_ACCENT, c).bold(), x + 3);
@@ -484,8 +517,9 @@ final class ChatScreen implements Element {
             hits.add(new Hit(new Rect(x, r.y(), 2, 2), () -> sidebar = true));
             x += 2;
         }
-        boolean team = selected.equals(ChatSession.TEAM);
-        String name = team ? session.team().name() : selected;
+        var group = session.group(selected);
+        boolean team = group != null;
+        String name = team ? group.name() : selected;
         Color c = team ? Theme.ACCENT : Theme.agentColor(selected);
         put(buf, x, r.y(), " " + (name.isEmpty() ? "?" : name.substring(0, 1).toUpperCase(Locale.ROOT)) + " ", st(Theme.BG, c).bold(), r.right());
         int nx = x + 4;
@@ -504,15 +538,16 @@ final class ChatScreen implements Element {
             subStyle = st(Theme.AMBER, Theme.PANEL);
         } else if (team) {
             StringBuilder sb = new StringBuilder();
-            for (Agent a : session.team().agents()) {
-                sb.append(sb.isEmpty() ? "" : ", ").append(clean(a.name()));
+            for (String m : group.members()) {
+                sb.append(sb.isEmpty() ? "" : ", ").append(clean(m));
             }
-            sb.append(", you");
-            sub = sb.toString();
+            sb.append(sb.isEmpty() ? "you" : ", you");
+            sub = sb.toString() + "   · click for group info";
         } else {
             sub = "online · " + clean(roleOf(selected)) + " · " + clean(modelLabel(selected));
         }
         put(buf, nx, r.y() + 1, sub, subStyle, r.right() - 30);
+        hits.add(new Hit(new Rect(x, r.y(), Math.max(1, r.right() - 32 - x), 2), () -> openInfo(ChatInfoView.Mode.INFO)));
         int bx = r.right() - 1;
         String[][] buttons = {{" Help ", "help"}, {" Tasks ", "tasks"}, {" Changes ", "diff"}};
         for (String[] b : buttons) {
@@ -532,7 +567,7 @@ final class ChatScreen implements Element {
     /** The agent currently working in {@code thread}, preferring one that is not just waiting for a teammate. */
     private String busyAgentIn(String thread) {
         String who = "";
-        for (Agent a : session.team().agents()) {
+        for (Agent a : session.contacts()) {
             if (thread.equals(session.agentThread(a.name()))) {
                 if (who.isEmpty() || session.agentState(who).startsWith("waiting for ") && !session.agentState(a.name()).equals("idle")) {
                     who = a.name();
@@ -586,7 +621,7 @@ final class ChatScreen implements Element {
             welcome(rows, width);
             return rows;
         }
-        boolean group = selected.equals(ChatSession.TEAM);
+        boolean group = session.group(selected) != null;
         long failed = session.lastFailedMessage();
         java.time.LocalDate day = null;
         Message prev = null;
@@ -665,11 +700,13 @@ final class ChatScreen implements Element {
     }
 
     private void welcome(List<Row> rows, int width) {
-        boolean team = selected.equals(ChatSession.TEAM);
-        String who = team ? "the " + clean(session.team().name()) + " team" : clean(selected);
+        var g = session.group(selected);
+        boolean team = g != null;
+        String who = team ? clean(g.name()) : clean(selected);
         centred(rows, width, "Start a conversation with " + who, st(Theme.TEXT, Theme.BG).bold());
         rows.add(new Row(0, List.of()));
-        String sub = team ? clean(session.team().lead()) + " leads and hands work to the others. Type @ to talk to one of them here."
+        String sub = team ? (g.admins().isEmpty() ? "No admin yet" : clean(String.join(", ", g.admins())) + " (admin) answers messages that "
+                + "mention nobody") + ". Type @ to talk to someone, or mention two people to ask both."
                 : clean(roleOf(selected)) + ". Messages here go straight to " + clean(selected) + ".";
         centred(rows, width, sub, st(Theme.DIM, Theme.BG));
         rows.add(new Row(0, List.of()));
@@ -926,10 +963,22 @@ final class ChatScreen implements Element {
                 return List.of();
             }
             key = "@" + prefix;
-            for (Agent a : session.team().agents()) {
+            var g = session.group(selected);
+            List<Agent> ordered = new ArrayList<>();
+            for (Agent a : session.contacts()) {
+                if (g == null || g.has(a.name())) {
+                    ordered.add(a);
+                }
+            }
+            for (Agent a : session.contacts()) {
+                if (g != null && !g.has(a.name())) {
+                    ordered.add(a);
+                }
+            }
+            for (Agent a : ordered) {
                 if (a.name().toLowerCase(Locale.ROOT).startsWith(prefix.toLowerCase(Locale.ROOT))) {
-                    items.add(new MenuItem("@" + a.name(), a.role(), a.name().equals(session.team().lead()) ? "lead" : "",
-                            () -> completeMention(a.name())));
+                    String tag = g == null ? "" : !g.has(a.name()) ? "not in this group" : g.isAdmin(a.name()) ? "admin" : "";
+                    items.add(new MenuItem("@" + a.name(), a.role(), tag, () -> completeMention(a.name())));
                 }
             }
         }
@@ -1156,7 +1205,7 @@ final class ChatScreen implements Element {
     }
 
     private String where(ChatSession.Pending p) {
-        String chat = p.thread().equals(ChatSession.TEAM) || p.thread().equals(ChatSession.EVERYWHERE) ? title(ChatSession.TEAM) : title(p.thread());
+        String chat = p.thread().equals(ChatSession.EVERYWHERE) ? title(ChatSession.TEAM) : title(p.thread());
         int n = session.pendingCount();
         return " · " + chat + " chat" + (n > 1 ? " · 1 of " + n : "");
     }
@@ -1175,6 +1224,14 @@ final class ChatScreen implements Element {
                 settingsOpen = false;
             } else {
                 settingsView.key(key);
+            }
+            return EventResult.HANDLED;
+        }
+        if (infoOpen) {
+            if (ctrl && ch == 'c') {
+                infoOpen = false;
+            } else {
+                infoView.key(key);
             }
             return EventResult.HANDLED;
         }
@@ -1255,7 +1312,9 @@ final class ChatScreen implements Element {
                     return EventResult.HANDLED;
                 }
                 case ENTER -> {
-                    if (!(alt || key.hasShift())) {
+                    String typed = input.mentionPrefix();
+                    boolean complete = typed != null && items.size() == 1 && items.get(0).label().equalsIgnoreCase("@" + typed);
+                    if (!(alt || key.hasShift()) && !complete) {
                         items.get(Math.min(menuIndex, items.size() - 1)).accept().run();
                         return EventResult.HANDLED;
                     }
@@ -1354,6 +1413,15 @@ final class ChatScreen implements Element {
         return EventResult.HANDLED;
     }
 
+    private String firstMention(String text) {
+        List<String> m = session.mentioned(text);
+        if (!m.isEmpty()) {
+            return m.get(0);
+        }
+        String bare = text.strip();
+        return session.contact(bare) != null ? bare : null;
+    }
+
     private void toggleSidebar() {
         sidebar = sideWidth == 0;
         autoSidebar = false;
@@ -1403,7 +1471,7 @@ final class ChatScreen implements Element {
             input.clear();
             return;
         }
-        session.submit(text, new ArrayList<>(attachments), selected.equals(ChatSession.TEAM) ? null : selected);
+        session.submit(text, new ArrayList<>(attachments), selected);
         input.remember(text);
         input.clear();
         attachments.clear();
@@ -1465,6 +1533,49 @@ final class ChatScreen implements Element {
                 }
                 case "team" -> toggleSidebar();
                 case "settings" -> settingsOpen = true;
+                case "info" -> openInfo(ChatInfoView.Mode.INFO);
+                case "dm" -> {
+                    String who = firstMention(arg);
+                    if (who == null) {
+                        openInfo(ChatInfoView.Mode.NEW_CHAT);
+                    } else {
+                        session.openDirect(who);
+                        select(who);
+                    }
+                }
+                case "newgroup" -> {
+                    List<String> members = session.mentioned(arg);
+                    String groupName = arg.replaceAll("@[A-Za-z][A-Za-z0-9_-]*", "").strip();
+                    if (groupName.isEmpty()) {
+                        openInfo(ChatInfoView.Mode.NEW_CHAT);
+                    } else {
+                        select(session.createGroup(groupName, members));
+                    }
+                }
+                case "add", "remove", "admin", "dismiss" -> {
+                    if (session.group(selected) == null) {
+                        session.error("Open a group first: this is a direct chat.");
+                        return true;
+                    }
+                    List<String> who = session.mentioned(arg);
+                    if (who.isEmpty()) {
+                        openInfo(name.equals("add") ? ChatInfoView.Mode.ADD_MEMBER : ChatInfoView.Mode.INFO);
+                        return true;
+                    }
+                    for (String w : who) {
+                        switch (name) {
+                            case "add" -> session.addMember(selected, w);
+                            case "remove" -> session.removeMember(selected, w);
+                            case "admin" -> session.setAdmin(selected, w, true);
+                            default -> session.setAdmin(selected, w, false);
+                        }
+                    }
+                }
+                case "rename" -> {
+                    if (session.group(selected) != null && !arg.isBlank()) {
+                        session.renameGroup(selected, arg);
+                    }
+                }
                 case "clear" -> session.clearMessages();
                 case "help" -> open(new View("Help", help(), false, false));
                 case "quit" -> quit.run();
@@ -1547,6 +1658,10 @@ final class ChatScreen implements Element {
 
     @Override
     public EventResult handlePasteEvent(PasteEvent paste) {
+        if (infoOpen) {
+            infoView.paste(paste.text());
+            return EventResult.HANDLED;
+        }
         if (settingsOpen) {
             settingsView.paste(paste.text());
             return EventResult.HANDLED;
@@ -1583,8 +1698,13 @@ final class ChatScreen implements Element {
     @Override
     public EventResult handleMouseEvent(MouseEvent m) {
         MouseEventKind kind = m.kind();
-        if (settingsOpen && !(sideWidth > 0 && m.x() < area.x() + sideWidth)) {
+        boolean inPane = !(sideWidth > 0 && m.x() < area.x() + sideWidth);
+        if (settingsOpen && inPane) {
             settingsView.mouse(m);
+            return EventResult.HANDLED;
+        }
+        if (infoOpen && inPane) {
+            infoView.mouse(m);
             return EventResult.HANDLED;
         }
         if (kind == MouseEventKind.SCROLL_UP || kind == MouseEventKind.SCROLL_DOWN) {
