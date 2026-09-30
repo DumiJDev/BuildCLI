@@ -9,7 +9,16 @@ import java.util.concurrent.CompletableFuture;
 public interface SettingsServices {
     Settings settings();
 
-    record Provider(String name, String url, String keyEnv, boolean keySet, boolean removable) {}
+    record Provider(String name, String url, String keyEnv, boolean keySet, boolean removable, String description) {
+        public Provider(String name, String url, String keyEnv, boolean keySet, boolean removable) {
+            this(name, url, keyEnv, keySet, removable, "");
+        }
+
+        /** Runs on this machine, so it needs no key but must be started. */
+        public boolean local() {
+            return keyEnv == null && (url.contains("://localhost") || url.contains("://127.0.0.1"));
+        }
+    }
 
     List<Provider> providers();
 
@@ -21,6 +30,14 @@ public interface SettingsServices {
     CompletableFuture<String> test(String model);
 
     CompletableFuture<ModelCatalog.Result> models(String provider);
+
+    /** Forgets the model lists, so the next {@link #models} asks the providers again (after starting Ollama, say). */
+    default void refreshModels() { }
+
+    /** False where nothing can be connected (tests, the demo): the chat then never opens the connect screen by itself. */
+    default boolean canConnect() {
+        return !providers().isEmpty();
+    }
 
     record AgentInfo(String name, String role, String origin, String file, List<String> capabilities) {}
 
