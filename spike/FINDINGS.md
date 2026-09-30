@@ -81,3 +81,8 @@ Works and is usable: layout, dialog overlay, key handling, tick-driven redraw fr
    `EnvironmentConfigManagerTest` does not compile (`CI Workflow` also fails on `main`/`develop`), Checkstyle
    `sun_checks` fails repo-wide (thousands of errors), and `labeler.yml` is malformed for the labeler version in use.
    The spike is not in the root Maven reactor, so it does not affect the legacy build.
+9. The OpenAI-compatible gateway (`--provider openai`) compiles and is wired into `bench`/`demo`, but it is **not yet
+   validated against a real endpoint**. The only attempt, through Ollama's own `/v1` on the spike box, timed out on
+   every request: `/v1` cannot set `num_thread`, so Ollama fell back to 16 threads (the ~50x slowdown from finding 1).
+   That is a property of this machine, not of the gateway. Validate it against a 7B+ model on another host, with
+   `--temperature` above 0 (the README has the commands).
