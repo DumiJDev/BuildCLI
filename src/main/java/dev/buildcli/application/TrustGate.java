@@ -33,7 +33,7 @@ public final class TrustGate {
                     .append("\n  may run:      ").append(a.permissions().commandAllow()).append("\n");
         }
         boolean granted = ui.approve(new ApprovalRequest("system", "trust",
-                "Trust the agent definitions of this project for team '" + team.name() + "'?", detail.toString()));
+                "Trust " + (team.agents().size() == 1 ? "this agent" : "these agents") + " from the project?", detail.toString()));
         if (granted) {
             store.trust(projectKey, digest);
         }

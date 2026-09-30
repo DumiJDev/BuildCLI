@@ -130,7 +130,7 @@ final class RunCommand implements Callable<Integer> {
                 ModelRef ref = gateways.get().modelFor(a);
                 models.put(a.name(), ref.provider() + ":" + ref.model());
             } catch (IllegalStateException e) {
-                models.put(a.name(), "no model: press F2 to choose one");
+                models.put(a.name(), "no model: type /connect");
             }
         }
         // one lock for the whole chat: agents working in parallel share it

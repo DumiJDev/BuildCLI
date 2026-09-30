@@ -67,6 +67,7 @@ final class ChatScreen implements Element {
             new Command("retry", "", "Send the last failed message again", ""),
             new Command("queue", "[clear]", "Show or drop messages waiting their turn", ""),
             new Command("settings", "", "Providers, models, agents, theme and more", "F2"),
+            new Command("connect", "", "Connect a provider and choose the default model", ""),
             new Command("dm", "@agent", "Open a direct chat with an agent", ""),
             new Command("newgroup", "<name> [@agents]", "Create a group with some agents", ""),
             new Command("add", "@agent", "Add an agent to this group", ""),
@@ -124,6 +125,8 @@ final class ChatScreen implements Element {
     private String clearArmedFor;
     private ChatInfoView infoView;
     private boolean infoOpen;
+    private final ConnectView connectView;
+    private boolean connectOpen;
 
     ChatScreen(ChatSession session, Map<String, String> models, Path cwd, Runnable quit) {
         this(session, models, cwd, quit, basicServices(session, models));
@@ -140,7 +143,31 @@ final class ChatScreen implements Element {
             runCommand("/open " + file);
         });
         this.infoView = new ChatInfoView(session, () -> selected, this::select, () -> infoOpen = false, this::modelLabel);
+        this.connectView = new ConnectView(services, message -> {
+            connectOpen = false;
+            if (message != null) {
+                session.system(message);
+            }
+        });
         ensureSelection();
+        if (services.canConnect() && noModelAnywhere()) {
+            openConnect("None of your agents has a model yet. Connect one to start chatting; it takes a minute.");
+        }
+    }
+
+    /** Nothing to answer with: no default model, no agent with a model of its own, no --model on the command line. */
+    private boolean noModelAnywhere() {
+        return settings().defaultModel() == null && session.contacts().stream().allMatch(a -> modelLabel(a.name()).startsWith("no model"))
+                && models.values().stream().allMatch(v -> v.startsWith("no model"));
+    }
+
+    /** The connect screen: choose a provider and a model, test it, make it the default. @param why shown on top, or null */
+    private void openConnect(String why) {
+        settingsOpen = false;
+        infoOpen = false;
+        view = null;
+        connectView.open(why);
+        connectOpen = true;
     }
 
     /** Settings kept in memory, no providers or agent files: for tests and the demo. */
@@ -201,7 +228,7 @@ final class ChatScreen implements Element {
 
     /** True while something on screen moves by itself: an agent working (spinner, dots) or a preview loading. */
     boolean animating() {
-        return session.busy() || loadingPreviews;
+        return session.busy() || loadingPreviews || connectOpen && connectView.animating();
     }
 
     private volatile boolean loadingPreviews;
@@ -216,7 +243,7 @@ final class ChatScreen implements Element {
             return team;
         }
         String def = services.settings().defaultModel();
-        return def != null ? def : models.getOrDefault(agent, "no model: press F2 > Models");
+        return def != null ? def : models.getOrDefault(agent, "no model: type /connect");
     }
 
     private dev.buildcli.application.Settings settings() {
@@ -249,7 +276,10 @@ final class ChatScreen implements Element {
             }
         }
         Rect pane = new Rect(rect.x() + sideW + (sideW > 0 ? 1 : 0), rect.y(), rect.width() - sideW - (sideW > 0 ? 1 : 0), rect.height());
-        if (settingsOpen) {
+        if (connectOpen) {
+            connectView.render(buf, pane);
+            frame.clearCursor();
+        } else if (settingsOpen) {
             settingsView.render(buf, pane);
             frame.clearCursor();
         } else if (infoOpen) {
@@ -763,7 +793,13 @@ final class ChatScreen implements Element {
             Runnable act = a[1].equals("agent") ? () -> {
                 settingsOpen = true;
                 settingsView.startNewAgent();
-            } : () -> settingsOpen = true;
+            } : () -> {
+                if (services.canConnect()) {
+                    openConnect(null);
+                } else {
+                    settingsOpen = true;
+                }
+            };
             String label = "  " + a[0];
             rows.add(new Row(x, List.of(new Span(label + " ".repeat(Math.max(1, boxW - Wrap.width(label) - 2)) + "› ", st(Theme.TEXT, Theme.PANEL), act))));
             rows.add(new Row(0, List.of()));
@@ -826,6 +862,10 @@ final class ChatScreen implements Element {
                 footer.add(new Span("! not sent ", st(Theme.RED, Theme.ME).bold()));
                 if (retryable) {
                     footer.add(new Span(" Retry ", st(Theme.BG, Theme.AMBER).bold(), () -> session.retry(m.id())));
+                    if (services.canConnect()) {
+                        footer.add(new Span(" ", meta));
+                        footer.add(new Span(" Change model ", st(Theme.TEXT, Theme.FIELD), () -> openConnect(null)));
+                    }
                 }
             }
             default -> { }
@@ -847,6 +887,10 @@ final class ChatScreen implements Element {
         List<Span> footer = new ArrayList<>();
         if (failed >= 0) {
             footer.add(new Span(" Retry ", st(Theme.BG, Theme.AMBER).bold(), () -> session.retry(failed)));
+        }
+        if (services.canConnect()) {
+            footer.add(new Span(" ", base));
+            footer.add(new Span(" Change model ", st(Theme.TEXT, Theme.FIELD), () -> openConnect("The last message failed: " + text)));
         }
         bubble(rows, width, false, "Something went wrong", Theme.RED, body, footer, base, base);
     }
@@ -1294,6 +1338,14 @@ final class ChatScreen implements Element {
         KeyCode code = key.code();
         char ch = code == KeyCode.CHAR ? Character.toLowerCase(key.character()) : 0;
 
+        if (connectOpen) {
+            if (ctrl && ch == 'c') {
+                connectOpen = false;
+            } else {
+                connectView.key(key);
+            }
+            return EventResult.HANDLED;
+        }
         if (settingsOpen) {
             if (ctrl && ch == 'c') {
                 settingsOpen = false;
@@ -1611,6 +1663,7 @@ final class ChatScreen implements Element {
                 }
                 case "team" -> toggleSidebar();
                 case "settings" -> settingsOpen = true;
+                case "connect" -> openConnect(null);
                 case "info" -> openInfo(ChatInfoView.Mode.INFO);
                 case "dm" -> {
                     String who = firstMention(arg);
@@ -1746,6 +1799,10 @@ final class ChatScreen implements Element {
 
     @Override
     public EventResult handlePasteEvent(PasteEvent paste) {
+        if (connectOpen) {
+            connectView.paste(paste.text());
+            return EventResult.HANDLED;
+        }
         if (infoOpen) {
             infoView.paste(paste.text());
             return EventResult.HANDLED;
@@ -1787,6 +1844,10 @@ final class ChatScreen implements Element {
     public EventResult handleMouseEvent(MouseEvent m) {
         MouseEventKind kind = m.kind();
         boolean inPane = !(sideWidth > 0 && m.x() < area.x() + sideWidth);
+        if (connectOpen && inPane) {
+            connectView.mouse(m);
+            return EventResult.HANDLED;
+        }
         if (settingsOpen && inPane) {
             settingsView.mouse(m);
             return EventResult.HANDLED;
@@ -1842,6 +1903,10 @@ final class ChatScreen implements Element {
 
     String selectedForTest() {
         return selected;
+    }
+
+    boolean connectOpenForTest() {
+        return connectOpen;
     }
 
     boolean settingsOpenForTest() {
