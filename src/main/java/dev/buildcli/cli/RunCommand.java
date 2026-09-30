@@ -113,8 +113,11 @@ final class RunCommand implements Callable<Integer> {
         if (tui) {
             // one lock for the whole chat: agents working in parallel share it
             var workspaceLock = new dev.buildcli.application.tools.WorkspaceLock();
-            ChatSession session = new ChatSession(team,
-                    (req, ui, cancelled, dispatcher) -> runOnce(team, config, gateways.get(), req, ui, cancelled, dispatcher, workspaceLock));
+            ChatSession session = new ChatSession(team, config.agents(),
+                    (chatTeam, req, ui, cancelled, dispatcher) -> runOnce(chatTeam, config, gateways.get(), req, ui, cancelled, dispatcher,
+                            workspaceLock),
+                    new dev.buildcli.infrastructure.FileChatStore(ctx.projectStateDir()),
+                    () -> services.settings().number(dev.buildcli.application.Settings.AGENT_HOPS, 6));
             if (!text.isEmpty()) {
                 session.submit(text, List.of(), agentName);
             }
