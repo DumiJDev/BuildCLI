@@ -174,6 +174,13 @@ public final class ChatSession implements UserInterface {
     private final Team team;
     private final Executor executor;
     private final ChatStore store;
+    private final dev.buildcli.ports.ChatLog log;
+    /** Messages waiting to be written: the UI never waits for the disk. */
+    private final LinkedBlockingDeque<Message> writes = new LinkedBlockingDeque<>();
+    private final Thread writer;
+    /** Where each message sits in the conversation, for the history: it changes when a message moves down on being read. */
+    private final Map<Long, Long> positions = new ConcurrentHashMap<>();
+    private final AtomicLong nextPosition = new AtomicLong();
     private final java.util.function.IntSupplier agentHops;
     private final Map<String, Agent> contacts = new LinkedHashMap<>();
     /** Groups by id; the team's own group has the id {@link #TEAM}. Guarded by {@code lock}. */
@@ -208,7 +215,14 @@ public final class ChatSession implements UserInterface {
      * @param agentHops how many messages agents may send each other before they wait for the user
      */
     public ChatSession(Team team, List<Agent> contacts, Executor executor, ChatStore store, java.util.function.IntSupplier agentHops) {
+        this(team, contacts, executor, store, agentHops, dev.buildcli.ports.ChatLog.NONE);
+    }
+
+    /** @param log where the conversation is kept, so it is there again after a restart */
+    public ChatSession(Team team, List<Agent> contacts, Executor executor, ChatStore store, java.util.function.IntSupplier agentHops,
+            dev.buildcli.ports.ChatLog log) {
         this.team = team;
+        this.log = log;
         this.executor = executor;
         this.store = store;
         this.agentHops = agentHops;
@@ -223,6 +237,76 @@ public final class ChatSession implements UserInterface {
             List<String> members = g.members().stream().filter(this.contacts::containsKey).distinct().toList();
             List<String> admins = g.admins().stream().filter(members::contains).toList();
             groups.put(g.id(), new Chat(g.id(), g.id().equals(TEAM) ? team.name() : g.name(), true, members, admins));
+        }
+        restore();
+        this.writer = log == dev.buildcli.ports.ChatLog.NONE ? null : Thread.ofVirtual().name("chat-history").start(this::writeLoop);
+    }
+
+    /**
+     * Loads the conversation kept from earlier. Work that was in progress when BuildCLI closed did not finish: those
+     * messages come back as not sent, so they can be retried, and unfinished activity as failed.
+     */
+    private void restore() {
+        List<dev.buildcli.domain.ChatEntry> saved;
+        try {
+            saved = log.recent(MAX_MESSAGES);
+        } catch (RuntimeException e) {
+            messages.add(new Message(ids.incrementAndGet(), Kind.ERROR, "", "Could not load the earlier messages: " + e.getMessage(),
+                    Instant.now(), State.NONE, List.of(), EVERYWHERE));
+            return;
+        }
+        long max = 0;
+        for (dev.buildcli.domain.ChatEntry e : saved) {
+            Kind kind;
+            State st;
+            try {
+                kind = Kind.valueOf(e.kind());
+                st = State.valueOf(e.state());
+            } catch (IllegalArgumentException ignored) {
+                continue;
+            }
+            boolean interrupted = st == State.QUEUED || st == State.RUNNING;
+            Message m = new Message(e.id(), kind, e.author(), e.text(), e.at(), interrupted ? State.FAILED : st, e.attachments(), e.thread());
+            messages.add(m);
+            positions.put(m.id(), e.position());
+            if (interrupted) {
+                writes.add(m);
+            }
+            max = Math.max(max, e.id());
+            nextPosition.set(Math.max(nextPosition.get(), e.position()));
+        }
+        ids.set(max);
+    }
+
+    private void writeLoop() {
+        while (true) {
+            Message m;
+            try {
+                m = writes.take();
+            } catch (InterruptedException e) {
+                return;
+            }
+            write(m);
+            if (closed && writes.isEmpty()) {
+                return;
+            }
+        }
+    }
+
+    private void write(Message m) {
+        try {
+            // what is kept on disk is scrubbed of secrets, like the event log; the screen shows the original
+            log.save(new dev.buildcli.domain.ChatEntry(m.id(), m.thread(), m.kind().name(), m.author(), Redactor.redact(m.text()), m.at(),
+                    m.state().name(), m.attachments(), positions.getOrDefault(m.id(), 0L)));
+        } catch (RuntimeException e) {
+            // a full disk or a locked database must not break the chat; the message stays on screen
+        }
+    }
+
+    /** Keeps a new or changed message, except local notes (help, command errors) that belong to no chat. */
+    private void persist(Message m) {
+        if (writer != null && !m.thread().equals(EVERYWHERE)) {
+            writes.add(m);
         }
     }
 
@@ -422,6 +506,9 @@ public final class ChatSession implements UserInterface {
             removed = groups.remove(id) != null;
         }
         saveGroups();
+        if (removed) {
+            clearChat(id);
+        }
         return removed;
     }
 
@@ -556,7 +643,10 @@ public final class ChatSession implements UserInterface {
         }
         synchronized (lock) {
             messages.removeIf(x -> x.id() == messageId);
-            messages.add(new Message(m.id(), m.kind(), m.author(), m.text(), Instant.now(), State.QUEUED, m.attachments(), m.thread()));
+            Message again = new Message(m.id(), m.kind(), m.author(), m.text(), Instant.now(), State.QUEUED, m.attachments(), m.thread());
+            messages.add(again);
+            positions.put(again.id(), nextPosition.incrementAndGet());
+            persist(again);
         }
         route(messageId, m.text(), m.attachments(), m.thread());
         return true;
@@ -584,15 +674,35 @@ public final class ChatSession implements UserInterface {
         add(new Message(ids.incrementAndGet(), Kind.ERROR, "", text, Instant.now(), State.NONE, List.of(), threadNow()));
     }
 
+    /** Clears every chat from the screen. The history on disk is kept; use {@link #clearChat} to delete a chat. */
     public void clearMessages() {
         synchronized (lock) {
             messages.clear();
         }
     }
 
+    /** Deletes one chat's messages, on screen and on disk, like "clear chat" in a messaging app. */
+    public void clearChat(String thread) {
+        synchronized (lock) {
+            messages.removeIf(m -> m.thread().equals(thread) || m.thread().equals(EVERYWHERE));
+        }
+        try {
+            log.clear(thread);
+        } catch (RuntimeException e) {
+            error("Could not delete the saved messages: " + e.getMessage());
+        }
+    }
+
     public void close() {
         closed = true;
         stop();
+        if (writer != null) {
+            // write what is still queued, so the last messages are there next time
+            List<Message> rest = new ArrayList<>();
+            writes.drainTo(rest);
+            writer.interrupt();
+            rest.forEach(this::write);
+        }
         for (Actor a : actors.values()) {
             Thread t = a.thread;
             if (t != null) {
@@ -740,7 +850,10 @@ public final class ChatSession implements UserInterface {
                     Message m = messages.get(i);
                     if (m.id() == run.messageId && m.state() == State.QUEUED) {
                         messages.remove(i);
-                        messages.add(m.withState(State.RUNNING));
+                        Message read = m.withState(State.RUNNING);
+                        messages.add(read);
+                        positions.put(read.id(), nextPosition.incrementAndGet());
+                        persist(read);
                         break;
                     }
                 }
@@ -1116,9 +1229,11 @@ public final class ChatSession implements UserInterface {
             for (int i = messages.size() - 1; i >= 0; i--) {
                 Message m = messages.get(i);
                 if (m.kind() == Kind.ACTIVITY && m.author().equals(agent) && m.state() == State.RUNNING) {
-                    messages.set(i, new Message(m.id(), m.kind(), m.author(),
+                    Message done = new Message(m.id(), m.kind(), m.author(),
                             ok ? m.text() : m.text() + " (" + ToolRuntime.abbreviate(payload, 140) + ")", m.at(), ok ? State.DONE : State.FAILED,
-                            m.attachments(), m.thread()));
+                            m.attachments(), m.thread());
+                    messages.set(i, done);
+                    persist(done);
                     return;
                 }
             }
@@ -1128,9 +1243,11 @@ public final class ChatSession implements UserInterface {
     private void add(Message m) {
         synchronized (lock) {
             messages.add(m);
+            positions.put(m.id(), nextPosition.incrementAndGet());
             if (messages.size() > MAX_MESSAGES) {
-                messages.remove(0);
+                messages.remove(0); // only from the screen: the history on disk keeps it
             }
+            persist(m);
         }
     }
 
@@ -1144,7 +1261,9 @@ public final class ChatSession implements UserInterface {
         synchronized (lock) {
             for (int i = messages.size() - 1; i >= 0; i--) {
                 if (messages.get(i).id() == id) {
-                    messages.set(i, messages.get(i).withState(s));
+                    Message changed = messages.get(i).withState(s);
+                    messages.set(i, changed);
+                    persist(changed);
                     return;
                 }
             }
