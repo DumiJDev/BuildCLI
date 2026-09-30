@@ -94,7 +94,8 @@ public final class ToolRuntime {
                 result = "DENIED: " + agent.name() + " does not have capability " + tool.capability();
             } else {
                 ToolContext ctx = new ToolContext(workspace, request -> approve(agent, task, request), lock, agent.name(),
-                        holder -> events.emit("WaitingForWorkspace", task.id, agent.name(), holder + " is changing the workspace"));
+                        holder -> events.emit("WaitingForWorkspace", task.id, agent.name(), holder + " is changing the workspace"))
+                        .onChange(ui::fileChanged);
                 // tools that change the workspace take the exclusive lock themselves, after any approval
                 result = tool.capability().equals(Capability.FILESYSTEM_WRITE) || tool.capability().equals(Capability.COMMAND_EXECUTE)
                         || tool.capability().equals(Capability.GIT_COMMIT) ? tool.execute(ctx, agent, call)
