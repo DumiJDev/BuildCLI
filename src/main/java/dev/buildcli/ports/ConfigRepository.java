@@ -15,6 +15,12 @@ public interface ConfigRepository {
 
     Optional<Team> team(String name);
 
+    /**
+     * A digest of the project's own agent and team files ({@code .buildcli/}), or an empty string if it has none.
+     * It changes whenever any of them changes; it is what the user approves in the trust prompt.
+     */
+    String projectDigest();
+
     /** The project's AGENTS.md (possibly truncated), or an empty string. It is context, never configuration. */
     String projectContext();
 }

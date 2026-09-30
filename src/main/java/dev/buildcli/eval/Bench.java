@@ -9,6 +9,7 @@ import dev.buildcli.infrastructure.HeadlessUi;
 import dev.buildcli.infrastructure.SqliteRunStore;
 import dev.buildcli.ports.EscalationChoice;
 import dev.buildcli.ports.LlmGateway;
+import java.util.function.Supplier;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -16,7 +17,8 @@ import java.nio.file.Path;
 public final class Bench {
     private Bench() {}
 
-    public static int run(LlmGateway llm, int runs, String label, boolean verbose) throws Exception {
+    /** @param gateways creates the gateway of one run, so per-run state (a scripted lead, a recording) never leaks between runs */
+    public static int run(Supplier<LlmGateway> gateways, int runs, String label, boolean verbose) throws Exception {
         int ok = 0;
         long totalMs = 0;
         long totalTokens = 0;
@@ -29,7 +31,7 @@ public final class Bench {
             int tokens = 0;
             try (SqliteRunStore store = new SqliteRunStore(SqliteRunStore.IN_MEMORY)) {
                 Events events = new Events(store, "run" + i, ui);
-                Orchestrator o = new Orchestrator(Scenario.team(Limits.defaults()), llm,
+                Orchestrator o = new Orchestrator(Scenario.team(Limits.defaults()), gateways.get(),
                         new ToolRuntime(ws, ui, events), ui, events);
                 try {
                     Task root = o.run(Scenario.REQUEST);

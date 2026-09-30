@@ -1,56 +1,66 @@
 package dev.buildcli.application;
 
+import dev.buildcli.application.tools.GitCommitTool;
+import dev.buildcli.application.tools.GitReadTool;
+import dev.buildcli.application.tools.ListFilesTool;
+import dev.buildcli.application.tools.ReadFileTool;
+import dev.buildcli.application.tools.RunCommandTool;
+import dev.buildcli.application.tools.SearchTool;
+import dev.buildcli.application.tools.Tool;
+import dev.buildcli.application.tools.ToolContext;
+import dev.buildcli.application.tools.WriteFileTool;
 import dev.buildcli.domain.Agent;
+import dev.buildcli.domain.Capability;
 import dev.buildcli.domain.Task;
+import dev.buildcli.domain.TaskStatus;
 import dev.buildcli.ports.ApprovalRequest;
 import dev.buildcli.ports.ToolCall;
 import dev.buildcli.ports.ToolSpec;
 import dev.buildcli.ports.ToolSpec.Param;
 import dev.buildcli.ports.UserInterface;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.FileSystems;
-import java.nio.file.LinkOption;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 /**
- * Executes tools on behalf of agents. Every call goes through capability and policy checks first;
- * expected denials are returned to the LLM as text so it can adapt, never thrown.
+ * Tool registry and executor. Every call goes through the same gate: the tool must exist, the agent must hold its
+ * capability, the tool applies its own policy checks, output is scrubbed of secrets, and output that carries outside
+ * content is delimited as untrusted data. Expected refusals come back to the model as text, never as exceptions.
  */
 public final class ToolRuntime {
-    static final int MAX_OUTPUT = 4000;
+    static final String OUTPUT_TAG = "tool-output";
 
     private final Path workspace;
     private final UserInterface ui;
     private final Events events;
+    private final List<Tool> tools;
 
     public ToolRuntime(Path workspace, UserInterface ui, Events events) {
+        this(workspace, ui, events, defaultTools());
+    }
+
+    public ToolRuntime(Path workspace, UserInterface ui, Events events, List<Tool> tools) {
         this.workspace = workspace.toAbsolutePath().normalize();
         this.ui = ui;
         this.events = events;
+        this.tools = List.copyOf(tools);
     }
 
+    /** The built-in tools of 1.0. */
+    public static List<Tool> defaultTools() {
+        return List.of(new ReadFileTool(), new ListFilesTool(), new WriteFileTool(), new SearchTool(), new RunCommandTool(),
+                new GitReadTool(), new GitCommitTool());
+    }
+
+    /** Only the tools an agent's capabilities resolve to: less to describe to the model, less it can misuse. */
     public List<ToolSpec> specsFor(Agent agent) {
         List<ToolSpec> specs = new ArrayList<>();
-        if (agent.can("filesystem.read")) {
-            specs.add(new ToolSpec("read_file", "Read a text file from the workspace.",
-                    List.of(new Param("path", "Path relative to the workspace root", false, true))));
+        for (Tool t : tools) {
+            if (agent.can(t.capability())) {
+                specs.add(t.spec());
+            }
         }
-        if (agent.can("filesystem.write")) {
-            specs.add(new ToolSpec("write_file", "Create or overwrite a text file in the workspace. Requires user approval.",
-                    List.of(new Param("path", "Path relative to the workspace root", false, true),
-                            new Param("content", "Full new file content", false, true))));
-        }
-        if (agent.can("command.execute")) {
-            specs.add(new ToolSpec("run_command",
-                    "Run a command in the workspace. Pass argv as an array of separate strings, never a shell string.",
-                    List.of(new Param("argv", "Command and arguments, e.g. [\"ls\", \"-la\"]", true, true))));
-        }
-        if (agent.can("agent.handoff")) {
+        if (agent.can(Capability.AGENT_HANDOFF)) {
             specs.add(new ToolSpec("handoff",
                     "Delegate a well-defined piece of work to a teammate. Returns the teammate's result.",
                     List.of(new Param("to", "Name of the teammate", false, true),
@@ -60,150 +70,51 @@ public final class ToolRuntime {
         return specs;
     }
 
-    /** Never throws for expected failures. */
+    /** Never throws for expected failures. The event log gets the scrubbed raw result; the model gets it delimited. */
     public String execute(Agent agent, Task task, ToolCall call) {
         events.emit("ToolCalled", task.id, agent.name(), call.name() + " " + call.args());
         String result;
-        String status = "ok";
+        Tool tool = tools.stream().filter(t -> t.name().equals(call.name())).findFirst().orElse(null);
         try {
-            result = dispatch(agent, task, call);
-            if (result.startsWith("DENIED") || result.startsWith("ERROR")) {
-                status = result.startsWith("DENIED") ? "denied" : "error";
+            if (tool == null) {
+                result = "ERROR: unknown tool '" + call.name() + "'";
+            } else if (!agent.can(tool.capability())) {
+                result = "DENIED: " + agent.name() + " does not have capability " + tool.capability();
+            } else {
+                ToolContext ctx = new ToolContext(workspace, request -> approve(agent, task, request));
+                result = tool.execute(ctx, agent, call);
             }
-        } catch (Exception e) {
+        } catch (IllegalArgumentException e) {
             result = "ERROR: " + e.getMessage();
-            status = "error";
+        } catch (Exception e) {
+            result = "ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage();
         }
+        result = Redactor.redact(result);
+        String status = result.startsWith("DENIED") ? "denied" : result.startsWith("ERROR") ? "error" : "ok";
         events.emit("ToolCompleted", task.id, agent.name(), status + ": " + abbreviate(result, 200));
-        return result;
+        boolean external = tool != null && tool.returnsExternalContent() && status.equals("ok");
+        return external ? wrapExternal(call.name(), result) : result;
     }
 
-    private String dispatch(Agent agent, Task task, ToolCall call) throws Exception {
-        String capability = switch (call.name()) {
-            case "read_file" -> "filesystem.read";
-            case "write_file" -> "filesystem.write";
-            case "run_command" -> "command.execute";
-            default -> null;
-        };
-        if (capability == null) {
-            return "ERROR: unknown tool '" + call.name() + "'";
-        }
-        if (!agent.can(capability)) {
-            return "DENIED: " + agent.name() + " does not have capability " + capability;
-        }
-        return switch (call.name()) {
-            case "read_file" -> readFile(agent, call);
-            case "write_file" -> writeFile(agent, task, call);
-            default -> runCommand(agent, task, call);
-        };
-    }
-
-    private String readFile(Agent agent, ToolCall call) throws IOException {
-        String rel = str(call, "path");
-        Path file = resolve(rel);
-        String relNorm = workspace.relativize(file).toString().replace('\\', '/');
-        boolean allowed = agent.permissions().readGlobs().stream()
-                .anyMatch(g -> FileSystems.getDefault().getPathMatcher("glob:" + g).matches(Path.of(relNorm)));
-        if (!allowed) {
-            return "DENIED: " + agent.name() + " may not read '" + relNorm + "' (allowed: " + agent.permissions().readGlobs() + ")";
-        }
-        if (!Files.isRegularFile(file)) {
-            return "ERROR: not a file: " + str(call, "path");
-        }
-        return abbreviate(Files.readString(file, StandardCharsets.UTF_8), MAX_OUTPUT);
-    }
-
-    private String writeFile(Agent agent, Task task, ToolCall call) throws IOException {
-        String rel = str(call, "path");
-        String content = str(call, "content");
-        Path file = resolve(rel);
-        String relNorm = workspace.relativize(file).toString().replace('\\', '/');
-        boolean allowed = agent.permissions().writeGlobs().stream()
-                .anyMatch(g -> FileSystems.getDefault().getPathMatcher("glob:" + g).matches(Path.of(relNorm)));
-        if (!allowed) {
-            return "DENIED: " + agent.name() + " may not write '" + relNorm + "' (allowed: "
-                    + agent.permissions().writeGlobs() + ")";
-        }
-        String old = Files.isRegularFile(file) ? Files.readString(file, StandardCharsets.UTF_8) : null;
-        if (!approve(agent, task, new ApprovalRequest(agent.name(), "write", "Write " + relNorm, diff(old, content)))) {
-            return "DENIED: the user rejected the write to " + relNorm;
-        }
-        Files.createDirectories(file.getParent());
-        Files.writeString(file, content, StandardCharsets.UTF_8);
-        return "OK: wrote " + content.length() + " chars to " + relNorm;
-    }
-
-    private String runCommand(Agent agent, Task task, ToolCall call) throws Exception {
-        Object raw = call.args().get("argv");
-        if (!(raw instanceof List<?> list) || list.isEmpty() || !list.stream().allMatch(String.class::isInstance)) {
-            return "ERROR: argv must be a non-empty array of strings (no shell strings, pipes or expansion)";
-        }
-        List<String> argv = list.stream().map(String.class::cast).toList();
-        boolean allowed = agent.permissions().commandAllow().stream()
-                .anyMatch(prefix -> argv.size() >= prefix.size() && argv.subList(0, prefix.size()).equals(prefix));
-        if (!allowed && !approve(agent, task,
-                new ApprovalRequest(agent.name(), "command", "Run outside policy: " + String.join(" ", argv),
-                        "Not in " + agent.name() + "'s command allow list."))) {
-            return "DENIED: command not allowed by policy and the user rejected it: " + String.join(" ", argv);
-        }
-        Process p = new ProcessBuilder(argv).directory(workspace.toFile()).redirectErrorStream(true).start();
-        boolean finished = p.waitFor(agent.permissions().commandTimeout().toMillis(), TimeUnit.MILLISECONDS);
-        if (!finished) {
-            p.destroyForcibly();
-            return "ERROR: command timed out after " + agent.permissions().commandTimeout();
-        }
-        String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        return "exit=" + p.exitValue() + "\n" + abbreviate(out, MAX_OUTPUT);
+    /**
+     * Delimits content that came from outside the runtime so the model can tell data from instructions. The closing
+     * tag is neutralised inside the content so it cannot break out of the block.
+     */
+    static String wrapExternal(String toolName, String content) {
+        String safe = content.replace("</" + OUTPUT_TAG, "</ " + OUTPUT_TAG);
+        return "<" + OUTPUT_TAG + " tool=\"" + toolName + "\">\n" + safe + "\n</" + OUTPUT_TAG + ">";
     }
 
     private boolean approve(Agent agent, Task task, ApprovalRequest request) {
         events.emit("ApprovalRequested", task.id, agent.name(), request.summary());
-        var previous = task.status;
-        task.status = dev.buildcli.domain.TaskStatus.WAITING_APPROVAL;
+        TaskStatus previous = task.status;
+        task.status = TaskStatus.WAITING_APPROVAL;
         events.taskChanged(task);
         boolean granted = ui.approve(request);
         task.status = previous;
         events.taskChanged(task);
         events.emit(granted ? "ApprovalGranted" : "ApprovalDenied", task.id, agent.name(), request.summary());
         return granted;
-    }
-
-    /**
-     * Confines every path to the workspace root, including through symlinks: the deepest existing ancestor is
-     * resolved to its real path and must still be inside the (real) workspace.
-     */
-    private Path resolve(String rel) throws IOException {
-        Path p = workspace.resolve(rel).normalize();
-        if (!p.startsWith(workspace)) {
-            throw new IllegalArgumentException("path escapes the workspace: " + rel);
-        }
-        Path existing = p;
-        while (existing != null && !Files.exists(existing, LinkOption.NOFOLLOW_LINKS)) {
-            existing = existing.getParent();
-        }
-        if (existing != null && !existing.toRealPath().startsWith(workspace.toRealPath())) {
-            throw new IllegalArgumentException("path escapes the workspace through a symlink: " + rel);
-        }
-        return p;
-    }
-
-    private static String str(ToolCall call, String key) {
-        Object v = call.args().get(key);
-        if (v == null) {
-            throw new IllegalArgumentException("missing argument '" + key + "'");
-        }
-        return v.toString();
-    }
-
-    static String diff(String old, String now) {
-        StringBuilder sb = new StringBuilder();
-        if (old == null) {
-            sb.append("(new file)\n");
-        } else {
-            old.lines().forEach(l -> sb.append("- ").append(l).append('\n'));
-        }
-        now.lines().forEach(l -> sb.append("+ ").append(l).append('\n'));
-        return sb.toString().stripTrailing();
     }
 
     static String abbreviate(String s, int max) {

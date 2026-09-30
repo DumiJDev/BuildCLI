@@ -32,6 +32,8 @@ public final class TamboUiApp extends ToolkitApp implements UserInterface {
                           CompletableFuture<EscalationChoice> answer) implements Pending {}
     }
 
+    private static final int LIVE_CHARS = 400;
+
     private final Consumer<UserInterface> job;
     private final List<String> log = new CopyOnWriteArrayList<>();
     private final Map<Integer, String> tasks = java.util.Collections.synchronizedMap(new LinkedHashMap<>());
@@ -41,6 +43,8 @@ public final class TamboUiApp extends ToolkitApp implements UserInterface {
     private volatile String outcome = "running";
     private volatile int inputTokens;
     private volatile int outputTokens;
+    private final StringBuilder live = new StringBuilder();
+    private volatile String liveAgent = "";
 
     /** @param job the run to execute on the worker thread, using this object as its UserInterface */
     public TamboUiApp(Consumer<UserInterface> job) {
@@ -95,7 +99,31 @@ public final class TamboUiApp extends ToolkitApp implements UserInterface {
     }
 
     @Override
+    public void onText(int taskId, String agent, String delta) {
+        synchronized (live) {
+            if (!agent.equals(liveAgent)) {
+                live.setLength(0);
+                liveAgent = agent;
+            }
+            live.append(delta);
+            if (live.length() > LIVE_CHARS) {
+                live.delete(0, live.length() - LIVE_CHARS);
+            }
+        }
+    }
+
+    private void clearLive() {
+        synchronized (live) {
+            live.setLength(0);
+            liveAgent = "";
+        }
+    }
+
+    @Override
     public void onEvent(Event e) {
+        if (e.type().equals("AgentReplied") || e.type().equals("ToolCalled")) {
+            clearLive();
+        }
         log.add(String.format("%-17s #%d %-6s %s", e.type(), e.taskId(), e.agent(), one(e.payload())));
         switch (e.type()) {
             case "TaskCreated" -> {
@@ -149,6 +177,16 @@ public final class TamboUiApp extends ToolkitApp implements UserInterface {
         return EventResult.UNHANDLED;
     }
 
+    private String liveTitle() {
+        return liveAgent.isEmpty() ? "Live" : "Live: " + liveAgent;
+    }
+
+    private String liveText() {
+        synchronized (live) {
+            return live.toString().replace('\n', ' ');
+        }
+    }
+
     @Override
     protected Element render() {
         List<Element> taskLines = new ArrayList<>();
@@ -173,6 +211,7 @@ public final class TamboUiApp extends ToolkitApp implements UserInterface {
                         panel("Tasks", taskLines.toArray(new Element[0])).rounded().percent(40),
                         panel("Events", logLines.toArray(new Element[0])).rounded().fill()
                 ).fill(),
+                panel(liveTitle(), text(liveText()).dim()).rounded().length(4),
                 panel(text(String.format("run: %s   tokens in/out: %d/%d   %s", outcome, inputTokens, outputTokens,
                         finished ? "[q] quit" : "")).dim()).rounded().length(3)
         );
