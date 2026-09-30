@@ -9,6 +9,10 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "monthly"
+  - package-ecosystem: "maven"
+    directory: "/spike" # the new runtime (moves to "/" after the M0 reset)
+    schedule:
+      interval: "monthly"
   - package-ecosystem: "github-actions" # See documentation for possible values
     directory: "/" # Location of package manifests
     schedule:

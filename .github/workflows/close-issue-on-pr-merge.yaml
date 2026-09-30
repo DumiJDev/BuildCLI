@@ -18,6 +18,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_BODY: ${{ github.event.pull_request.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          ACTOR: ${{ github.actor }}
           REPO: ${{ github.repository }}
         run: |
           echo "Checking PR description for linked issues..."
@@ -42,7 +44,7 @@ jobs:
               -d "{\"body\": \"$COMMENT_BODY\"}"
           else
             echo "No linked issue found in PR description. Commenting on PR."
-            COMMENT_BODY="@${{ github.actor }} Please ensure this PR references an issue using 'Closes #ISSUE_NUMBER' or 'Fixes #ISSUE_NUMBER'."
+            COMMENT_BODY="@${ACTOR} Please ensure this PR references an issue using 'Closes #ISSUE_NUMBER' or 'Fixes #ISSUE_NUMBER'."
             curl -X POST \
               -H "Authorization: token $GITHUB_TOKEN" \
               -H "Accept: application/vnd.github+json" \
