@@ -114,6 +114,34 @@ public final class ProviderRegistry {
         yaml.writeValue(file.toFile(), Map.of("schema", 1, "providers", providers));
     }
 
+    /** Removes a provider from {@code <globalDir>/providers.yaml}. Built-ins cannot be removed. @return false if it was not there */
+    public static boolean remove(Path globalDir, String name) throws IOException {
+        Path file = globalDir.resolve(FILE_NAME);
+        if (!Files.isRegularFile(file)) {
+            return false;
+        }
+        List<ProviderSpec> mine = new ArrayList<>(parse(file));
+        if (!mine.removeIf(s -> s.name().equals(name))) {
+            return false;
+        }
+        Files.delete(file);
+        for (ProviderSpec s : mine) {
+            save(globalDir, s);
+        }
+        return true;
+    }
+
+    /** True for providers that come with BuildCLI (a user file may still override their URL). */
+    public static boolean isBuiltIn(String name) {
+        return builtIns().containsKey(name);
+    }
+
+    /** The providers in the user's own file. */
+    public static List<String> userDefined(Path globalDir) {
+        Path file = globalDir.resolve(FILE_NAME);
+        return Files.isRegularFile(file) ? parse(file).stream().map(ProviderSpec::name).toList() : List.of();
+    }
+
     private static List<ProviderSpec> parse(Path file) {
         try {
             if (Files.size(file) > MAX_BYTES) {

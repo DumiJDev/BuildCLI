@@ -88,9 +88,30 @@ public final class LangChain4jGateway implements LlmGateway {
         return new LangChain4jGateway(chat, stream);
     }
 
+    /** Waits before each retry of a rate-limited or unavailable provider: 3 tries in total, about 10 s at most. */
+    static final long[] BACKOFF_MS = {2_000, 6_000};
+
     @Override
     public LlmReply chat(Agent agent, List<LlmMessage> messages, List<ToolSpec> tools) {
-        return toReply(model.chat(request(messages, tools)));
+        for (int attempt = 0; ; attempt++) {
+            try {
+                return toReply(model.chat(request(messages, tools)));
+            } catch (RuntimeException e) {
+                if (attempt >= BACKOFF_MS.length || !ProviderErrors.retryable(e)) {
+                    throw new IllegalStateException(ProviderErrors.message(e), e);
+                }
+                pause(BACKOFF_MS[attempt]);
+            }
+        }
+    }
+
+    private static void pause(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("interrupted while waiting to retry", e);
+        }
     }
 
     @Override
@@ -98,6 +119,24 @@ public final class LangChain4jGateway implements LlmGateway {
         if (streamingModel == null) {
             return LlmGateway.super.chatStreaming(agent, messages, tools, onText);
         }
+        for (int attempt = 0; ; attempt++) {
+            boolean[] spoke = {false};
+            try {
+                return streamOnce(messages, tools, delta -> {
+                    spoke[0] = true;
+                    onText.accept(delta);
+                });
+            } catch (RuntimeException e) {
+                // once text has been shown, a retry would repeat it: only retry failures before the first word
+                if (spoke[0] || attempt >= BACKOFF_MS.length || !ProviderErrors.retryable(e)) {
+                    throw e instanceof IllegalStateException && e.getCause() == null ? e : new IllegalStateException(ProviderErrors.message(e), e);
+                }
+                pause(BACKOFF_MS[attempt]);
+            }
+        }
+    }
+
+    private LlmReply streamOnce(List<LlmMessage> messages, List<ToolSpec> tools, Consumer<String> onText) {
         CompletableFuture<ChatResponse> done = new CompletableFuture<>();
         streamingModel.chat(request(messages, tools), new StreamingChatResponseHandler() {
             @Override
@@ -121,7 +160,8 @@ public final class LangChain4jGateway implements LlmGateway {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("interrupted while waiting for the model", e);
         } catch (ExecutionException e) {
-            throw new IllegalStateException(e.getCause() == null ? e.getMessage() : e.getCause().getMessage(), e.getCause());
+            Throwable cause = e.getCause() == null ? e : e.getCause();
+            throw new IllegalStateException(ProviderErrors.message(cause), cause);
         } catch (TimeoutException e) {
             throw new IllegalStateException("request timed out", e);
         }

@@ -65,19 +65,21 @@ public final class GitCommitTool implements Tool {
                 + message.lines().findFirst().orElse(""), detail))) {
             return "DENIED: the user rejected the commit";
         }
-        ProcessRunner.Result add = run(ctx, List.of("add", "--"), paths);
-        if (add.exitCode() != 0) {
-            return "ERROR: git add failed: " + ToolContext.cap(add.output(), ToolContext.MAX_OUTPUT);
-        }
-        List<String> commit = new ArrayList<>(GIT);
-        commit.addAll(List.of("commit", "-m", message, "--"));
-        commit.addAll(paths);
-        ProcessRunner.Result r = ProcessRunner.run(commit, ctx.workspace(), agent.permissions().commandTimeout(), GitReadTool.ENV);
-        if (r.timedOut()) {
-            return "ERROR: git commit timed out";
-        }
-        return (r.exitCode() == 0 ? "OK: " : "ERROR: git commit exited with " + r.exitCode() + ": ")
-                + ToolContext.cap(r.output(), ToolContext.MAX_OUTPUT);
+        return ctx.exclusive(() -> {
+            ProcessRunner.Result add = run(ctx, List.of("add", "--"), paths);
+            if (add.exitCode() != 0) {
+                return "ERROR: git add failed: " + ToolContext.cap(add.output(), ToolContext.MAX_OUTPUT);
+            }
+            List<String> commit = new ArrayList<>(GIT);
+            commit.addAll(List.of("commit", "-m", message, "--"));
+            commit.addAll(paths);
+            ProcessRunner.Result r = ProcessRunner.run(commit, ctx.workspace(), agent.permissions().commandTimeout(), GitReadTool.ENV);
+            if (r.timedOut()) {
+                return "ERROR: git commit timed out";
+            }
+            return (r.exitCode() == 0 ? "OK: " : "ERROR: git commit exited with " + r.exitCode() + ": ")
+                    + ToolContext.cap(r.output(), ToolContext.MAX_OUTPUT);
+        });
     }
 
     private static ProcessRunner.Result run(ToolContext ctx, List<String> args, List<String> paths) throws Exception {

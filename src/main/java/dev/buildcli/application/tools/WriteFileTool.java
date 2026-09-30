@@ -50,18 +50,30 @@ public final class WriteFileTool implements Tool {
             return "DENIED: " + agent.name() + " may not write '" + rel + "' (allowed: " + agent.permissions().writeGlobs() + ")";
         }
         boolean exists = Files.isRegularFile(file);
+        String before = exists && Files.size(file) <= MAX_DIFFABLE_BYTES ? Files.readString(file, StandardCharsets.UTF_8) : null;
+        long beforeSize = exists ? Files.size(file) : -1;
         String diff;
         if (exists && Files.size(file) > MAX_DIFFABLE_BYTES) {
             diff = "(the existing file is " + Files.size(file) + " bytes, too large to diff; it will be replaced by "
                     + content.length() + " characters)";
         } else {
-            diff = Diffs.unified(rel, exists ? Files.readString(file, StandardCharsets.UTF_8) : null, content);
+            diff = Diffs.unified(rel, before, content);
         }
         if (!ctx.approve(new ApprovalRequest(agent.name(), "write", "Write " + rel, diff))) {
             return "DENIED: the user rejected the write to " + rel;
         }
-        Files.createDirectories(file.getParent());
-        Files.writeString(file, content, StandardCharsets.UTF_8);
-        return "OK: wrote " + content.length() + " chars to " + rel;
+        // the user approved this exact diff; if someone changed the file meanwhile, writing would silently undo their work
+        return ctx.exclusive(() -> {
+            boolean nowExists = Files.isRegularFile(file);
+            boolean unchanged = nowExists == exists && (!exists || (before != null
+                    ? before.equals(Files.readString(file, StandardCharsets.UTF_8)) : Files.size(file) == beforeSize));
+            if (!unchanged) {
+                return "ERROR: " + rel + " was changed by someone else while you waited for approval. Read it again and redo "
+                        + "your change on top of the new content.";
+            }
+            Files.createDirectories(file.getParent());
+            Files.writeString(file, content, StandardCharsets.UTF_8);
+            return "OK: wrote " + content.length() + " chars to " + rel;
+        });
     }
 }
