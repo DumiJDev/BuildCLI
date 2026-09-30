@@ -77,10 +77,12 @@ Works and is usable: layout, dialog overlay, key handling, tick-driven redraw fr
 7. CI on Windows passes, but the tests run real `cat`/`ls` processes and GitHub's Windows runners ship Git for
    Windows (which provides them). A plain Windows machine will not have them: M2 needs a cross-platform command
    fixture. CI only proves build + tests; the TamboUI TUI itself still has not been driven on macOS/Windows.
-8. The repo's pre-existing workflows fail on this PR for reasons unrelated to the spike: the legacy `core` test
-   `EnvironmentConfigManagerTest` does not compile (`CI Workflow` also fails on `main`/`develop`), Checkstyle
-   `sun_checks` fails repo-wide (thousands of errors), and `labeler.yml` is malformed for the labeler version in use.
-   The spike is not in the root Maven reactor, so it does not affect the legacy build.
+8. The repo's inherited workflows were built for the legacy CLI and were failing on this PR (legacy `core` test did not
+   compile, Checkstyle `sun_checks` reported ~4,750 findings, `labeler.yml` was invalid for labeler v5). Since the
+   project starts from scratch they were reworked: one `ci.yaml` (build + test + Checkstyle + smoke test on 3 OSes),
+   a lean `spike/checkstyle.xml` enforced by `mvn verify`, CodeQL without the legacy build, `workflow-lint.yaml`
+   (actionlint + zizmor), a valid labeler config, and a fix for the undefined `$PR_NUMBER` in
+   `close-issue-on-pr-merge.yaml`. `release.yaml` still packages the legacy CLI and is left for M3 (packaging).
 9. The OpenAI-compatible gateway (`--provider openai`) compiles and is wired into `bench`/`demo`, but it is **not yet
    validated against a real endpoint**. The only attempt, through Ollama's own `/v1` on the spike box, timed out on
    every request: `/v1` cannot set `num_thread`, so Ollama fell back to 16 threads (the ~50x slowdown from finding 1).
