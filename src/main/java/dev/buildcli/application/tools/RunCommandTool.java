@@ -44,6 +44,10 @@ public final class RunCommandTool implements Tool {
             return "ERROR: argv must be a non-empty array of strings (no shell strings, pipes or expansion)";
         }
         List<String> argv = list.stream().map(String.class::cast).toList();
+        String refusal = CommandGuard.refusal(argv, CommandGuard.isWindows());
+        if (refusal != null) {
+            return "ERROR: " + refusal;
+        }
         boolean allowed = agent.permissions().commandAllow().stream()
                 .anyMatch(prefix -> argv.size() >= prefix.size() && argv.subList(0, prefix.size()).equals(prefix));
         if (!allowed && !ctx.approve(new ApprovalRequest(agent.name(), "command", "Run outside policy: " + String.join(" ", argv),

@@ -13,6 +13,8 @@ import java.util.List;
 
 /** Writes are checked against the agent's write globs first, then shown to the user as a unified diff. */
 public final class WriteFileTool implements Tool {
+    private static final long MAX_DIFFABLE_BYTES = 2_000_000;
+
     @Override
     public String name() {
         return "write_file";
@@ -47,8 +49,15 @@ public final class WriteFileTool implements Tool {
         if (!ToolContext.matches(agent.permissions().writeGlobs(), rel)) {
             return "DENIED: " + agent.name() + " may not write '" + rel + "' (allowed: " + agent.permissions().writeGlobs() + ")";
         }
-        String old = Files.isRegularFile(file) ? Files.readString(file, StandardCharsets.UTF_8) : null;
-        if (!ctx.approve(new ApprovalRequest(agent.name(), "write", "Write " + rel, Diffs.unified(rel, old, content)))) {
+        boolean exists = Files.isRegularFile(file);
+        String diff;
+        if (exists && Files.size(file) > MAX_DIFFABLE_BYTES) {
+            diff = "(the existing file is " + Files.size(file) + " bytes, too large to diff; it will be replaced by "
+                    + content.length() + " characters)";
+        } else {
+            diff = Diffs.unified(rel, exists ? Files.readString(file, StandardCharsets.UTF_8) : null, content);
+        }
+        if (!ctx.approve(new ApprovalRequest(agent.name(), "write", "Write " + rel, diff))) {
             return "DENIED: the user rejected the write to " + rel;
         }
         Files.createDirectories(file.getParent());

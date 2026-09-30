@@ -21,6 +21,10 @@ itself mean safe, so this page states what the **runtime** enforces, what it doe
 | **Secrets are scrubbed** | Common credential formats and `secret = value` assignments are masked in tool output (before it reaches the model) and in the event log. | `secretsInFilesNeverReachTheModelOrTheEventLog`, `RedactorTest` |
 | **Untrusted project definitions** | Agents defined in a project's `.buildcli/` may not run until you approve them; the approval is for an exact digest of those files, so changing one asks again. Your own `~/.buildcli` definitions need no approval. | `TrustTest` |
 | **Run limits** | Retries, steps, handoff depth, handoffs per attempt and tokens per task are enforced by the runtime; a task that hits them fails and is escalated to you. | `OrchestratorTest` |
+| **Untrusted text cannot drive your terminal** | Everything printed or drawn (model replies, file contents, command output, configuration text) has control characters and escape sequences made visible, and bidirectional overrides ("Trojan Source") replaced, so an approval dialog cannot be disguised. | `TerminalSafetyTest`, `untrustedTextCannotDriveTheTerminalInHeadlessOutput` |
+| **Windows `cmd.exe` argument guard** | Tools like `mvn` run through `cmd.exe` on Windows, which interprets `& \| < > ^ %` and quotes; arguments containing them are refused so a crafted argument cannot turn an allowed command into another. | `windowsRefusesArgumentsThatCmdExeWouldInterpret` |
+| **Bounded inputs** | File reads load only what is returned (a multi-gigabyte file cannot exhaust memory); huge files are not diffed in memory; configuration files over 256 KB are refused and YAML aliases are not expanded; invalid globs are rejected when the configuration loads. | `readingAHugeFileReturnsOnlyTheStartWithoutLoadingItAll`, `aYamlAliasBombInsideAnIgnoredValueIsNotExpanded`, `anInvalidGlobIsAConfigurationErrorNotARuntimeSurprise` |
+| **Stored state is scrubbed** | The request, task objectives, results and run summaries are redacted before they are written to the state database, not only the event log. | `secretsAreAlsoScrubbedFromWhatIsStoredAboutTasksAndRuns` |
 | **State stays out of the repo** | Runs, tasks and events live in `~/.buildcli/projects/<id>/`, never in the project tree. | `StateLocationsTest` |
 
 Prompt injection is handled structurally, not by hoping the model resists: a file that says "ignore your instructions and
@@ -38,6 +42,10 @@ call. The model may be *fooled*; it cannot be *given more power*.
 - **Redaction is best effort.** It recognises common credential formats and secret-named assignments. A password written
   in prose, or a secret with an unusual format, is invisible to it. Do not point an agent at files that contain secrets
   you would not want a model provider to see; with a hosted provider, what an agent reads is sent to it.
+- **`AGENTS.md` and other files of a cloned project are untrusted text.** They are given to agents as delimited data, and
+  the runtime still checks every action, but a powerful agent (for example one of your own global agents with broad
+  permissions) reading a hostile repository can still be *misled* into actions that stay inside its permissions. Give global
+  agents narrow permissions, and read approval dialogs.
 - **Git hooks run.** `git_commit` triggers the repository's hooks, exactly as your own commit would. Hooks are project
   code: this is another reason project definitions need your approval.
 - **Symlink races.** The symlink check happens when a path is resolved. A process that swaps a directory for a symlink

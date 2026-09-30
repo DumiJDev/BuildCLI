@@ -417,6 +417,11 @@ Each milestone has **acceptance criteria**; a milestone is closed only when they
 
 ### M4: Hardening → 1.0.0
 
+> **Status: prepared; needs humans.** Done: a security self-review with fixes (terminal-escape and bidi sanitization, Windows
+> `cmd.exe` guard, bounded reads, config limits, redaction of stored state), concepts/stability/releasing/troubleshooting docs,
+> validated examples, changelog. **Not done and not doable by the author:** preview feedback (P1s), review of the security
+> model by two maintainers, verification on macOS/Windows terminals, benchmarking a capable model.
+
 - Docs (concepts, agent/team/policy reference, security model with its limits), sample teams, schema stability commitment, bug bash from preview feedback.
 
 **Accept when:** the preview feedback P1s are closed, and the security model doc has been reviewed by at least two maintainers.

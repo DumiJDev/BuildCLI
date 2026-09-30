@@ -1,0 +1,7 @@
+schema: 1
+name: docs
+description: A writer and an editor. Cannot run commands.
+lead: writer
+agents: [writer, editor]
+runtime:
+  default: { provider: ollama, model: qwen2.5:7b }

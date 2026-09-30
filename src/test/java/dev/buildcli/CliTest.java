@@ -326,4 +326,20 @@ class CliTest {
         assertTrue(cli().out.contains("Usage: buildcli"));
         assertEquals(2, cli("nonsense").code);
     }
+
+    @Test
+    void untrustedTextCannotDriveTheTerminalInHeadlessOutput() throws Exception {
+        cli("init");
+        Files.writeString(project.resolve("notes.txt"), "\u001b[2Jcleared \u001b]0;pwned\u0007 \u202Edisguised");
+        Result r = cli(() -> new ScriptedGateway()
+                .call("ana", "handoff", Map.of("to", "carla", "objective", "read \u001b[31mnotes"))
+                .call("carla", "read_file", Map.of("path", "notes.txt"))
+                .say("carla", "read it \u001b[1mbold")
+                .say("ana", "final \u001b]0;title\u0007 report"), "", Map.of(), "run", "--headless", "--approve", "all", "look at the notes");
+        assertEquals(0, r.code, r.out + r.err);
+        assertFalse(r.out.contains("\u001b"), "an ESC reached the terminal");
+        assertFalse(r.out.contains("\u0007"), "a BEL reached the terminal");
+        assertFalse(r.out.contains("\u202E"), "a bidi override reached the terminal");
+        assertTrue(r.out.contains("final \u241B]0;title\u2407 report"), r.out);
+    }
 }
