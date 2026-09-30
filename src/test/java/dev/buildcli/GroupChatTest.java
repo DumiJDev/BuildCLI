@@ -55,6 +55,14 @@ class GroupChatTest {
         assertFalse(s.busy());
     }
 
+    static void waitFor(java.util.function.BooleanSupplier condition) throws InterruptedException {
+        long end = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (!condition.getAsBoolean() && System.nanoTime() < end) {
+            Thread.sleep(10);
+        }
+        assertTrue(condition.getAsBoolean(), "timed out");
+    }
+
     ChatSession session(ChatSession.Executor executor, ChatStore store, int hops) {
         return new ChatSession(TEAM, CONTACTS, executor, store, () -> hops);
     }
@@ -97,9 +105,9 @@ class GroupChatTest {
         }, ChatStore.NONE, 6);
         s.setAdmin(ChatSession.TEAM, "bruno", true);
         s.submit("long job");
-        Thread.sleep(100);
+        waitFor(() -> calls.size() == 1);
         s.submit("quick question");
-        Thread.sleep(200);
+        waitFor(() -> calls.size() == 2);
         assertEquals(List.of("ana", "bruno"), calls, "ana was busy, so the other admin answered");
         release.countDown();
         awaitIdle(s);
