@@ -89,19 +89,27 @@ class PeopleRuntimeTest {
         AtomicInteger inside = new AtomicInteger();
         AtomicInteger maxInside = new AtomicInteger();
         List<String> order = new CopyOnWriteArrayList<>();
+        CountDownLatch firstStarted = new CountDownLatch(1);
+        CountDownLatch firstMayFinish = new CountDownLatch(1);
         var session = new ChatSession(TEAM, (team, request, ui, cancelled, dispatcher) -> {
             maxInside.accumulateAndGet(inside.incrementAndGet(), Math::max);
             order.add(request.text());
-            Thread.sleep(80);
+            if (request.text().equals("in the team chat")) {
+                firstStarted.countDown();
+                firstMayFinish.await(10, TimeUnit.SECONDS);
+            } else {
+                Thread.sleep(20);
+            }
             inside.decrementAndGet();
             return done("ana", "ok " + request.text());
         });
         session.submit("in the team chat");
         session.submit("in ana's direct chat", List.of(), "ana");
         session.submit("team again");
-        Thread.sleep(40);
+        assertTrue(firstStarted.await(10, TimeUnit.SECONDS));
         assertTrue(session.queued() >= 1, "ana has not read the later messages yet");
         assertEquals(ChatSession.TEAM, session.agentThread("ana"), "busy in the team chat");
+        firstMayFinish.countDown();
         awaitIdle(session);
         assertEquals(1, maxInside.get(), "one conversation at a time");
         assertEquals(List.of("in the team chat", "in ana's direct chat", "team again"), order, "in the order received");

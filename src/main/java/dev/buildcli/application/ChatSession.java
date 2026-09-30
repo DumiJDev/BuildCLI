@@ -117,6 +117,8 @@ public final class ChatSession implements UserInterface {
     private final class Actor {
         final String name;
         final LinkedBlockingDeque<Job> inbox = new LinkedBlockingDeque<>();
+        /** Jobs received and not finished yet; unlike the inbox it has no gap while a job is being picked up. */
+        final AtomicInteger pending = new AtomicInteger();
         volatile Job current;
         volatile Thread thread;
 
@@ -146,12 +148,18 @@ public final class ChatSession implements UserInterface {
                     RUN.remove();
                     current = null;
                     state.put(name, "idle");
+                    pending.decrementAndGet();
                 }
             }
         }
 
+        void send(Job job) {
+            pending.incrementAndGet();
+            inbox.add(job);
+        }
+
         boolean busy() {
-            return current != null || !inbox.isEmpty();
+            return pending.get() > 0;
         }
     }
 
@@ -301,7 +309,7 @@ public final class ChatSession implements UserInterface {
 
     private void enqueue(Run run, String text, List<Attachment> attachments, String from) {
         Actor actor = actors.get(run.me);
-        actor.inbox.add(new Job(run, () -> process(run, text, attachments, from)));
+        actor.send(new Job(run, () -> process(run, text, attachments, from)));
         actor.start();
     }
 
@@ -527,6 +535,7 @@ public final class ChatSession implements UserInterface {
                 Message m = j.run().messageId > 0 ? find(j.run().messageId) : null;
                 if (m != null && m.state() == State.QUEUED) {
                     replace(m.id(), State.FAILED);
+                    a.pending.decrementAndGet();
                     dropped++;
                 } else {
                     a.inbox.add(j);
@@ -895,7 +904,7 @@ public final class ChatSession implements UserInterface {
             }
             state.put(from, "waiting for " + to);
             try {
-                target.inbox.add(new Job(run, () -> {
+                target.send(new Job(run, () -> {
                     state.put(to, "thinking");
                     try {
                         answer.complete(work.get());

@@ -69,7 +69,7 @@ class ChatSessionTest {
     @Test
     void messagesSentWhileTheTeamIsBusyWaitInOrderAndAreAllAnswered() throws Exception {
         CountDownLatch release = new CountDownLatch(1);
-        List<String> order = new ArrayList<>();
+        List<String> order = new java.util.concurrent.CopyOnWriteArrayList<>();
         var session = new ChatSession(TEAM, (team, request, ui, cancelled, dispatcher) -> {
             order.add(request.text());
             if (request.text().equals("first")) {
@@ -81,7 +81,10 @@ class ChatSessionTest {
             return t;
         });
         long first = session.submit("first");
-        Thread.sleep(150);
+        long end = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (order.isEmpty() && System.nanoTime() < end) {
+            Thread.sleep(10);
+        }
         long second = session.submit("second");
         long third = session.submit("third");
 
