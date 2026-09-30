@@ -46,17 +46,32 @@ public final class SqliteRunStore implements RunStore, AutoCloseable {
     private final Connection connection;
 
     public SqliteRunStore(String jdbcUrl) {
+        Connection opened;
         try {
-            connection = DriverManager.getConnection(jdbcUrl);
-            try (Statement st = connection.createStatement()) {
+            opened = DriverManager.getConnection(jdbcUrl);
+        } catch (SQLException e) {
+            throw new IllegalStateException("cannot open the state database " + jdbcUrl + ": " + e.getMessage(), e);
+        }
+        try {
+            try (Statement st = opened.createStatement()) {
                 st.execute("PRAGMA journal_mode=WAL");
                 st.execute("PRAGMA synchronous=NORMAL");
                 st.execute("PRAGMA busy_timeout=5000");
             }
-            migrate();
-        } catch (SQLException e) {
+            migrate(opened);
+        } catch (SQLException | RuntimeException e) {
+            // A refused or broken database must not leave its file locked: on Windows an open handle blocks deleting it.
+            try {
+                opened.close();
+            } catch (SQLException ignored) {
+                // nothing more can be done; the original failure is what matters
+            }
+            if (e instanceof IllegalStateException ise) {
+                throw ise;
+            }
             throw new IllegalStateException("cannot open the state database " + jdbcUrl + ": " + e.getMessage(), e);
         }
+        this.connection = opened;
     }
 
     /** Opens (creating it if needed) a state database file; parent directories are created. */
@@ -69,7 +84,7 @@ public final class SqliteRunStore implements RunStore, AutoCloseable {
         return new SqliteRunStore("jdbc:sqlite:" + file.toAbsolutePath());
     }
 
-    private void migrate() throws SQLException {
+    private static void migrate(Connection connection) throws SQLException {
         int current;
         try (Statement st = connection.createStatement(); ResultSet rs = st.executeQuery("PRAGMA user_version")) {
             current = rs.next() ? rs.getInt(1) : 0;
