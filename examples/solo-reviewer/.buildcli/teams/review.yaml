@@ -1,0 +1,8 @@
+schema: 1
+name: review
+description: "One reviewer, run directly: buildcli run --agent reviewer \"review my changes\""
+lead: reviewer
+agents: [reviewer]
+runtime:
+  # any OpenAI-compatible endpoint (set OPENAI_BASE_URL and OPENAI_API_KEY), or switch to ollama
+  default: { provider: openai, model: <your-model-id> }

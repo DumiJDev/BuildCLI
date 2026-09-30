@@ -66,7 +66,8 @@ buildcli usage         # tokens per agent
 
 `init` uses `ollama / qwen2.5:7b` by default (`buildcli init --model provider:model` to change it). Pull the model first
 (`ollama pull qwen2.5:7b`) or point the team at any OpenAI-compatible endpoint. Every command is documented in the
-[CLI reference](docs/reference/cli.md); agent and team files in [agents and teams](docs/reference/agents-and-teams.md).
+[CLI reference](docs/reference/cli.md); agent and team files in [agents and teams](docs/reference/agents-and-teams.md);
+ready-to-copy teams in [`examples/`](examples). New to the ideas? Read [concepts](docs/concepts.md); stuck? [troubleshooting](docs/troubleshooting.md).
 
 ## Known limitations
 

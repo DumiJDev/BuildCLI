@@ -443,4 +443,19 @@ class OrchestratorTest {
         assertTrue(completed.get(0).payload().startsWith("ok: public"));
         assertTrue(completed.get(1).payload().startsWith("denied: DENIED: bruno may not read 'secret.txt'"), completed.get(1).payload());
     }
+
+    @Test
+    void aProviderErrorWithoutAMessageStillSaysSomethingUseful() {
+        var llm = new ScriptedGateway();
+        llm.then("ana", new RuntimeException(null, new java.net.ConnectException("Connection refused")));
+        for (int i = 0; i < 3; i++) {
+            llm.then("ana", new IllegalStateException());
+        }
+        var ui = ui(true, EscalationChoice.ABORT);
+        assertThrows(RunAborted.class, () -> orch(llm, ui, Limits.defaults()).run("go"));
+        var failures = ui.events.stream().filter(e -> e.type().equals("TaskFailed")).map(e -> e.payload()).toList();
+        assertEquals("LLM error: Connection refused", failures.get(0));
+        assertTrue(failures.get(1).contains("IllegalStateException") && failures.get(1).contains("buildcli doctor"), failures.get(1));
+        assertFalse(failures.stream().anyMatch(f -> f.contains("null")), failures.toString());
+    }
 }

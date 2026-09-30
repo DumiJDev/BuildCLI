@@ -41,6 +41,8 @@ import java.util.stream.Stream;
 public final class FileConfigRepository implements ConfigRepository {
     public static final int SCHEMA = 1;
     public static final int MAX_CONTEXT_CHARS = 8000;
+    /** Definition files are small; a huge one in a cloned project is refused instead of being read into memory. */
+    public static final long MAX_FILE_BYTES = 256 * 1024;
 
     private static final ObjectMapper YAML = new ObjectMapper(new YAMLFactory());
     private static final Pattern NAME = Pattern.compile("[a-z][a-z0-9_-]*");
@@ -442,6 +444,10 @@ public final class FileConfigRepository implements ConfigRepository {
 
     private String read(Path file) {
         try {
+            if (Files.size(file) > MAX_FILE_BYTES) {
+                problem(file, "file is larger than " + MAX_FILE_BYTES / 1024 + " KB; configuration files are small, refusing to read it");
+                return null;
+            }
             String text = Files.readString(file, StandardCharsets.UTF_8);
             if (isProjectDefinition(file)) {
                 digest.update((projectRoot.relativize(file).toString().replace('\\', '/') + "\0" + text + "\0")
@@ -520,7 +526,12 @@ public final class FileConfigRepository implements ConfigRepository {
         }
         for (JsonNode v : node) {
             if (v.isTextual()) {
-                out.add(v.asText());
+                try {
+                    java.nio.file.FileSystems.getDefault().getPathMatcher("glob:" + v.asText());
+                    out.add(v.asText());
+                } catch (java.util.regex.PatternSyntaxException | UnsupportedOperationException e) {
+                    problem(file, "'" + where + "' has an invalid glob '" + v.asText() + "': " + firstLine(e.getMessage()));
+                }
             } else {
                 problem(file, "'" + where + "' must contain only strings");
             }

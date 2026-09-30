@@ -116,7 +116,7 @@ public final class TamboUiApp extends ToolkitApp implements UserInterface {
 
     /** Lets the caller show the result line in the status bar (for example the final report). */
     public void setOutcome(String text) {
-        outcome = text;
+        outcome = TerminalText.sanitize(text);
     }
 
     // ---- UserInterface (called from the orchestrator thread) ----
@@ -150,7 +150,7 @@ public final class TamboUiApp extends ToolkitApp implements UserInterface {
     @Override
     public void onTaskChanged(Task t) {
         // a snapshot: the orchestrator mutates the live object
-        Task copy = new Task(t.id, t.parentId, t.from, t.to, t.objective, t.brief);
+        Task copy = new Task(t.id, t.parentId, t.from, t.to, TerminalText.sanitize(t.objective), t.brief);
         copy.status = t.status;
         copy.tokens = t.tokens;
         copy.attempts = t.attempts;
@@ -164,7 +164,7 @@ public final class TamboUiApp extends ToolkitApp implements UserInterface {
                 live.setLength(0);
                 liveAgent = agent;
             }
-            live.append(delta);
+            live.append(TerminalText.sanitize(delta));
             if (live.length() > LIVE_CHARS) {
                 live.delete(0, live.length() - LIVE_CHARS);
             }
@@ -183,7 +183,7 @@ public final class TamboUiApp extends ToolkitApp implements UserInterface {
         if (e.type().equals("AgentReplied") || e.type().equals("ToolCalled")) {
             clearLive();
         }
-        log.add(String.format("%-17s #%d %-6s %s", e.type(), e.taskId(), e.agent(), e.payload().replace('\n', ' ')));
+        log.add(TerminalText.sanitize(String.format("%-17s #%d %-6s %s", e.type(), e.taskId(), e.agent(), e.payload().replace('\n', ' '))));
         if (log.size() > LOG_LINES) {
             log.remove(0);
         }
@@ -259,7 +259,7 @@ public final class TamboUiApp extends ToolkitApp implements UserInterface {
             view = stack(body, approvalDialog(a.request())).alignment(ContentAlignment.CENTER);
         } else if (p instanceof Pending.Escalation esc) {
             view = stack(body, dialog("Task #" + esc.taskId() + " needs you (" + esc.agent() + ")",
-                    text(esc.objective()), text("Failed after the automatic retries: " + esc.reason()).red(),
+                    text(TerminalText.sanitize(esc.objective())), text("Failed after the automatic retries: " + TerminalText.sanitize(esc.reason())).red(),
                     text("[r] retry   [s] skip this task   [a] abort the run").dim()).width(76).rounded())
                     .alignment(ContentAlignment.CENTER);
         }
@@ -270,8 +270,8 @@ public final class TamboUiApp extends ToolkitApp implements UserInterface {
         List<Element> lines = new ArrayList<>();
         for (Agent a : team.agents()) {
             String state = agentState.getOrDefault(a.name(), "idle");
-            var line = text((state.equals("idle") ? "○ " : "● ") + a.name() + (a.name().equals(team.lead()) ? " (lead)" : "")
-                    + "  " + a.role() + "  " + models.getOrDefault(a.name(), "") + "  " + state);
+            var line = text(TerminalText.sanitize((state.equals("idle") ? "○ " : "● ") + a.name() + (a.name().equals(team.lead()) ? " (lead)" : "")
+                    + "  " + a.role() + "  " + models.getOrDefault(a.name(), "") + "  " + state));
             lines.add(switch (state) {
                 case "working" -> line.cyan();
                 case "waiting for you", "needs you" -> line.yellow();
@@ -314,8 +314,8 @@ public final class TamboUiApp extends ToolkitApp implements UserInterface {
 
     private Element approvalDialog(ApprovalRequest r) {
         List<Element> body = new ArrayList<>();
-        body.add(text(r.summary()).bold());
-        List<String> lines = r.detail().lines().toList();
+        body.add(text(TerminalText.sanitize(r.summary())).bold());
+        List<String> lines = TerminalText.sanitize(r.detail()).lines().toList();
         lines.stream().limit(DIFF_LINES).forEach(l -> body.add(diffLine(l)));
         if (lines.size() > DIFF_LINES) {
             body.add(text("... " + (lines.size() - DIFF_LINES) + " more lines").dim());
