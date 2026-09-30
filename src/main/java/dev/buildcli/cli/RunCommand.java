@@ -113,15 +113,22 @@ final class RunCommand implements Callable<Integer> {
         if (tui) {
             // one lock for the whole chat: agents working in parallel share it
             var workspaceLock = new dev.buildcli.application.tools.WorkspaceLock();
-            ChatSession session = new ChatSession(team, config.agents(),
-                    (chatTeam, req, ui, cancelled, dispatcher) -> runOnce(chatTeam, config, gateways.get(), req, ui, cancelled, dispatcher,
-                            workspaceLock),
-                    new dev.buildcli.infrastructure.FileChatStore(ctx.projectStateDir()),
-                    () -> services.settings().number(dev.buildcli.application.Settings.AGENT_HOPS, 6));
-            if (!text.isEmpty()) {
-                session.submit(text, List.of(), agentName);
+            // the conversation history lives in the project's state database, next to runs and events
+            try (SqliteRunStore history = SqliteRunStore.open(ctx.stateDb())) {
+                ChatSession session = new ChatSession(team, config.agents(),
+                        (chatTeam, req, ui, cancelled, dispatcher) -> runOnce(chatTeam, config, gateways.get(), req, ui, cancelled, dispatcher,
+                                workspaceLock),
+                        new dev.buildcli.infrastructure.FileChatStore(ctx.projectStateDir()),
+                        () -> services.settings().number(dev.buildcli.application.Settings.AGENT_HOPS, 6), history);
+                try {
+                    if (!text.isEmpty()) {
+                        session.submit(text, List.of(), agentName);
+                    }
+                    ctx.tui.launch(session, models, services);
+                } finally {
+                    session.close();
+                }
             }
-            ctx.tui.launch(session, models, services);
             return 0;
         }
         RoutingGateway gateway = gateways.get();

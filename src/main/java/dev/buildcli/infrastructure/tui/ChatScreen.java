@@ -76,7 +76,7 @@ final class ChatScreen implements Element {
             new Command("rename", "<name>", "Rename this group", ""),
             new Command("info", "", "Group or contact info", ""),
             new Command("team", "", "Show or hide the chat list", "Ctrl+B"),
-            new Command("clear", "", "Clear the conversation from the screen", "Ctrl+L"),
+            new Command("clear", "", "Delete this chat's messages (asks you to confirm)", ""),
             new Command("help", "", "Keys, commands and tips", ""),
             new Command("quit", "", "Leave BuildCLI", "Ctrl+C"));
 
@@ -120,6 +120,8 @@ final class ChatScreen implements Element {
     private final SettingsServices services;
     private final SettingsView settingsView;
     private boolean settingsOpen;
+    /** The chat a first /clear was typed in; a second /clear there deletes it. */
+    private String clearArmedFor;
     private ChatInfoView infoView;
     private boolean infoOpen;
 
@@ -1284,7 +1286,7 @@ final class ChatScreen implements Element {
                     return EventResult.HANDLED;
                 }
                 case 'l' -> {
-                    session.clearMessages();
+                    scrollOff = 0; // redraw at the latest message; deleting a chat is /clear, which asks first
                     return EventResult.HANDLED;
                 }
                 default -> { }
@@ -1463,6 +1465,9 @@ final class ChatScreen implements Element {
 
     void submit() {
         String text = input.text().strip();
+        if (!text.equals("/clear")) {
+            clearArmedFor = null;
+        }
         if (text.isEmpty() && attachments.isEmpty()) {
             return;
         }
@@ -1576,7 +1581,17 @@ final class ChatScreen implements Element {
                         session.renameGroup(selected, arg);
                     }
                 }
-                case "clear" -> session.clearMessages();
+                case "clear" -> {
+                    if (selected.equals(clearArmedFor)) {
+                        clearArmedFor = null;
+                        session.clearChat(selected);
+                    } else {
+                        clearArmedFor = selected;
+                        long n = session.messages().stream().filter(m -> m.thread().equals(selected)).count();
+                        session.system("This deletes the " + n + " message(s) of " + title(selected) + ", also from the saved history. "
+                                + "Type /clear again to confirm.");
+                    }
+                }
                 case "help" -> open(new View("Help", help(), false, false));
                 case "quit" -> quit.run();
                 default -> { }
