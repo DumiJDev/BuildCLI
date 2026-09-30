@@ -8,6 +8,7 @@ import java.util.List;
  * <p>On Windows, tools such as {@code mvn} are {@code .cmd} batch files, and Java starts those through {@code cmd.exe},
  * which interprets {@code & | < > ^ %} and quotes inside the arguments. An allow-listed {@code ["mvn", "test"]} could then
  * be turned into a different command by a crafted argument. Arguments containing those characters are refused there.
+ * This is defence in depth: some JDK releases also reject such arguments, and nothing here relies on that.
  */
 public final class CommandGuard {
     private static final String CMD_SPECIAL = "&|<>^%\"\r\n";
