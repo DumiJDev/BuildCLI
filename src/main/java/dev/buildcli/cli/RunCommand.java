@@ -88,9 +88,7 @@ final class RunCommand implements Callable<Integer> {
                 return 2;
             }
         }
-        ProviderSettings base = ProviderSettings.fromEnvironment(ctx.env);
-        ProviderSettings settings = new ProviderSettings(base.ollamaUrl(), base.openAiUrl(), base.openAiApiKey(),
-                threads == null ? base.ollamaThreads() : threads, temperature == null ? base.temperature() : temperature, !noStream);
+        ProviderSettings settings = ctx.providerSettings().with(threads, temperature, !noStream);
         RoutingGateway gateway = new RoutingGateway(team.routing(), fallback, ref -> ctx.gateways.create(ref, settings));
         Map<String, String> models = new LinkedHashMap<>();
         for (Agent a : team.agents()) {

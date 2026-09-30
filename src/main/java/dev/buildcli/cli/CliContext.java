@@ -66,6 +66,11 @@ public final class CliContext {
                 (team, models, request, job) -> new TamboUiApp(team, models, request, job).run());
     }
 
+    /** Providers (built in plus the user's providers.yaml) and the environment their keys are read from. */
+    public ProviderSettings providerSettings() {
+        return ProviderSettings.fromEnvironment(env, globalDir());
+    }
+
     public Path globalDir() {
         return StateLocations.globalDir(env, home);
     }

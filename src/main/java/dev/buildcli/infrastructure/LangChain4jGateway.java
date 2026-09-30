@@ -78,12 +78,12 @@ public final class LangChain4jGateway implements LlmGateway {
 
     /** Any OpenAI-compatible endpoint (OpenAI, vLLM, LM Studio, Ollama's /v1, ...). The key comes from the caller. */
     public static LangChain4jGateway openAiCompatible(String baseUrl, String apiKey, String modelName, double temperature,
-            boolean streaming) {
+            boolean streaming, int maxOutputTokens) {
         ChatModel chat = OpenAiChatModel.builder().baseUrl(baseUrl).apiKey(apiKey).modelName(modelName)
-                .temperature(temperature).maxCompletionTokens(512).timeout(TIMEOUT).build();
+                .temperature(temperature).maxCompletionTokens(maxOutputTokens).timeout(TIMEOUT).build();
         StreamingChatModel stream = streaming
                 ? OpenAiStreamingChatModel.builder().baseUrl(baseUrl).apiKey(apiKey).modelName(modelName)
-                        .temperature(temperature).maxCompletionTokens(512).timeout(TIMEOUT).build()
+                        .temperature(temperature).maxCompletionTokens(maxOutputTokens).timeout(TIMEOUT).build()
                 : null;
         return new LangChain4jGateway(chat, stream);
     }
