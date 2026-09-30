@@ -23,36 +23,57 @@ import dev.langchain4j.model.chat.request.json.JsonStringSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.ollama.OllamaChatModel;
 import dev.langchain4j.model.ollama.OllamaChatRequestParameters;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/** The only class that knows LangChain4j. Everything above it uses the neutral port types. */
-public final class OllamaGateway implements LlmGateway {
+/**
+ * The only class that knows LangChain4j's chat API. Everything above it uses the neutral port types.
+ * Any LangChain4j {@link ChatModel} can sit behind it; see the factories for Ollama and OpenAI-compatible.
+ */
+public final class LangChain4jGateway implements LlmGateway {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private final ChatModel model;
 
-    public OllamaGateway(String baseUrl, String modelName, int threads) {
-        this.model = OllamaChatModel.builder()
+    public LangChain4jGateway(ChatModel model) {
+        this.model = model;
+    }
+
+    /** Local Ollama. {@code threads} is Ollama's num_thread (its 16-thread default was ~50x slower on the spike box). */
+    public static LangChain4jGateway ollama(String baseUrl, String modelName, int threads, double temperature) {
+        return new LangChain4jGateway(OllamaChatModel.builder()
                 .baseUrl(baseUrl)
                 .defaultRequestParameters(OllamaChatRequestParameters.builder()
                         .modelName(modelName)
-                        .temperature(0.0)
+                        .temperature(temperature)
                         .maxOutputTokens(512)
                         .numThread(threads)
                         .build())
                 .timeout(Duration.ofMinutes(2))
-                .build();
+                .build());
+    }
+
+    /** Any OpenAI-compatible endpoint (OpenAI, vLLM, LM Studio, Ollama's /v1, ...). The key comes from the caller. */
+    public static LangChain4jGateway openAiCompatible(String baseUrl, String apiKey, String modelName, double temperature) {
+        return new LangChain4jGateway(OpenAiChatModel.builder()
+                .baseUrl(baseUrl)
+                .apiKey(apiKey)
+                .modelName(modelName)
+                .temperature(temperature)
+                .maxCompletionTokens(512)
+                .timeout(Duration.ofMinutes(2))
+                .build());
     }
 
     @Override
     public LlmReply chat(Agent agent, List<LlmMessage> messages, List<ToolSpec> tools) {
-        ChatRequest.Builder request = ChatRequest.builder().messages(messages.stream().map(OllamaGateway::toLc).toList());
+        ChatRequest.Builder request = ChatRequest.builder().messages(messages.stream().map(LangChain4jGateway::toLc).toList());
         if (!tools.isEmpty()) {
-            request.toolSpecifications(tools.stream().map(OllamaGateway::toLc).toList());
+            request.toolSpecifications(tools.stream().map(LangChain4jGateway::toLc).toList());
         }
         ChatResponse response = model.chat(request.build());
         AiMessage ai = response.aiMessage();
