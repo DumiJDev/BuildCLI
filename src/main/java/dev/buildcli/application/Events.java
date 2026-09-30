@@ -34,16 +34,22 @@ public final class Events {
     }
 
     public void startRun(String team, String request) {
-        store.startRun(new RunInfo(runId, team, request, Instant.now(), null, "RUNNING", null));
+        store.startRun(new RunInfo(runId, team, Redactor.redact(request), Instant.now(), null, "RUNNING", null));
     }
 
     public void finishRun(String status, String summary) {
-        store.finishRun(runId, status, summary);
+        store.finishRun(runId, status, Redactor.redact(summary));
     }
 
     /** Persists the current state of a task. Call after every status change. */
     public void taskChanged(Task task) {
-        store.saveTask(runId, task);
+        // the stored copy is scrubbed; the live task (what the UI reads) is left alone
+        Task stored = new Task(task.id, task.parentId, task.from, task.to, Redactor.redact(task.objective), Redactor.redact(task.brief));
+        stored.status = task.status;
+        stored.result = Redactor.redact(task.result);
+        stored.attempts = task.attempts;
+        stored.tokens = task.tokens;
+        store.saveTask(runId, stored);
         ui.onTaskChanged(task);
     }
 

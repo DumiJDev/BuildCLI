@@ -43,6 +43,17 @@ public final class ReadFileTool implements Tool {
         if (!Files.isRegularFile(file)) {
             return "ERROR: not a file: " + rel;
         }
-        return ToolContext.cap(Files.readString(file, StandardCharsets.UTF_8), ToolContext.MAX_OUTPUT);
+        // Read only what can be returned: a multi-gigabyte file must not be loaded into memory to show 4,000 characters.
+        long size = Files.size(file);
+        byte[] head;
+        try (java.io.InputStream in = Files.newInputStream(file)) {
+            head = in.readNBytes(ToolContext.MAX_OUTPUT * 4);
+        }
+        String text = new String(head, StandardCharsets.UTF_8);
+        if (size > head.length) {
+            return ToolContext.cap(text, ToolContext.MAX_OUTPUT) + (text.length() <= ToolContext.MAX_OUTPUT
+                    ? "... [truncated: the file is " + size + " bytes]" : "");
+        }
+        return ToolContext.cap(text, ToolContext.MAX_OUTPUT);
     }
 }

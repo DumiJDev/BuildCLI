@@ -142,4 +142,24 @@ class SecurityTest {
         }
         assertTrue(toolResultsSeenByBruno.get(0).startsWith("DENIED"), toolResultsSeenByBruno.get(0));
     }
+
+    @Test
+    void secretsAreAlsoScrubbedFromWhatIsStoredAboutTasksAndRuns() throws Exception {
+        var script = new ScriptedGateway()
+                .call("ana", "handoff", Map.of("to", "bruno", "objective", "use API_KEY=abcdef123456789 to call it"))
+                .say("bruno", "done, the password=hunter2hunter2 still works")
+                .say("ana", "report with token ghp_abcdefghijklmnopqrstuvwxyz0123456789");
+        var ui = new HeadlessUi(r -> true, EscalationChoice.ABORT, false);
+        try (var store = new SqliteRunStore(SqliteRunStore.IN_MEMORY)) {
+            Events events = new Events(store, "run1", ui);
+            new Orchestrator(new Team("t", "ana", List.of(LEAD, DEV), Limits.defaults()), spy(script),
+                    new ToolRuntime(dir, ui, events), ui, events).run("deploy with secret=supersecretvalue1");
+            String stored = store.listRuns(1).get(0).request() + store.listRuns(1).get(0).summary()
+                    + store.listTasks("run1").stream().map(t -> t.objective + t.result).reduce("", String::concat);
+            for (String secret : List.of("abcdef123456789", "hunter2hunter2", "ghp_abcdef", "supersecretvalue1")) {
+                assertFalse(stored.contains(secret), "the state database holds " + secret + ": " + stored);
+            }
+            assertTrue(stored.contains("[REDACTED]"));
+        }
+    }
 }

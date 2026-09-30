@@ -49,8 +49,9 @@ public final class CliContext {
         this.cwd = cwd.toAbsolutePath().normalize();
         this.home = home;
         this.env = env;
-        this.out = out;
-        this.err = err;
+        // everything printed may contain untrusted text (model replies, tool output): never let it drive the terminal
+        this.out = dev.buildcli.infrastructure.SafePrintStream.wrap(out);
+        this.err = dev.buildcli.infrastructure.SafePrintStream.wrap(err);
         this.in = in;
         this.terminal = terminal;
         this.gateways = gateways;
