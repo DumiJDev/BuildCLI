@@ -41,12 +41,13 @@ class ChatSessionTest {
 
     /** Runs each request through a real orchestrator with the given model. */
     ChatSession.Executor orchestrated(LlmGateway llm, List<Orchestrator.Request> seen) {
-        return (request, ui, cancelled) -> {
+        return (request, ui, cancelled, dispatcher) -> {
             seen.add(request);
             try (SqliteRunStore store = new SqliteRunStore(SqliteRunStore.IN_MEMORY)) {
                 Events events = new Events(store, "run", ui);
                 Orchestrator o = new Orchestrator(TEAM, llm, new ToolRuntime(workspace, ui, events), ui, events);
                 o.cancelWhen(cancelled);
+                o.dispatchWith(dispatcher);
                 return o.run(request);
             }
         };
@@ -69,7 +70,7 @@ class ChatSessionTest {
     void messagesSentWhileTheTeamIsBusyWaitInOrderAndAreAllAnswered() throws Exception {
         CountDownLatch release = new CountDownLatch(1);
         List<String> order = new ArrayList<>();
-        var session = new ChatSession(TEAM, (request, ui, cancelled) -> {
+        var session = new ChatSession(TEAM, (request, ui, cancelled, dispatcher) -> {
             order.add(request.text());
             if (request.text().equals("first")) {
                 release.await(10, TimeUnit.SECONDS);
@@ -117,7 +118,7 @@ class ChatSessionTest {
     @Test
     void aFailureIsShownAndTheSessionKeepsWorking() throws Exception {
         AtomicInteger calls = new AtomicInteger();
-        var session = new ChatSession(TEAM, (request, ui, cancelled) -> {
+        var session = new ChatSession(TEAM, (request, ui, cancelled, dispatcher) -> {
             if (calls.incrementAndGet() == 1) {
                 throw new IllegalStateException("connection refused: localhost:11434");
             }
@@ -183,7 +184,7 @@ class ChatSessionTest {
 
     @Test
     void stopEndsTheRunAndDeniesAnOpenQuestion() throws Exception {
-        var session = new ChatSession(TEAM, (request, ui, cancelled) -> {
+        var session = new ChatSession(TEAM, (request, ui, cancelled, dispatcher) -> {
             boolean ok = ui.approve(new ApprovalRequest("bruno", "write", "Write out/a.txt", "+hi"));
             assertFalse(ok, "stopping answers 'no'");
             if (cancelled.getAsBoolean()) {
@@ -205,7 +206,7 @@ class ChatSessionTest {
 
     @Test
     void toolEventsBecomeShortActivityLinesWithoutDumpingFileContents() {
-        var session = new ChatSession(TEAM, (r, u, c) -> null);
+        var session = new ChatSession(TEAM, (r, u, c, d) -> null);
         session.onEvent(new Event(Instant.now(), "ToolCalled", 2, "bruno", "write_file {path=out/a.txt, content=SECRET-BODY-OF-THE-FILE}"));
         session.onEvent(new Event(Instant.now(), "ToolCompleted", 2, "bruno", "ok: OK: wrote 20 chars"));
         session.onEvent(new Event(Instant.now(), "ToolCalled", 2, "bruno", "run_command {argv=[rm, -rf, out]}"));

@@ -45,7 +45,7 @@ class ChatScreenTest {
     boolean quit;
 
     ChatSession session() {
-        return new ChatSession(TEAM, (request, ui, cancelled) -> {
+        return new ChatSession(TEAM, (request, ui, cancelled, dispatcher) -> {
             requests.add(request.text());
             targets.add(request.target());
             Task t = new Task(1, null, "user", request.target() == null ? "ana" : request.target(), request.text(), "");
@@ -161,7 +161,7 @@ class ChatScreenTest {
     @Test
     void messagesTypedWhileTheTeamWorksAreQueued() throws Exception {
         var gate = new java.util.concurrent.CountDownLatch(1);
-        var s = new ChatSession(TEAM, (request, ui, cancelled) -> {
+        var s = new ChatSession(TEAM, (request, ui, cancelled, dispatcher) -> {
             gate.await(5, TimeUnit.SECONDS);
             Task t = new Task(1, null, "user", "ana", request.text(), "");
             t.status = TaskStatus.DONE;
@@ -176,11 +176,11 @@ class ChatScreenTest {
         type(screen, "second");
         key(screen, KeyCode.ENTER);
         String out = render(screen, 120, 36);
-        assertTrue(out.contains("◷"), "the second message shows as waiting:\n" + out);
+        assertTrue(out.contains("1 queued"), "the second message shows as waiting:\n" + out);
         assertTrue(out.contains("1 queued"));
         gate.countDown();
         idle(s);
-        assertFalse(render(screen, 120, 36).contains("◷"));
+        assertFalse(render(screen, 120, 36).contains("queued"));
     }
 
     @Test

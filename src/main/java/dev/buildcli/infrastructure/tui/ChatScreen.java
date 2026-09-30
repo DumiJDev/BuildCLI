@@ -276,13 +276,19 @@ final class ChatScreen implements Element {
 
             String preview;
             Style ps = st(Theme.DIM, bg);
-            ChatSession.Live live = session.live();
-            if (t.equals(session.activeThread()) && live != null) {
+            ChatSession.Live live = session.live(t);
+            String busyIn = t.equals(ChatSession.TEAM) ? null : session.agentThread(t);
+            if (live != null) {
                 preview = (t.equals(ChatSession.TEAM) ? clean(live.agent()) + " is " : "") + "typing…";
                 ps = st(Theme.GREEN, bg);
-            } else if (t.equals(session.activeThread())) {
-                preview = "working…";
+            } else if (session.isActive(t)) {
+                String who = busyAgentIn(t);
+                preview = t.equals(ChatSession.TEAM) && !who.isEmpty() ? clean(who) + " is " + session.agentState(who) + "…"
+                        : session.agentState(t) + "…";
                 ps = st(Theme.GREEN, bg);
+            } else if (busyIn != null) {
+                preview = "busy in the " + title(busyIn) + " chat";
+                ps = st(Theme.AMBER, bg);
             } else if (last == null) {
                 preview = t.equals(ChatSession.TEAM) ? session.team().agents().size() + " agents and you" : clean(roleOf(t));
             } else {
@@ -397,12 +403,16 @@ final class ChatScreen implements Element {
         put(buf, nx, r.y(), title(selected), base.bold(), r.right() - 30);
         String sub;
         Style subStyle = st(Theme.DIM, Theme.PANEL);
-        ChatSession.Live live = session.live();
-        if (selected.equals(session.activeThread())) {
-            String who = live != null ? clean(live.agent()) : busyAgent();
+        ChatSession.Live live = session.live(selected);
+        String elsewhere = team ? null : session.agentThread(selected);
+        if (session.isActive(selected)) {
+            String who = live != null ? live.agent() : busyAgentIn(selected);
             String state = live != null ? "typing…" : who.isEmpty() ? "working…" : session.agentState(who) + "…";
-            sub = (team && !who.isEmpty() ? who + " is " : team ? "" : "") + state;
+            sub = (team && !who.isEmpty() ? clean(who) + " is " : "") + state;
             subStyle = st(Theme.GREEN, Theme.PANEL);
+        } else if (elsewhere != null) {
+            sub = "busy in the " + title(elsewhere) + " chat · will read your messages after";
+            subStyle = st(Theme.AMBER, Theme.PANEL);
         } else if (team) {
             StringBuilder sb = new StringBuilder();
             for (Agent a : session.team().agents()) {
@@ -411,7 +421,7 @@ final class ChatScreen implements Element {
             sb.append(", you");
             sub = sb.toString();
         } else {
-            sub = clean(roleOf(selected)) + " · " + clean(models.getOrDefault(selected, ""));
+            sub = "online · " + clean(roleOf(selected)) + " · " + clean(models.getOrDefault(selected, ""));
         }
         put(buf, nx, r.y() + 1, sub, subStyle, r.right() - 30);
         int bx = r.right() - 1;
@@ -422,19 +432,22 @@ final class ChatScreen implements Element {
             String cmd = b[1];
             hits.add(new Hit(new Rect(bx, r.y(), Wrap.width(b[0]), 1), () -> runCommand("/" + cmd)));
         }
-        if (session.busy()) {
+        if (session.isActive(selected)) {
             String stop = " ■ Stop ";
             int sx = r.right() - 1 - Wrap.width(stop);
             put(buf, sx, r.y() + 1, stop, st(Theme.TEXT, Color.rgb(120, 40, 45)), r.right());
-            hits.add(new Hit(new Rect(sx, r.y() + 1, Wrap.width(stop), 1), session::stop));
+            hits.add(new Hit(new Rect(sx, r.y() + 1, Wrap.width(stop), 1), () -> session.stop(selected)));
         }
     }
 
-    private String busyAgent() {
+    /** The agent currently working in {@code thread}, preferring one that is not just waiting for a teammate. */
+    private String busyAgentIn(String thread) {
         String who = "";
         for (Agent a : session.team().agents()) {
-            if (!session.agentState(a.name()).equals("idle")) {
-                who = a.name();
+            if (thread.equals(session.agentThread(a.name()))) {
+                if (who.isEmpty() || session.agentState(who).startsWith("waiting for ") && !session.agentState(a.name()).equals("idle")) {
+                    who = a.name();
+                }
             }
         }
         return who;
@@ -452,7 +465,7 @@ final class ChatScreen implements Element {
         lastTotal = total;
         scrollOff = Math.max(0, Math.min(scrollOff, scrollMax));
         int first = Math.max(0, total - viewH - scrollOff);
-        boolean empty = msgs.isEmpty() && !selected.equals(session.activeThread());
+        boolean empty = msgs.isEmpty() && !session.isActive(selected);
         int yOff = total < viewH ? (empty ? Math.max(0, (viewH - total) / 3) : viewH - total) : 0;
         for (int i = 0; i < viewH && first + i < total; i++) {
             Row row = rows.get(first + i);
@@ -480,7 +493,7 @@ final class ChatScreen implements Element {
 
     private List<Row> chatRows(int width, List<Message> msgs) {
         List<Row> rows = new ArrayList<>();
-        if (msgs.isEmpty() && !selected.equals(session.activeThread())) {
+        if (msgs.isEmpty() && !session.isActive(selected)) {
             welcome(rows, width);
             return rows;
         }
@@ -515,13 +528,14 @@ final class ChatScreen implements Element {
             }
             prev = m;
         }
-        if (selected.equals(session.activeThread())) {
+        if (session.isActive(selected)) {
             rows.add(new Row(0, List.of()));
-            ChatSession.Live live = session.live();
+            ChatSession.Live live = session.live(selected);
             if (live != null) {
                 agentBubble(rows, width, group ? clean(live.agent()) : null, live.text() + " ▍", "", true);
             } else if (session.pending() == null) {
-                typingDots(rows, group ? busyAgent() : "");
+                String who = busyAgentIn(selected);
+                typingDots(rows, group ? who : "", who.isEmpty() ? "" : session.agentState(who));
             }
         }
         rows.add(new Row(0, List.of()));
@@ -540,7 +554,7 @@ final class ChatScreen implements Element {
         }
     }
 
-    private void typingDots(List<Row> rows, String who) {
+    private void typingDots(List<Row> rows, String who, String state) {
         int phase = (int) (System.currentTimeMillis() / 300 % 3);
         StringBuilder dots = new StringBuilder(" ");
         for (int i = 0; i < 3; i++) {
@@ -552,6 +566,9 @@ final class ChatScreen implements Element {
             spans.add(new Span(clean(who) + " ", st(Theme.agentColor(who), Theme.THEM).bold()));
         }
         spans.add(new Span(dots.toString(), st(Theme.DIM, Theme.THEM)));
+        if (state.startsWith("waiting") || state.equals("reading") || state.equals("working")) {
+            spans.add(new Span(state + " ", st(Theme.DIM, Theme.THEM).italic()));
+        }
         rows.add(new Row(2, spans));
     }
 
@@ -601,8 +618,8 @@ final class ChatScreen implements Element {
         Style meta = st(Theme.ON_ME_DIM, Theme.ME);
         footer.add(new Span(TIME.format(m.at()) + " ", meta));
         switch (m.state()) {
-            case QUEUED -> footer.add(new Span("◷", meta));
-            case RUNNING -> footer.add(new Span("✓", meta));
+            case QUEUED -> footer.add(new Span("✓", meta));
+            case RUNNING -> footer.add(new Span("✓✓", st(Theme.BLUE, Theme.ME)));
             case DONE -> footer.add(new Span("✓✓", st(Theme.BLUE, Theme.ME)));
             case FAILED -> {
                 footer.add(new Span("! not sent ", st(Theme.RED, Theme.ME).bold()));
@@ -986,7 +1003,7 @@ final class ChatScreen implements Element {
         List<String[]> buttons = new ArrayList<>();
         List<Runnable> actions = new ArrayList<>();
         if (p instanceof ChatSession.Pending.Approval a) {
-            title = clean(a.request().agent()) + " asks for approval";
+            title = clean(a.request().agent()) + " asks for approval" + where(p);
             body.add(List.of(new Span(clean(a.request().summary()), base.bold())));
             body.add(List.of());
             int limit = Math.max(3, r.height() - 12);
@@ -1006,7 +1023,7 @@ final class ChatScreen implements Element {
             actions.add(() -> a.answer().complete(false));
         } else {
             var e = (ChatSession.Pending.Escalation) p;
-            title = clean(e.agent()) + " is stuck (task #" + e.taskId() + ")";
+            title = clean(e.agent()) + " is stuck (task #" + e.taskId() + ")" + where(p);
             body.addAll(Styled.lines(clean(e.objective()), w - 4, base, base.bold(), base));
             body.add(List.of());
             body.addAll(Styled.lines("It failed after the automatic retries: " + clean(e.reason()), w - 4, st(Theme.RED, Theme.DIALOG),
@@ -1046,6 +1063,12 @@ final class ChatScreen implements Element {
         }
     }
 
+    private String where(ChatSession.Pending p) {
+        String chat = p.thread().equals(ChatSession.TEAM) || p.thread().equals(ChatSession.EVERYWHERE) ? title(ChatSession.TEAM) : title(p.thread());
+        int n = session.pendingCount();
+        return " · " + chat + " chat" + (n > 1 ? " · 1 of " + n : "");
+    }
+
     // ---- keyboard ----
 
     @Override
@@ -1066,7 +1089,7 @@ final class ChatScreen implements Element {
             return EventResult.HANDLED;
         }
         if (ctrl && ch == 'x') {
-            session.stop();
+            session.stop(selected);
             return EventResult.HANDLED;
         }
         ChatSession.Pending p = session.pending();
@@ -1320,7 +1343,7 @@ final class ChatScreen implements Element {
                     attachments.add(Attachment.of(resolve(arg)));
                 }
                 case "tasks" -> open(new View("Tasks", taskLines(), false, false));
-                case "stop" -> session.stop();
+                case "stop" -> session.stop(selected);
                 case "retry" -> {
                     long id = session.lastFailedMessage();
                     if (id < 0 || !session.retry(id)) {
@@ -1348,7 +1371,7 @@ final class ChatScreen implements Element {
 
     private List<String> taskLines() {
         List<String> out = new ArrayList<>();
-        List<Task> tasks = session.tasks();
+        List<Task> tasks = session.tasks(selected);
         if (tasks.isEmpty()) {
             out.add("No tasks yet. Each message becomes a task; a handoff becomes a child task.");
         }

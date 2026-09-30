@@ -105,7 +105,10 @@ final class RunCommand implements Callable<Integer> {
         String text = request == null ? "" : String.join(" ", request).strip();
         boolean tui = !headless && ctx.terminal;
         if (tui) {
-            ChatSession session = new ChatSession(team, (req, ui, cancelled) -> runOnce(team, config, gateway, req, ui, cancelled));
+            // one lock for the whole chat: agents working in parallel share it
+            var workspaceLock = new dev.buildcli.application.tools.WorkspaceLock();
+            ChatSession session = new ChatSession(team,
+                    (req, ui, cancelled, dispatcher) -> runOnce(team, config, gateway, req, ui, cancelled, dispatcher, workspaceLock));
             if (!text.isEmpty()) {
                 session.submit(text, List.of(), agentName);
             }
@@ -158,7 +161,8 @@ final class RunCommand implements Callable<Integer> {
 
     /** One request, start to finish: trust check, a fresh run id and store, the orchestrator. Throws if it cannot run. */
     private Task runOnce(Team team, ConfigRepository config, RoutingGateway gateway, Orchestrator.Request request, UserInterface ui,
-            java.util.function.BooleanSupplier cancelled) throws Exception {
+            java.util.function.BooleanSupplier cancelled, Orchestrator.Dispatcher dispatcher,
+            dev.buildcli.application.tools.WorkspaceLock workspaceLock) throws Exception {
         String runId = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + "-"
                 + HexFormat.of().formatHex(randomBytes());
         try (SqliteRunStore store = SqliteRunStore.open(ctx.stateDb())) {
@@ -166,9 +170,10 @@ final class RunCommand implements Callable<Integer> {
                 throw new IllegalStateException("the project's agent definitions were not trusted, so nothing was run");
             }
             Events events = new Events(store, runId, ui);
-            Orchestrator orchestrator = new Orchestrator(team, gateway, new ToolRuntime(ctx.cwd, ui, events), ui, events,
+            Orchestrator orchestrator = new Orchestrator(team, gateway, new ToolRuntime(ctx.cwd, ui, events, workspaceLock), ui, events,
                     config.projectContext());
             orchestrator.cancelWhen(cancelled);
+            orchestrator.dispatchWith(dispatcher);
             Task root = orchestrator.run(request);
             lastRunId = runId;
             lastUsage = store.usage(runId);
@@ -182,7 +187,8 @@ final class RunCommand implements Callable<Integer> {
     /** Headless: runs on the calling thread and records the exit code in {@link #exit}. */
     private void execute(Team team, ConfigRepository config, RoutingGateway gateway, String requestText, UserInterface ui) {
         try {
-            Task root = runOnce(team, config, gateway, new Orchestrator.Request(requestText), ui, () -> false);
+            Task root = runOnce(team, config, gateway, new Orchestrator.Request(requestText), ui, () -> false,
+                    Orchestrator.Dispatcher.INLINE, new dev.buildcli.application.tools.WorkspaceLock());
             exit.set(root.status == TaskStatus.DONE ? 0 : 1);
             summarize(root, lastRunId, lastUsage);
         } catch (RunAborted e) {

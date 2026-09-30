@@ -89,12 +89,14 @@ final class DevCommands {
             var team = Scenario.team(Limits.defaults());
             Map<String, String> models = new java.util.LinkedHashMap<>();
             team.agents().forEach(a -> models.put(a.name(), fake ? "scripted" : m.provider + "/" + m.model));
-            var session = new dev.buildcli.application.ChatSession(team, (request, ui, cancelled) -> {
+            var workspaceLock = new dev.buildcli.application.tools.WorkspaceLock();
+            var session = new dev.buildcli.application.ChatSession(team, (request, ui, cancelled, dispatcher) -> {
                 LlmGateway model = fake ? demoModel(script(escalate && request.target() == null), request) : llm;
                 try (SqliteRunStore store = new SqliteRunStore(SqliteRunStore.IN_MEMORY)) {
                     Events events = new Events(store, "demo", ui);
-                    Orchestrator o = new Orchestrator(team, model, new ToolRuntime(workspace, ui, events), ui, events);
+                    Orchestrator o = new Orchestrator(team, model, new ToolRuntime(workspace, ui, events, workspaceLock), ui, events);
                     o.cancelWhen(cancelled);
+                    o.dispatchWith(dispatcher);
                     return o.run(request);
                 }
             });
