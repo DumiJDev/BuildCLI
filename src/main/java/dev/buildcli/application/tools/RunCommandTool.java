@@ -54,7 +54,7 @@ public final class RunCommandTool implements Tool {
                 "Not in " + agent.name() + "'s command allow list."))) {
             return "DENIED: command not allowed by policy and the user rejected it: " + String.join(" ", argv);
         }
-        ProcessRunner.Result r = ProcessRunner.run(argv, ctx.workspace(), agent.permissions().commandTimeout(), Map.of());
+        ProcessRunner.Result r = ctx.exclusive(() -> ProcessRunner.run(argv, ctx.workspace(), agent.permissions().commandTimeout(), Map.of()));
         if (r.timedOut()) {
             return "ERROR: command timed out after " + agent.permissions().commandTimeout();
         }

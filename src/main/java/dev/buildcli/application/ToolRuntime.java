@@ -8,6 +8,7 @@ import dev.buildcli.application.tools.RunCommandTool;
 import dev.buildcli.application.tools.SearchTool;
 import dev.buildcli.application.tools.Tool;
 import dev.buildcli.application.tools.ToolContext;
+import dev.buildcli.application.tools.WorkspaceLock;
 import dev.buildcli.application.tools.WriteFileTool;
 import dev.buildcli.domain.Agent;
 import dev.buildcli.domain.Capability;
@@ -34,16 +35,27 @@ public final class ToolRuntime {
     private final UserInterface ui;
     private final Events events;
     private final List<Tool> tools;
+    private final WorkspaceLock lock;
 
     public ToolRuntime(Path workspace, UserInterface ui, Events events) {
-        this(workspace, ui, events, defaultTools());
+        this(workspace, ui, events, defaultTools(), new WorkspaceLock());
+    }
+
+    /** @param lock shared by every run working on the same workspace at the same time */
+    public ToolRuntime(Path workspace, UserInterface ui, Events events, WorkspaceLock lock) {
+        this(workspace, ui, events, defaultTools(), lock);
     }
 
     public ToolRuntime(Path workspace, UserInterface ui, Events events, List<Tool> tools) {
+        this(workspace, ui, events, tools, new WorkspaceLock());
+    }
+
+    public ToolRuntime(Path workspace, UserInterface ui, Events events, List<Tool> tools, WorkspaceLock lock) {
         this.workspace = workspace.toAbsolutePath().normalize();
         this.ui = ui;
         this.events = events;
         this.tools = List.copyOf(tools);
+        this.lock = lock;
     }
 
     /** The built-in tools of 1.0. */
@@ -81,8 +93,12 @@ public final class ToolRuntime {
             } else if (!agent.can(tool.capability())) {
                 result = "DENIED: " + agent.name() + " does not have capability " + tool.capability();
             } else {
-                ToolContext ctx = new ToolContext(workspace, request -> approve(agent, task, request));
-                result = tool.execute(ctx, agent, call);
+                ToolContext ctx = new ToolContext(workspace, request -> approve(agent, task, request), lock, agent.name(),
+                        holder -> events.emit("WaitingForWorkspace", task.id, agent.name(), holder + " is changing the workspace"));
+                // tools that change the workspace take the exclusive lock themselves, after any approval
+                result = tool.capability().equals(Capability.FILESYSTEM_WRITE) || tool.capability().equals(Capability.COMMAND_EXECUTE)
+                        || tool.capability().equals(Capability.GIT_COMMIT) ? tool.execute(ctx, agent, call)
+                        : lock.shared(() -> tool.execute(ctx, agent, call));
             }
         } catch (IllegalArgumentException e) {
             result = "ERROR: " + e.getMessage();

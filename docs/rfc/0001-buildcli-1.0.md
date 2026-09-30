@@ -159,6 +159,14 @@ Agents never talk freely. Every interaction is a task with an owner.
 
 ## Execution model
 
+> **Amended 2026-09-30 (decision by the proposer):** agents behave like people. Each agent has an inbox and one
+> virtual thread, so it answers **one conversation at a time**, while **different agents work in parallel**. Races are
+> controlled by the runtime: workspace changes are exclusive (fair read/write lock), reads are shared, approvals happen
+> outside the lock, `write_file` refuses to overwrite a file changed while it waited for approval, handoffs that would
+> close a wait cycle are refused, and agents that talk to each other by @mention pause after a configurable number of
+> messages without the user. Chats are WhatsApp-like: groups with members and admins, and direct chats.
+> The paragraph below is the original 1.0 plan, kept for history.
+
 **One agent runs at a time in 1.0.** The orchestrator runs tasks sequentially: the lead delegates, the target agent runs, the result returns. This is a deliberate simplification:
 
 - Deterministic runs, easy to test and replay.

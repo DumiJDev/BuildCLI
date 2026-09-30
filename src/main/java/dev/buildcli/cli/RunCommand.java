@@ -90,28 +90,41 @@ final class RunCommand implements Callable<Integer> {
             }
         }
         ProviderSettings settings = ctx.providerSettings().with(threads, temperature, !noStream);
-        RoutingGateway gateway = new RoutingGateway(team.routing(), fallback, ref -> ctx.gateways.create(ref, settings));
+        ChatServices services = new ChatServices(ctx, config, team);
+        final ModelRef fallbackModel = fallback;
+        // settings are read for every run, so a model chosen on the settings screen applies to the next message
+        java.util.function.Supplier<RoutingGateway> gateways = () -> new RoutingGateway(effectiveRouting(team, services.settings()),
+                fallbackModel, ref -> ctx.gateways.create(ref, settings));
+        String text = request == null ? "" : String.join(" ", request).strip();
+        boolean tui = !headless && ctx.terminal;
         Map<String, String> models = new LinkedHashMap<>();
         for (Agent a : team.agents()) {
             try {
-                ModelRef ref = gateway.modelFor(a);
-                models.put(a.name(), ref.provider() + "/" + ref.model());
+                ModelRef ref = gateways.get().modelFor(a);
+                models.put(a.name(), ref.provider() + ":" + ref.model());
             } catch (IllegalStateException e) {
-                ctx.err.println("error: " + e.getMessage());
-                return 2;
+                if (!tui) {
+                    ctx.err.println("error: " + e.getMessage());
+                    return 2;
+                }
+                models.put(a.name(), "no model: press F2 to choose one");
             }
         }
-
-        String text = request == null ? "" : String.join(" ", request).strip();
-        boolean tui = !headless && ctx.terminal;
         if (tui) {
-            ChatSession session = new ChatSession(team, (req, ui, cancelled) -> runOnce(team, config, gateway, req, ui, cancelled));
+            // one lock for the whole chat: agents working in parallel share it
+            var workspaceLock = new dev.buildcli.application.tools.WorkspaceLock();
+            ChatSession session = new ChatSession(team, config.agents(),
+                    (chatTeam, req, ui, cancelled, dispatcher) -> runOnce(chatTeam, config, gateways.get(), req, ui, cancelled, dispatcher,
+                            workspaceLock),
+                    new dev.buildcli.infrastructure.FileChatStore(ctx.projectStateDir()),
+                    () -> services.settings().number(dev.buildcli.application.Settings.AGENT_HOPS, 6));
             if (!text.isEmpty()) {
                 session.submit(text, List.of(), agentName);
             }
-            ctx.tui.launch(session, models);
+            ctx.tui.launch(session, models, services);
             return 0;
         }
+        RoutingGateway gateway = gateways.get();
         if (text.isEmpty()) {
             ctx.err.println("error: a request is required without the TUI, for example: buildcli run --headless \"add a health endpoint\"");
             return 2;
@@ -119,6 +132,30 @@ final class RunCommand implements Callable<Integer> {
         ConsoleUi.Policy policy = approve != null ? approve : ctx.terminal ? ConsoleUi.Policy.ASK : ConsoleUi.Policy.NONE;
         execute(team, config, gateway, text, new ConsoleUi(ctx.out, ctx.in, policy));
         return exit.get();
+    }
+
+    /** The team's routing with the settings screen's choices on top: a model set for an agent wins; the default fills gaps. */
+    static dev.buildcli.domain.ModelRouting effectiveRouting(Team team, dev.buildcli.application.Settings settings) {
+        Map<String, ModelRef> overrides = new java.util.HashMap<>(team.routing().overrides());
+        for (Agent a : team.agents()) {
+            String m = settings.modelFor(a.name());
+            if (m != null) {
+                try {
+                    overrides.put(a.name(), BuildCli.parseModel(m));
+                } catch (IllegalArgumentException ignored) {
+                    // an unparsable value is shown on the settings screen; the team's model stays in use
+                }
+            }
+        }
+        ModelRef def = team.routing().defaultModel();
+        if (def == null && settings.defaultModel() != null) {
+            try {
+                def = BuildCli.parseModel(settings.defaultModel());
+            } catch (IllegalArgumentException ignored) {
+                // as above
+            }
+        }
+        return new dev.buildcli.domain.ModelRouting(def, overrides);
     }
 
     private Team resolveTeam(ConfigRepository config) {
@@ -158,7 +195,8 @@ final class RunCommand implements Callable<Integer> {
 
     /** One request, start to finish: trust check, a fresh run id and store, the orchestrator. Throws if it cannot run. */
     private Task runOnce(Team team, ConfigRepository config, RoutingGateway gateway, Orchestrator.Request request, UserInterface ui,
-            java.util.function.BooleanSupplier cancelled) throws Exception {
+            java.util.function.BooleanSupplier cancelled, Orchestrator.Dispatcher dispatcher,
+            dev.buildcli.application.tools.WorkspaceLock workspaceLock) throws Exception {
         String runId = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + "-"
                 + HexFormat.of().formatHex(randomBytes());
         try (SqliteRunStore store = SqliteRunStore.open(ctx.stateDb())) {
@@ -166,9 +204,10 @@ final class RunCommand implements Callable<Integer> {
                 throw new IllegalStateException("the project's agent definitions were not trusted, so nothing was run");
             }
             Events events = new Events(store, runId, ui);
-            Orchestrator orchestrator = new Orchestrator(team, gateway, new ToolRuntime(ctx.cwd, ui, events), ui, events,
+            Orchestrator orchestrator = new Orchestrator(team, gateway, new ToolRuntime(ctx.cwd, ui, events, workspaceLock), ui, events,
                     config.projectContext());
             orchestrator.cancelWhen(cancelled);
+            orchestrator.dispatchWith(dispatcher);
             Task root = orchestrator.run(request);
             lastRunId = runId;
             lastUsage = store.usage(runId);
@@ -182,7 +221,8 @@ final class RunCommand implements Callable<Integer> {
     /** Headless: runs on the calling thread and records the exit code in {@link #exit}. */
     private void execute(Team team, ConfigRepository config, RoutingGateway gateway, String requestText, UserInterface ui) {
         try {
-            Task root = runOnce(team, config, gateway, new Orchestrator.Request(requestText), ui, () -> false);
+            Task root = runOnce(team, config, gateway, new Orchestrator.Request(requestText), ui, () -> false,
+                    Orchestrator.Dispatcher.INLINE, new dev.buildcli.application.tools.WorkspaceLock());
             exit.set(root.status == TaskStatus.DONE ? 0 : 1);
             summarize(root, lastRunId, lastUsage);
         } catch (RunAborted e) {

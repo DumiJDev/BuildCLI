@@ -30,7 +30,7 @@ public final class CliContext {
 
     /** Opens the chat UI on a session and blocks until the user quits. */
     public interface TuiLauncher {
-        void launch(ChatSession session, Map<String, String> models) throws Exception;
+        void launch(ChatSession session, Map<String, String> models, dev.buildcli.infrastructure.tui.SettingsServices services) throws Exception;
     }
 
     public final Path cwd;
@@ -62,8 +62,9 @@ public final class CliContext {
         return new CliContext(Path.of("").toAbsolutePath(), Path.of(System.getProperty("user.home")), System.getenv(),
                 System.out, System.err, new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8)),
                 isInteractiveTerminal(), (ref, settings) -> settings.gatewayFor(ref),
-                (session, models) -> new dev.buildcli.infrastructure.tui.ChatApp(session, models, Path.of("").toAbsolutePath(),
-                        !"0".equals(System.getenv("BUILDCLI_MOUSE"))).run());
+                (session, models, services) -> new dev.buildcli.infrastructure.tui.ChatApp(session, models, Path.of("").toAbsolutePath(),
+                        !"0".equals(System.getenv("BUILDCLI_MOUSE")) && services.settings().flag(dev.buildcli.application.Settings.MOUSE),
+                        services).run());
     }
 
     /** Providers (built in plus the user's providers.yaml) and the environment their keys are read from. */
@@ -73,6 +74,10 @@ public final class CliContext {
 
     public Path globalDir() {
         return StateLocations.globalDir(env, home);
+    }
+
+    public Path projectStateDir() {
+        return StateLocations.projectStateDir(globalDir(), cwd);
     }
 
     public Path stateDb() {

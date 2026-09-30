@@ -47,7 +47,8 @@ public final class FileConfigRepository implements ConfigRepository {
     private static final ObjectMapper YAML = new ObjectMapper(new YAMLFactory());
     private static final Pattern NAME = Pattern.compile("[a-z][a-z0-9_-]*");
     private static final Pattern DURATION = Pattern.compile("(\\d+)(ms|s|m|h)");
-    private static final Set<String> PROVIDERS = Set.of("ollama", "openai");
+    /** A provider name; whether it exists is checked against the provider registry when a run starts. */
+    private static final java.util.regex.Pattern PROVIDER = java.util.regex.Pattern.compile("[a-z][a-z0-9-]{0,39}");
     private static final Set<String> AGENT_KEYS = Set.of("schema", "name", "role", "description", "instructions",
             "capabilities", "permissions", "memory", "personality");
     private static final Set<String> TEAM_KEYS = Set.of("schema", "name", "description", "lead", "agents", "runtime", "limits");
@@ -361,8 +362,8 @@ public final class FileConfigRepository implements ConfigRepository {
     private ModelRef modelRef(Path file, String key, JsonNode node) {
         String provider = node.path("provider").asText("");
         String model = node.path("model").asText("");
-        if (!PROVIDERS.contains(provider) || model.isBlank()) {
-            problem(file, "runtime." + key + " needs provider (one of " + new TreeSet<>(PROVIDERS) + ") and a model");
+        if (!PROVIDER.matcher(provider).matches() || model.isBlank()) {
+            problem(file, "runtime." + key + " needs a provider (e.g. ollama, openrouter; see 'buildcli provider list') and a model");
             return null;
         }
         return new ModelRef(provider, model);
