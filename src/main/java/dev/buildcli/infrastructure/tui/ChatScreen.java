@@ -54,7 +54,11 @@ final class ChatScreen implements Element {
     record Command(String name, String arg, String description, String shortcut) {}
 
     /** What the full-screen viewer shows. */
-    private record View(String title, List<String> lines, boolean diff, boolean numbered) {}
+    private record View(String title, List<String> lines, boolean diff, boolean numbered, long changes, boolean confirmUndo) {
+        View(String title, List<String> lines, boolean diff, boolean numbered) {
+            this(title, lines, diff, numbered, -1, false);
+        }
+    }
 
     static final List<Command> COMMANDS = List.of(
             new Command("diff", "[--staged] [path]", "Show uncommitted changes (git diff)", "Ctrl+G"),
@@ -65,8 +69,11 @@ final class ChatScreen implements Element {
             new Command("tasks", "", "Show what the team is doing: tasks and handoffs", "Ctrl+T"),
             new Command("stop", "", "Stop the team's current work", "Ctrl+X"),
             new Command("retry", "", "Send the last failed message again", ""),
+            new Command("review", "", "See the files agents changed in this chat", ""),
+            new Command("undo", "", "Put back the files an agent changed last (shows them first)", ""),
             new Command("queue", "[clear]", "Show or drop messages waiting their turn", ""),
             new Command("settings", "", "Providers, models, agents, theme and more", "F2"),
+            new Command("connect", "", "Connect a provider and choose the default model", ""),
             new Command("dm", "@agent", "Open a direct chat with an agent", ""),
             new Command("newgroup", "<name> [@agents]", "Create a group with some agents", ""),
             new Command("add", "@agent", "Add an agent to this group", ""),
@@ -124,6 +131,8 @@ final class ChatScreen implements Element {
     private String clearArmedFor;
     private ChatInfoView infoView;
     private boolean infoOpen;
+    private final ConnectView connectView;
+    private boolean connectOpen;
 
     ChatScreen(ChatSession session, Map<String, String> models, Path cwd, Runnable quit) {
         this(session, models, cwd, quit, basicServices(session, models));
@@ -140,7 +149,31 @@ final class ChatScreen implements Element {
             runCommand("/open " + file);
         });
         this.infoView = new ChatInfoView(session, () -> selected, this::select, () -> infoOpen = false, this::modelLabel);
+        this.connectView = new ConnectView(services, message -> {
+            connectOpen = false;
+            if (message != null) {
+                session.system(message);
+            }
+        });
         ensureSelection();
+        if (services.canConnect() && noModelAnywhere()) {
+            openConnect("None of your agents has a model yet. Connect one to start chatting; it takes a minute.");
+        }
+    }
+
+    /** Nothing to answer with: no default model, no agent with a model of its own, no --model on the command line. */
+    private boolean noModelAnywhere() {
+        return settings().defaultModel() == null && session.contacts().stream().allMatch(a -> modelLabel(a.name()).startsWith("no model"))
+                && models.values().stream().allMatch(v -> v.startsWith("no model"));
+    }
+
+    /** The connect screen: choose a provider and a model, test it, make it the default. @param why shown on top, or null */
+    private void openConnect(String why) {
+        settingsOpen = false;
+        infoOpen = false;
+        view = null;
+        connectView.open(why);
+        connectOpen = true;
     }
 
     /** Settings kept in memory, no providers or agent files: for tests and the demo. */
@@ -201,7 +234,7 @@ final class ChatScreen implements Element {
 
     /** True while something on screen moves by itself: an agent working (spinner, dots) or a preview loading. */
     boolean animating() {
-        return session.busy() || loadingPreviews;
+        return session.busy() || loadingPreviews || connectOpen && connectView.animating();
     }
 
     private volatile boolean loadingPreviews;
@@ -216,7 +249,7 @@ final class ChatScreen implements Element {
             return team;
         }
         String def = services.settings().defaultModel();
-        return def != null ? def : models.getOrDefault(agent, "no model: press F2 > Models");
+        return def != null ? def : models.getOrDefault(agent, "no model: type /connect");
     }
 
     private dev.buildcli.application.Settings settings() {
@@ -249,7 +282,10 @@ final class ChatScreen implements Element {
             }
         }
         Rect pane = new Rect(rect.x() + sideW + (sideW > 0 ? 1 : 0), rect.y(), rect.width() - sideW - (sideW > 0 ? 1 : 0), rect.height());
-        if (settingsOpen) {
+        if (connectOpen) {
+            connectView.render(buf, pane);
+            frame.clearCursor();
+        } else if (settingsOpen) {
             settingsView.render(buf, pane);
             frame.clearCursor();
         } else if (infoOpen) {
@@ -698,6 +734,7 @@ final class ChatScreen implements Element {
                 case USER -> userBubble(rows, width, m, m.id() == failed);
                 case AGENT -> agentBubble(rows, width, group && !sameAuthor ? clean(m.author()) : null, m.text(), TIME.format(m.at()), false);
                 case ACTIVITY -> activity(rows, width, m);
+                case CHANGES -> changesCard(rows, width, m);
                 case SYSTEM -> centred(rows, width, " " + clean(m.text()).replace('\n', ' ') + " ", st(Theme.DIM, Theme.PILL));
                 case ERROR -> problem(rows, width, m.text(), failed);
                 default -> { }
@@ -719,7 +756,66 @@ final class ChatScreen implements Element {
     }
 
     private static boolean isQuiet(Message m) {
-        return m.kind() == ChatSession.Kind.ACTIVITY || m.kind() == ChatSession.Kind.SYSTEM;
+        return m.kind() == ChatSession.Kind.ACTIVITY || m.kind() == ChatSession.Kind.SYSTEM || m.kind() == ChatSession.Kind.CHANGES;
+    }
+
+    /** "ana changed 2 files", with buttons to see exactly what changed and to put it back. */
+    private void changesCard(List<Row> rows, int width, Message m) {
+        boolean undone = m.state() == State.UNDONE;
+        var nets = dev.buildcli.application.tools.FileChanges.net(session.changes(m.id()));
+        int add = 0;
+        int del = 0;
+        for (var n : nets) {
+            int[] c = n.counts();
+            add += c[0];
+            del += c[1];
+        }
+        String stat = nets.isEmpty() ? "" : "  +" + add + " −" + del;
+        String text = (undone ? "↶ " : "✎ ") + clean(m.author()) + " " + clean(m.text()).replaceFirst("^Changed", "changed");
+        int room = Math.max(10, Math.min(width - 14 - Wrap.width(stat), 76));
+        String shown = CharWidth.truncateWithEllipsis(text, room, CharWidth.TruncatePosition.END);
+        Style pill = st(undone ? Theme.DIM : Theme.TEXT, Theme.PILL);
+        int w = Wrap.width(shown) + Wrap.width(stat) + 2;
+        rows.add(new Row(Math.max(0, (width - w) / 2), List.of(new Span(" " + shown, pill),
+                new Span(stat + " ", st(undone ? Theme.DIM : Theme.ACCENT, Theme.PILL)))));
+        List<Span> buttons = new ArrayList<>();
+        buttons.add(new Span(" Review ", st(Theme.TEXT, Theme.FIELD), () -> reviewChanges(m.id(), false)));
+        if (undone) {
+            buttons.add(new Span("  undone", st(Theme.DIM, Theme.BG).italic()));
+        } else if (session.canUndo()) {
+            buttons.add(new Span(" ", st(Theme.TEXT, Theme.BG)));
+            buttons.add(new Span(" Undo ", st(Theme.TEXT, Theme.FIELD), () -> reviewChanges(m.id(), true)));
+        }
+        int bw = Styled.width(buttons);
+        rows.add(new Row(Math.max(0, (width - bw) / 2), buttons));
+    }
+
+    /** Opens the files of a changes card as a diff. With {@code undo} it asks to confirm putting them back. */
+    private void reviewChanges(long id, boolean undo) {
+        var files = session.changes(id);
+        if (files.isEmpty()) {
+            session.system("These changes were not kept, so they cannot be shown.");
+            return;
+        }
+        List<String> lines = new ArrayList<>();
+        for (var n : dev.buildcli.application.tools.FileChanges.net(files)) {
+            lines.add("diff --git a/" + n.path() + " b/" + n.path());
+            lines.addAll(dev.buildcli.application.tools.FileChanges.diff(List.of(new dev.buildcli.domain.FileChange(
+                    n.agents().get(0), n.path(), n.existed(), n.before(), n.after()))).lines().toList());
+        }
+        String who = files.get(0).agent();
+        open(new View(undo ? "Undo " + who + "'s changes?" : who + "'s changes", lines, true, false, id, undo));
+    }
+
+    private void undoLast() {
+        long id = session.lastChanges(selected);
+        if (id < 0) {
+            session.system("No changes to undo in this chat.");
+        } else if (!session.canUndo()) {
+            session.system("Undo is not available here.");
+        } else {
+            reviewChanges(id, true);
+        }
     }
 
     private static void centred(List<Row> rows, int width, String text, Style style) {
@@ -763,7 +859,13 @@ final class ChatScreen implements Element {
             Runnable act = a[1].equals("agent") ? () -> {
                 settingsOpen = true;
                 settingsView.startNewAgent();
-            } : () -> settingsOpen = true;
+            } : () -> {
+                if (services.canConnect()) {
+                    openConnect(null);
+                } else {
+                    settingsOpen = true;
+                }
+            };
             String label = "  " + a[0];
             rows.add(new Row(x, List.of(new Span(label + " ".repeat(Math.max(1, boxW - Wrap.width(label) - 2)) + "› ", st(Theme.TEXT, Theme.PANEL), act))));
             rows.add(new Row(0, List.of()));
@@ -826,6 +928,10 @@ final class ChatScreen implements Element {
                 footer.add(new Span("! not sent ", st(Theme.RED, Theme.ME).bold()));
                 if (retryable) {
                     footer.add(new Span(" Retry ", st(Theme.BG, Theme.AMBER).bold(), () -> session.retry(m.id())));
+                    if (services.canConnect()) {
+                        footer.add(new Span(" ", meta));
+                        footer.add(new Span(" Change model ", st(Theme.TEXT, Theme.FIELD), () -> openConnect(null)));
+                    }
                 }
             }
             default -> { }
@@ -847,6 +953,10 @@ final class ChatScreen implements Element {
         List<Span> footer = new ArrayList<>();
         if (failed >= 0) {
             footer.add(new Span(" Retry ", st(Theme.BG, Theme.AMBER).bold(), () -> session.retry(failed)));
+        }
+        if (services.canConnect()) {
+            footer.add(new Span(" ", base));
+            footer.add(new Span(" Change model ", st(Theme.TEXT, Theme.FIELD), () -> openConnect("The last message failed: " + text)));
         }
         bubble(rows, width, false, "Something went wrong", Theme.RED, body, footer, base, base);
     }
@@ -1170,11 +1280,52 @@ final class ChatScreen implements Element {
                 + "   ↑↓ PgUp PgDn scroll" + (view.diff() ? " · [ ] previous/next file" : "") + " · Esc close";
         fill(buf, new Rect(r.x(), r.bottom() - 1, r.width(), 1), bar);
         put(buf, r.x() + 2, r.bottom() - 1, foot, st(Theme.DIM, Theme.SIDEBAR), r.right());
+        if (view.changes() >= 0) {
+            long id = view.changes();
+            Rect b = new Rect(r.x(), r.bottom() - 2, r.width(), 1);
+            fill(buf, b, st(Theme.TEXT, Theme.PANEL));
+            int x = r.x() + 2;
+            if (view.confirmUndo()) {
+                x += put(buf, x, b.y(), "Files you or another agent changed since are left alone.  ", st(Theme.DIM, Theme.PANEL), r.right());
+                x += put(buf, x, b.y(), " Undo  Y ", st(Theme.TEXT, Theme.DANGER).bold(), r.right());
+                hits.add(new Hit(new Rect(x - 9, b.y(), 9, 1), () -> undoChanges(id)));
+                x += put(buf, x + 1, b.y(), " Cancel  N ", st(Theme.TEXT, Theme.FIELD), r.right()) + 1;
+                hits.add(new Hit(new Rect(x - 11, b.y(), 11, 1), () -> view = null));
+            } else if (session.canUndo() && !undone(id)) {
+                int w = put(buf, x, b.y(), " Undo these changes  U ", st(Theme.TEXT, Theme.FIELD), r.right());
+                hits.add(new Hit(new Rect(x, b.y(), w, 1), () -> reviewChanges(id, true)));
+            }
+            viewHeight = Math.max(1, viewHeight - 1);
+        }
+    }
+
+    private boolean undone(long id) {
+        return session.messages().stream().anyMatch(m -> m.id() == id && m.state() == State.UNDONE);
+    }
+
+    private void undoChanges(long id) {
+        view = null;
+        session.undo(id);
     }
 
     private EventResult viewerKey(KeyEvent key) {
         KeyCode code = key.code();
         char ch = code == KeyCode.CHAR ? key.character() : 0;
+        if (view.changes() >= 0 && code == KeyCode.CHAR && !key.hasCtrl()) {
+            char c = Character.toLowerCase(ch);
+            if (view.confirmUndo() && c == 'y') {
+                undoChanges(view.changes());
+                return EventResult.HANDLED;
+            }
+            if (view.confirmUndo() && c == 'n') {
+                view = null;
+                return EventResult.HANDLED;
+            }
+            if (!view.confirmUndo() && c == 'u' && session.canUndo() && !undone(view.changes())) {
+                reviewChanges(view.changes(), true);
+                return EventResult.HANDLED;
+            }
+        }
         switch (code) {
             case ESCAPE -> view = null;
             case UP -> viewScroll--;
@@ -1294,6 +1445,14 @@ final class ChatScreen implements Element {
         KeyCode code = key.code();
         char ch = code == KeyCode.CHAR ? Character.toLowerCase(key.character()) : 0;
 
+        if (connectOpen) {
+            if (ctrl && ch == 'c') {
+                connectOpen = false;
+            } else {
+                connectView.key(key);
+            }
+            return EventResult.HANDLED;
+        }
         if (settingsOpen) {
             if (ctrl && ch == 'c') {
                 settingsOpen = false;
@@ -1577,6 +1736,15 @@ final class ChatScreen implements Element {
                         open(new View("Changes" + (arg.isEmpty() ? "" : "  " + arg), lines, true, false));
                     }
                 }
+                case "review" -> {
+                    long id = session.lastChanges(selected);
+                    if (id < 0) {
+                        session.system("No files changed by agents in this chat yet.");
+                    } else {
+                        reviewChanges(id, false);
+                    }
+                }
+                case "undo" -> undoLast();
                 case "status" -> open(new View("git status", LocalViews.status(cwd), false, false));
                 case "log" -> open(new View("Recent commits", LocalViews.log(cwd), false, false));
                 case "open" -> {
@@ -1611,6 +1779,7 @@ final class ChatScreen implements Element {
                 }
                 case "team" -> toggleSidebar();
                 case "settings" -> settingsOpen = true;
+                case "connect" -> openConnect(null);
                 case "info" -> openInfo(ChatInfoView.Mode.INFO);
                 case "dm" -> {
                     String who = firstMention(arg);
@@ -1746,6 +1915,10 @@ final class ChatScreen implements Element {
 
     @Override
     public EventResult handlePasteEvent(PasteEvent paste) {
+        if (connectOpen) {
+            connectView.paste(paste.text());
+            return EventResult.HANDLED;
+        }
         if (infoOpen) {
             infoView.paste(paste.text());
             return EventResult.HANDLED;
@@ -1787,6 +1960,10 @@ final class ChatScreen implements Element {
     public EventResult handleMouseEvent(MouseEvent m) {
         MouseEventKind kind = m.kind();
         boolean inPane = !(sideWidth > 0 && m.x() < area.x() + sideWidth);
+        if (connectOpen && inPane) {
+            connectView.mouse(m);
+            return EventResult.HANDLED;
+        }
         if (settingsOpen && inPane) {
             settingsView.mouse(m);
             return EventResult.HANDLED;
@@ -1842,6 +2019,10 @@ final class ChatScreen implements Element {
 
     String selectedForTest() {
         return selected;
+    }
+
+    boolean connectOpenForTest() {
+        return connectOpen;
     }
 
     boolean settingsOpenForTest() {

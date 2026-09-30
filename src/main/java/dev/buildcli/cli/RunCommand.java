@@ -130,7 +130,7 @@ final class RunCommand implements Callable<Integer> {
                 ModelRef ref = gateways.get().modelFor(a);
                 models.put(a.name(), ref.provider() + ":" + ref.model());
             } catch (IllegalStateException e) {
-                models.put(a.name(), "no model: press F2 to choose one");
+                models.put(a.name(), "no model: type /connect");
             }
         }
         // one lock for the whole chat: agents working in parallel share it
@@ -143,6 +143,7 @@ final class RunCommand implements Callable<Integer> {
                             workspaceLock),
                     setup.store, () -> setup.settings.number(dev.buildcli.application.Settings.AGENT_HOPS, 6), history);
             services.attach(session);
+            session.workspace(ctx.cwd, workspaceLock);
             try {
                 if (!text.isEmpty()) {
                     Chat target = teamName == null ? null : setup.group(teamName);

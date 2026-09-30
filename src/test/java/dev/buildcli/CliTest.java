@@ -129,7 +129,7 @@ class CliTest {
 
         Result create = cli("agent", "create", "dora", "--role", "tester", "--capabilities", "filesystem.read,command.execute");
         assertEquals(0, create.code, create.err);
-        assertTrue(create.out.contains("ask for your approval"));
+        assertTrue(create.out.contains("asks you to approve"));
         assertTrue(cli("agent", "list").out.contains("dora"));
         assertEquals(2, cli("agent", "create", "dora").code, "no overwrite");
         assertEquals(2, cli("agent", "create", "Bad Name").code);
@@ -167,6 +167,17 @@ class CliTest {
                 (ref, settings) -> new ScriptedGateway(), (session, models, services) -> launched.set(session));
         assertEquals(0, BuildCli.run(new String[] {"run"}, ctx));
         return launched.get();
+    }
+
+    @Test
+    void everySubcommandHasHelp() {
+        Result r = cli("agent", "create", "--help");
+        assertEquals(0, r.code, r.err);
+        assertTrue(r.out.contains("Usage: buildcli agent create"), r.out);
+        assertFalse(r.err.contains("Missing required parameter"), r.err);
+        Result created = cli("agent", "create", "lia");
+        assertTrue(created.out.contains("run 'buildcli' and chat with lia"), created.out);
+        assertFalse(created.out.contains("team"), "agents are not about teams any more: " + created.out);
     }
 
     @Test
@@ -274,7 +285,7 @@ class CliTest {
         assertEquals(1, r.code);
         assertTrue(r.err.contains("were not trusted, so nothing was run"), r.err);
         assertFalse(Files.exists(project.resolve("src/Hello.java")));
-        assertTrue(r.out.contains("Trust the agent definitions"), r.out);
+        assertTrue(r.out.contains("from the project?"), r.out);
         Result ok = cli(CliTest::happyScript, "", Map.of(), "run", "--headless", "--approve", "all", "add Hello");
         assertEquals(0, ok.code, ok.out + ok.err);
     }
