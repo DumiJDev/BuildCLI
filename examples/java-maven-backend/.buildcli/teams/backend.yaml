@@ -1,0 +1,10 @@
+schema: 1
+name: backend
+description: Architect, developer and reviewer.
+lead: ana
+agents: [ana, bruno, carla]
+runtime:
+  default: { provider: ollama, model: qwen2.5:7b }
+limits:
+  max_retries: 3
+  max_tokens_per_task: 30000

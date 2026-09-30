@@ -250,4 +250,40 @@ class FileConfigRepositoryTest {
         writeProject("agents/b.yaml", "schema: 1\nname: dup\nrole: r\n");
         assertTrue(anyContains(problems(this::load), "is also defined in"));
     }
+
+    @Test
+    void anInvalidGlobIsAConfigurationErrorNotARuntimeSurprise() throws IOException {
+        writeProject("agents/a.yaml", "schema: 1\nname: a\nrole: r\npermissions:\n  filesystem:\n    write: [\"src/[unclosed\"]\n");
+        assertTrue(anyContains(problems(this::load), "invalid glob 'src/[unclosed'"));
+    }
+
+    @Test
+    void aHugeDefinitionFileIsRefusedWithoutBeingRead() throws IOException {
+        writeProject("agents/big.yaml", "schema: 1\nname: big\nrole: r\ninstructions: \"" + "x".repeat((int) FileConfigRepository.MAX_FILE_BYTES) + "\"\n");
+        assertTrue(anyContains(problems(this::load), "larger than 256 KB"));
+    }
+
+    @Test
+    void aYamlAliasBombInsideAnIgnoredValueIsNotExpanded() throws IOException {
+        // Each level references the previous one nine times: 9^12 (~2.8e11) nodes if aliases were expanded.
+        StringBuilder bomb = new StringBuilder("schema: 1\nname: bomb\nrole: r\ndescription:\n  a0: &a0 [\"lol\", \"lol\", \"lol\"]\n");
+        for (int i = 1; i <= 12; i++) {
+            bomb.append("  a").append(i).append(": &a").append(i).append(" [");
+            for (int k = 0; k < 9; k++) {
+                bomb.append(k == 0 ? "" : ", ").append("*a").append(i - 1);
+            }
+            bomb.append("]\n");
+        }
+        writeProject("agents/bomb.yaml", bomb.toString());
+        long start = System.nanoTime();
+        boolean loadedOrRejected;
+        try {
+            loadedOrRejected = load().agent("bomb").isPresent();
+        } catch (ConfigException e) {
+            loadedOrRejected = true; // a clean rejection is fine too
+        }
+        long millis = (System.nanoTime() - start) / 1_000_000;
+        assertTrue(loadedOrRejected);
+        assertTrue(millis < 5_000, "the bomb must not be expanded: took " + millis + " ms");
+    }
 }

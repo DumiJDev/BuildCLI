@@ -152,7 +152,7 @@ public final class Orchestrator {
             try {
                 reply = llm.chatStreaming(agent, messages, specs, delta -> ui.onText(t.id, agent.name(), delta));
             } catch (RuntimeException e) {
-                throw new TaskFailure("LLM error: " + e.getMessage(), false);
+                throw new TaskFailure("LLM error: " + describe(e), false);
             }
             t.tokens += reply.inputTokens() + reply.outputTokens();
             events.emit("AgentInvoked", t.id, agent.name(), "step=" + step, reply.inputTokens(), reply.outputTokens());
@@ -183,6 +183,16 @@ public final class Orchestrator {
             }
         }
         throw new TaskFailure("max steps (" + limits.maxSteps() + ") reached without a final answer");
+    }
+
+    /** The first useful message in the cause chain: connection failures often carry theirs on the cause, or none at all. */
+    static String describe(Throwable t) {
+        for (Throwable c = t; c != null; c = c.getCause()) {
+            if (c.getMessage() != null && !c.getMessage().isBlank()) {
+                return c.getMessage();
+            }
+        }
+        return t.getClass().getSimpleName() + " (no details; is the model provider running and reachable? try 'buildcli doctor')";
     }
 
     /** The runtime validates the form and permissions of a handoff; it does not judge its quality. */

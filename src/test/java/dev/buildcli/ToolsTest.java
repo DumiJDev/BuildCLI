@@ -217,4 +217,39 @@ class ToolsTest {
         assertEquals(Set.of("PATH", "HOME", "LC_ALL", "SystemRoot"), filtered.keySet());
         assertFalse(filtered.containsKey("OPENAI_API_KEY"));
     }
+
+    @Test
+    void readingAHugeFileReturnsOnlyTheStartWithoutLoadingItAll() throws Exception {
+        Path big = ws.resolve("big.log");
+        try (var out = java.nio.file.Files.newBufferedWriter(big)) {
+            for (int i = 0; i < 200_000; i++) {
+                out.write("line " + i + " of a very large log file\n");
+            }
+        }
+        long size = Files.size(big);
+        assertTrue(size > 5_000_000, "the fixture is big: " + size);
+        String out = run(new dev.buildcli.application.tools.ReadFileTool(), agent(List.of("**"), Capability.FILESYSTEM_READ), true,
+                Map.of("path", "big.log"));
+        assertTrue(out.startsWith("line 0 of a very large log file\nline 1"), out.substring(0, 40));
+        assertTrue(out.length() < 5000, "the output is bounded: " + out.length());
+        assertTrue(out.contains("truncated"), "the model is told it is partial");
+    }
+
+    @Test
+    void overwritingAHugeFileDoesNotTryToDiffItInMemory() throws Exception {
+        Path big = ws.resolve("out/huge.txt");
+        Files.createDirectories(big.getParent());
+        try (var out = Files.newOutputStream(big)) {
+            byte[] chunk = new byte[1 << 20];
+            java.util.Arrays.fill(chunk, (byte) 'x');
+            for (int i = 0; i < 3; i++) {
+                out.write(chunk);
+            }
+        }
+        Agent writer = new Agent("bruno", "dev", "", Set.of(Capability.FILESYSTEM_WRITE),
+                new dev.buildcli.domain.Permissions(List.of("**"), List.of("out/**"), List.of(), Duration.ofSeconds(5)));
+        String out = run(new dev.buildcli.application.tools.WriteFileTool(), writer, true, Map.of("path", "out/huge.txt", "content", "small"));
+        assertTrue(out.startsWith("OK"), out);
+        assertTrue(approvals.get(0).detail().contains("too large to diff"), approvals.get(0).detail());
+    }
 }
