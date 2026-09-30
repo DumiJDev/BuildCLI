@@ -58,7 +58,7 @@ try {
 
 $launcher = Join-Path $binDir "buildcli.cmd"
 # A lean JVM for a CLI (serial GC, quick JIT, small stacks, a class-data archive made on the first run); BUILDCLI_JAVA_OPTS adds options
-Set-Content -Path $launcher -Encoding ASCII -Value "@echo off`r`njava -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xss512k -XX:+AutoCreateSharedArchive -XX:SharedArchiveFile=`"$jar.jsa`" -Xlog:cds=off -Xlog:cds+dynamic=off -Xlog:aot=off %BUILDCLI_JAVA_OPTS% -jar `"$jar`" %*"
+Set-Content -Path $launcher -Encoding ASCII -Value "@echo off`r`njava -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xss512k -XX:+AutoCreateSharedArchive -XX:SharedArchiveFile=`"$jar.jsa`" -Xlog:disable %BUILDCLI_JAVA_OPTS% -jar `"$jar`" %*"
 Write-Host "Installed: $launcher"
 & $launcher --version
 
