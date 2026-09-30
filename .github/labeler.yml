@@ -28,4 +28,4 @@ ci/cd:
 
 runtime:
   - changed-files:
-      - any-glob-to-any-file: ['spike/src/main/**']
+      - any-glob-to-any-file: ['src/main/**']
