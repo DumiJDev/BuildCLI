@@ -76,7 +76,7 @@ final class ChatScreen implements Element {
             new Command("rename", "<name>", "Rename this group", ""),
             new Command("info", "", "Group or contact info", ""),
             new Command("team", "", "Show or hide the chat list", "Ctrl+B"),
-            new Command("clear", "", "Clear the conversation from the screen", "Ctrl+L"),
+            new Command("clear", "", "Delete this chat's messages (asks you to confirm)", ""),
             new Command("help", "", "Keys, commands and tips", ""),
             new Command("quit", "", "Leave BuildCLI", "Ctrl+C"));
 
@@ -120,6 +120,8 @@ final class ChatScreen implements Element {
     private final SettingsServices services;
     private final SettingsView settingsView;
     private boolean settingsOpen;
+    /** The chat a first /clear was typed in; a second /clear there deletes it. */
+    private String clearArmedFor;
     private ChatInfoView infoView;
     private boolean infoOpen;
 
@@ -138,6 +140,7 @@ final class ChatScreen implements Element {
             runCommand("/open " + file);
         });
         this.infoView = new ChatInfoView(session, () -> selected, this::select, () -> infoOpen = false, this::modelLabel);
+        ensureSelection();
     }
 
     /** Settings kept in memory, no providers or agent files: for tests and the demo. */
@@ -196,13 +199,24 @@ final class ChatScreen implements Element {
         };
     }
 
+    /** True while something on screen moves by itself: an agent working (spinner, dots) or a preview loading. */
+    boolean animating() {
+        return session.busy() || loadingPreviews;
+    }
+
+    private volatile boolean loadingPreviews;
+
     private String modelLabel(String agent) {
         String own = services.settings().modelFor(agent);
         if (own != null) {
             return own;
         }
         String team = services.teamModel(agent);
-        return team != null ? team : services.settings().defaultModel() == null ? models.getOrDefault(agent, "") : services.settings().defaultModel();
+        if (team != null) {
+            return team;
+        }
+        String def = services.settings().defaultModel();
+        return def != null ? def : models.getOrDefault(agent, "no model: press F2 > Models");
     }
 
     private dev.buildcli.application.Settings settings() {
@@ -215,6 +229,7 @@ final class ChatScreen implements Element {
     public void render(Frame frame, Rect rect, RenderContext ctx) {
         area = rect;
         hits.clear();
+        ensureSelection();
         scrollTrack = Rect.ZERO;
         Theme.use(settings().get(dev.buildcli.application.Settings.THEME));
         Buffer buf = frame.buffer();
@@ -336,6 +351,20 @@ final class ChatScreen implements Element {
             }
         }
         return out;
+    }
+
+    /** Keeps a chat open: the first group or agent, once there is one (for example right after the first agent is created). */
+    private void ensureSelection() {
+        if (session.group(selected) != null || session.contact(selected) != null) {
+            return;
+        }
+        String first = session.defaultChat();
+        if (first != null) {
+            if (session.group(first) == null) {
+                session.openDirect(first);
+            }
+            select(first);
+        }
     }
 
     private void select(String thread) {
@@ -519,11 +548,11 @@ final class ChatScreen implements Element {
         }
         var group = session.group(selected);
         boolean team = group != null;
-        String name = team ? group.name() : selected;
+        String name = team ? group.name() : session.contact(selected) != null ? selected : "Welcome";
         Color c = team ? Theme.ACCENT : Theme.agentColor(selected);
         put(buf, x, r.y(), " " + (name.isEmpty() ? "?" : name.substring(0, 1).toUpperCase(Locale.ROOT)) + " ", st(Theme.BG, c).bold(), r.right());
         int nx = x + 4;
-        put(buf, nx, r.y(), title(selected), base.bold(), r.right() - 30);
+        put(buf, nx, r.y(), team || session.contact(selected) != null ? title(selected) : "Welcome", base.bold(), r.right() - 30);
         String sub;
         Style subStyle = st(Theme.DIM, Theme.PANEL);
         ChatSession.Live live = session.live(selected);
@@ -543,6 +572,8 @@ final class ChatScreen implements Element {
             }
             sb.append(sb.isEmpty() ? "you" : ", you");
             sub = sb.toString() + "   · click for group info";
+        } else if (session.contact(selected) == null) {
+            sub = "create an agent to start";
         } else {
             sub = "online · " + clean(roleOf(selected)) + " · " + clean(modelLabel(selected));
         }
@@ -577,9 +608,23 @@ final class ChatScreen implements Element {
         return who;
     }
 
+    private record RowsKey(long version, int width, String chat, String theme, boolean activity, boolean compact, long frame) {}
+
+    private RowsKey rowsKey;
+    private List<Row> rowsCache = List.of();
+
     private void drawConversation(Buffer buf, Rect r, List<Message> msgs) {
         int width = r.width() - 1;
-        List<Row> rows = chatRows(width, msgs);
+        // rebuilding every bubble is the costly part of a frame: reuse the rows until the chat changes or something moves
+        boolean moving = session.isActive(selected) || loadingPreviews;
+        var key = new RowsKey(session.version(), width, selected, Theme.current(), settings().flag(dev.buildcli.application.Settings.SHOW_ACTIVITY),
+                settings().flag(dev.buildcli.application.Settings.COMPACT), moving ? System.currentTimeMillis() / 100 : 0);
+        if (!key.equals(rowsKey)) {
+            loadingPreviews = false;
+            rowsCache = chatRows(width, msgs);
+            rowsKey = key;
+        }
+        List<Row> rows = rowsCache;
         int total = rows.size();
         int viewH = r.height();
         scrollMax = Math.max(0, total - viewH);
@@ -617,6 +662,10 @@ final class ChatScreen implements Element {
 
     private List<Row> chatRows(int width, List<Message> msgs) {
         List<Row> rows = new ArrayList<>();
+        if (session.group(selected) == null && session.contact(selected) == null) {
+            onboarding(rows, width);
+            return rows;
+        }
         if (msgs.isEmpty() && !session.isActive(selected)) {
             welcome(rows, width);
             return rows;
@@ -697,6 +746,29 @@ final class ChatScreen implements Element {
             spans.add(new Span(state + " ", st(Theme.DIM, Theme.THEM).italic()));
         }
         rows.add(new Row(2, spans));
+    }
+
+    /** No agents yet: BuildCLI is about agents, so the first thing to do is create one. */
+    private void onboarding(List<Row> rows, int width) {
+        centred(rows, width, "No agents yet", st(Theme.TEXT, Theme.BG).bold());
+        rows.add(new Row(0, List.of()));
+        centred(rows, width, "Agents are the people you chat with: each has a role and a model, and does only what you allow.",
+                st(Theme.DIM, Theme.BG));
+        rows.add(new Row(0, List.of()));
+        rows.add(new Row(0, List.of()));
+        int boxW = Math.min(width - 4, 56);
+        int x = Math.max(0, (width - boxW) / 2);
+        String[][] actions = {{"Create your first agent", "agent"}, {"Choose a model and provider", "settings"}};
+        for (String[] a : actions) {
+            Runnable act = a[1].equals("agent") ? () -> {
+                settingsOpen = true;
+                settingsView.startNewAgent();
+            } : () -> settingsOpen = true;
+            String label = "  " + a[0];
+            rows.add(new Row(x, List.of(new Span(label + " ".repeat(Math.max(1, boxW - Wrap.width(label) - 2)) + "› ", st(Theme.TEXT, Theme.PANEL), act))));
+            rows.add(new Row(0, List.of()));
+        }
+        centred(rows, width, "Or run 'buildcli init' in a terminal for three sample agents in a group.", st(Theme.FAINT, Theme.BG));
     }
 
     private void welcome(List<Row> rows, int width) {
@@ -859,6 +931,9 @@ final class ChatScreen implements Element {
     }
 
     private void attachmentLines(List<List<Span>> body, Attachment a, Style base, int max) {
+        if (Previews.loading(a)) {
+            loadingPreviews = true;
+        }
         String size = a.size() >= 1024 * 1024 ? a.size() / 1024 / 1024 + " MB" : Math.max(1, a.size() / 1024) + " KB";
         if (a.kind() == Attachment.Kind.IMAGE) {
             Previews.Image img = Previews.image(a);
@@ -1284,7 +1359,7 @@ final class ChatScreen implements Element {
                     return EventResult.HANDLED;
                 }
                 case 'l' -> {
-                    session.clearMessages();
+                    scrollOff = 0; // redraw at the latest message; deleting a chat is /clear, which asks first
                     return EventResult.HANDLED;
                 }
                 default -> { }
@@ -1463,6 +1538,9 @@ final class ChatScreen implements Element {
 
     void submit() {
         String text = input.text().strip();
+        if (!text.equals("/clear")) {
+            clearArmedFor = null;
+        }
         if (text.isEmpty() && attachments.isEmpty()) {
             return;
         }
@@ -1576,7 +1654,17 @@ final class ChatScreen implements Element {
                         session.renameGroup(selected, arg);
                     }
                 }
-                case "clear" -> session.clearMessages();
+                case "clear" -> {
+                    if (selected.equals(clearArmedFor)) {
+                        clearArmedFor = null;
+                        session.clearChat(selected);
+                    } else {
+                        clearArmedFor = selected;
+                        long n = session.messages().stream().filter(m -> m.thread().equals(selected)).count();
+                        session.system("This deletes the " + n + " message(s) of " + title(selected) + ", also from the saved history. "
+                                + "Type /clear again to confirm.");
+                    }
+                }
                 case "help" -> open(new View("Help", help(), false, false));
                 case "quit" -> quit.run();
                 default -> { }
