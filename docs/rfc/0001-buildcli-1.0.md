@@ -390,6 +390,12 @@ Each milestone has **acceptance criteria**; a milestone is closed only when they
 
 ### M2: LLM gateway and tools
 
+> **Status: implemented, one criterion open.** Tool registry (read, list, write with unified diff, search, git read/commit,
+> command under an argv policy), secret redaction, scrubbed subprocess environment, untrusted-output delimiting, trust
+> approval for project-defined agents, per-agent model routing and streaming, all covered by deterministic tests
+> (see [`docs/security-model.md`](../security-model.md)). **Not met:** running the demo scenario against a real local model;
+> the only model available (3B) is not reliable enough (see [`docs/m2-real-model-findings.md`](../m2-real-model-findings.md)).
+
 - LangChain4j port (Ollama + OpenAI-compatible), streaming, tool calling.
 - Tool runtime: filesystem, git, command (argv policy), approvals with diffs, redaction.
 

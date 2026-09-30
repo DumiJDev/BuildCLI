@@ -11,12 +11,13 @@ public final class Capability {
     public static final String FILESYSTEM_WRITE = "filesystem.write";
     public static final String SEARCH = "search";
     public static final String GIT_READ = "git.read";
+    public static final String GIT_COMMIT = "git.commit";
     public static final String COMMAND_EXECUTE = "command.execute";
     public static final String AGENT_HANDOFF = "agent.handoff";
 
     /** Every capability defined in 1.0. Unknown names in an agent file are rejected. */
     public static final Set<String> KNOWN = Set.of(
-            FILESYSTEM_READ, FILESYSTEM_WRITE, SEARCH, GIT_READ, COMMAND_EXECUTE, AGENT_HANDOFF);
+            FILESYSTEM_READ, FILESYSTEM_WRITE, SEARCH, GIT_READ, GIT_COMMIT, COMMAND_EXECUTE, AGENT_HANDOFF);
 
     private Capability() {}
 }

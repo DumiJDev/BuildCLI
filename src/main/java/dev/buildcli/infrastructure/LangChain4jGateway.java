@@ -16,19 +16,28 @@ import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.json.JsonArraySchema;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.request.json.JsonStringSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.ollama.OllamaChatModel;
 import dev.langchain4j.model.ollama.OllamaChatRequestParameters;
+import dev.langchain4j.model.ollama.OllamaStreamingChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
+import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
 
 /**
  * The only class that knows LangChain4j's chat API. Everything above it uses the neutral port types.
@@ -37,45 +46,96 @@ import java.util.UUID;
 public final class LangChain4jGateway implements LlmGateway {
     private static final ObjectMapper JSON = new ObjectMapper();
 
+    private static final Duration TIMEOUT = Duration.ofMinutes(2);
+
     private final ChatModel model;
+    private final StreamingChatModel streamingModel;
 
     public LangChain4jGateway(ChatModel model) {
+        this(model, null);
+    }
+
+    /** @param streamingModel may be null: then {@link #chatStreaming} reports the text only when it is complete */
+    public LangChain4jGateway(ChatModel model, StreamingChatModel streamingModel) {
         this.model = model;
+        this.streamingModel = streamingModel;
     }
 
     /** Local Ollama. {@code threads} is Ollama's num_thread (its 16-thread default was ~50x slower on the spike box). */
-    public static LangChain4jGateway ollama(String baseUrl, String modelName, int threads, double temperature) {
-        return new LangChain4jGateway(OllamaChatModel.builder()
-                .baseUrl(baseUrl)
-                .defaultRequestParameters(OllamaChatRequestParameters.builder()
-                        .modelName(modelName)
-                        .temperature(temperature)
-                        .maxOutputTokens(512)
-                        .numThread(threads)
-                        .build())
-                .timeout(Duration.ofMinutes(2))
-                .build());
+    public static LangChain4jGateway ollama(String baseUrl, String modelName, int threads, double temperature, boolean streaming) {
+        var params = OllamaChatRequestParameters.builder()
+                .modelName(modelName)
+                .temperature(temperature)
+                .maxOutputTokens(512)
+                .numThread(threads)
+                .build();
+        ChatModel chat = OllamaChatModel.builder().baseUrl(baseUrl).defaultRequestParameters(params).timeout(TIMEOUT).build();
+        StreamingChatModel stream = streaming
+                ? OllamaStreamingChatModel.builder().baseUrl(baseUrl).defaultRequestParameters(params).timeout(TIMEOUT).build()
+                : null;
+        return new LangChain4jGateway(chat, stream);
     }
 
     /** Any OpenAI-compatible endpoint (OpenAI, vLLM, LM Studio, Ollama's /v1, ...). The key comes from the caller. */
-    public static LangChain4jGateway openAiCompatible(String baseUrl, String apiKey, String modelName, double temperature) {
-        return new LangChain4jGateway(OpenAiChatModel.builder()
-                .baseUrl(baseUrl)
-                .apiKey(apiKey)
-                .modelName(modelName)
-                .temperature(temperature)
-                .maxCompletionTokens(512)
-                .timeout(Duration.ofMinutes(2))
-                .build());
+    public static LangChain4jGateway openAiCompatible(String baseUrl, String apiKey, String modelName, double temperature,
+            boolean streaming) {
+        ChatModel chat = OpenAiChatModel.builder().baseUrl(baseUrl).apiKey(apiKey).modelName(modelName)
+                .temperature(temperature).maxCompletionTokens(512).timeout(TIMEOUT).build();
+        StreamingChatModel stream = streaming
+                ? OpenAiStreamingChatModel.builder().baseUrl(baseUrl).apiKey(apiKey).modelName(modelName)
+                        .temperature(temperature).maxCompletionTokens(512).timeout(TIMEOUT).build()
+                : null;
+        return new LangChain4jGateway(chat, stream);
     }
 
     @Override
     public LlmReply chat(Agent agent, List<LlmMessage> messages, List<ToolSpec> tools) {
+        return toReply(model.chat(request(messages, tools)));
+    }
+
+    @Override
+    public LlmReply chatStreaming(Agent agent, List<LlmMessage> messages, List<ToolSpec> tools, Consumer<String> onText) {
+        if (streamingModel == null) {
+            return LlmGateway.super.chatStreaming(agent, messages, tools, onText);
+        }
+        CompletableFuture<ChatResponse> done = new CompletableFuture<>();
+        streamingModel.chat(request(messages, tools), new StreamingChatResponseHandler() {
+            @Override
+            public void onPartialResponse(String partial) {
+                onText.accept(partial);
+            }
+
+            @Override
+            public void onCompleteResponse(ChatResponse response) {
+                done.complete(response);
+            }
+
+            @Override
+            public void onError(Throwable error) {
+                done.completeExceptionally(error);
+            }
+        });
+        try {
+            return toReply(done.get(TIMEOUT.toMillis(), TimeUnit.MILLISECONDS));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("interrupted while waiting for the model", e);
+        } catch (ExecutionException e) {
+            throw new IllegalStateException(e.getCause() == null ? e.getMessage() : e.getCause().getMessage(), e.getCause());
+        } catch (TimeoutException e) {
+            throw new IllegalStateException("request timed out", e);
+        }
+    }
+
+    private static ChatRequest request(List<LlmMessage> messages, List<ToolSpec> tools) {
         ChatRequest.Builder request = ChatRequest.builder().messages(messages.stream().map(LangChain4jGateway::toLc).toList());
         if (!tools.isEmpty()) {
             request.toolSpecifications(tools.stream().map(LangChain4jGateway::toLc).toList());
         }
-        ChatResponse response = model.chat(request.build());
+        return request.build();
+    }
+
+    private static LlmReply toReply(ChatResponse response) {
         AiMessage ai = response.aiMessage();
         List<ToolCall> calls = new ArrayList<>();
         if (ai.hasToolExecutionRequests()) {
