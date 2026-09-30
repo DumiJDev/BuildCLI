@@ -110,8 +110,11 @@ public final class TamboUiApp extends ToolkitApp implements UserInterface {
             case "ApprovalGranted", "ApprovalDenied" -> taskStatus.put(e.taskId(), "RUNNING");
             case "AgentInvoked" -> {
                 for (String part : e.payload().split(" ")) {
-                    if (part.startsWith("in=")) inputTokens += Integer.parseInt(part.substring(3));
-                    if (part.startsWith("out=")) outputTokens += Integer.parseInt(part.substring(4));
+                    if (part.startsWith("in=")) {
+                        inputTokens += Integer.parseInt(part.substring(3));
+                    } else if (part.startsWith("out=")) {
+                        outputTokens += Integer.parseInt(part.substring(4));
+                    }
                 }
             }
             default -> {}
@@ -127,12 +130,23 @@ public final class TamboUiApp extends ToolkitApp implements UserInterface {
     private EventResult onKey(KeyEvent key) {
         Pending p = pending;
         if (p instanceof Pending.Approval a) {
-            if (key.isCharIgnoreCase('y')) { a.answer().complete(true); return EventResult.HANDLED; }
-            if (key.isCharIgnoreCase('n')) { a.answer().complete(false); return EventResult.HANDLED; }
+            if (key.isCharIgnoreCase('y') || key.isCharIgnoreCase('n')) {
+                a.answer().complete(key.isCharIgnoreCase('y'));
+                return EventResult.HANDLED;
+            }
         } else if (p instanceof Pending.Escalation esc) {
-            if (key.isCharIgnoreCase('r')) { esc.answer().complete(EscalationChoice.RETRY); return EventResult.HANDLED; }
-            if (key.isCharIgnoreCase('s')) { esc.answer().complete(EscalationChoice.SKIP); return EventResult.HANDLED; }
-            if (key.isCharIgnoreCase('a')) { esc.answer().complete(EscalationChoice.ABORT); return EventResult.HANDLED; }
+            EscalationChoice choice = null;
+            if (key.isCharIgnoreCase('r')) {
+                choice = EscalationChoice.RETRY;
+            } else if (key.isCharIgnoreCase('s')) {
+                choice = EscalationChoice.SKIP;
+            } else if (key.isCharIgnoreCase('a')) {
+                choice = EscalationChoice.ABORT;
+            }
+            if (choice != null) {
+                esc.answer().complete(choice);
+                return EventResult.HANDLED;
+            }
         } else if (key.isCharIgnoreCase('q') || key.isCtrlC()) {
             quit();
             return EventResult.HANDLED;

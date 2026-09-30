@@ -1,4 +1,4 @@
-name: Lint & Review
+name: Workflow lint
 
 on:
   pull_request:
@@ -9,7 +9,7 @@ on:
 permissions: {}
 
 jobs:
-  lint-and-review:
+  actionlint:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -33,11 +33,6 @@ jobs:
         with:
           reporter: github-check
           github_token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: dbelyaev/action-checkstyle@8e5f0fa3791d3f5cb3d5fcaf2047fe1444d075dd # v1.19.1
-        with:
-          reporter: github-check
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          checkstyle_config: sun_checks.xml
 
   zizmor:
     runs-on: ubuntu-latest

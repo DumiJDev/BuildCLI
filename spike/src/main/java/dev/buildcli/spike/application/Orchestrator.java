@@ -104,6 +104,7 @@ public final class Orchestrator {
                     return t.result;
                 }
                 case ABORT -> throw new RunAborted("aborted by the user at task #" + t.id + ": " + reason);
+                default -> throw new IllegalStateException("unknown escalation choice: " + choice);
             }
         }
     }
