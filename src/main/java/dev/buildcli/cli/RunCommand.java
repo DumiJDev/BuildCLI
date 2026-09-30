@@ -8,7 +8,7 @@ import dev.buildcli.application.ToolRuntime;
 import dev.buildcli.application.TrustGate;
 import dev.buildcli.domain.Agent;
 import dev.buildcli.domain.AgentUsage;
-import dev.buildcli.domain.Limits;
+import dev.buildcli.domain.Chat;
 import dev.buildcli.domain.ModelRef;
 import dev.buildcli.domain.Task;
 import dev.buildcli.domain.TaskStatus;
@@ -33,17 +33,17 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
-@Command(name = "run", description = "Run a request through a team or a single agent. On a terminal it opens the TUI.")
+@Command(name = "run", description = "Open the chat, or with --headless send one request to an agent or a group")
 final class RunCommand implements Callable<Integer> {
     private final CliContext ctx;
 
-    @Option(names = "--team", description = "The team to run (default: the only team, if there is one)")
+    @Option(names = {"--group", "--team"}, description = "Send the request to a group (default: the only group, if there is one)")
     String teamName;
 
-    @Option(names = "--agent", description = "Talk to a single agent directly instead of a team")
+    @Option(names = "--agent", description = "Send the request to one agent")
     String agentName;
 
-    @Option(names = "--model", description = "Model for agents the team did not configure, as provider:model (e.g. ollama:qwen2.5:7b)")
+    @Option(names = "--model", description = "Model for agents that have none, as provider:model (e.g. openrouter:openrouter/free)")
     String model;
 
     @Option(names = "--headless", description = "Plain-text output, no TUI (also used when there is no terminal)")
@@ -76,8 +76,8 @@ final class RunCommand implements Callable<Integer> {
         if (config == null) {
             return 2;
         }
-        Team team = resolveTeam(config);
-        if (team == null) {
+        if (agentName != null && teamName != null) {
+            ctx.err.println("error: use either --group or --agent, not both");
             return 2;
         }
         ModelRef fallback = null;
@@ -90,113 +90,105 @@ final class RunCommand implements Callable<Integer> {
             }
         }
         ProviderSettings settings = ctx.providerSettings().with(threads, temperature, !noStream);
-        ChatServices services = new ChatServices(ctx, config, team);
+        ChatSetup setup = new ChatSetup(ctx, config);
         final ModelRef fallbackModel = fallback;
-        // settings are read for every run, so a model chosen on the settings screen applies to the next message
-        java.util.function.Supplier<RoutingGateway> gateways = () -> new RoutingGateway(effectiveRouting(team, services.settings()),
-                fallbackModel, ref -> ctx.gateways.create(ref, settings));
+        // read for every run, so a model chosen on the settings screen applies to the next message
+        java.util.function.Supplier<RoutingGateway> gateways = () -> new RoutingGateway(setup.routing(), fallbackModel,
+                ref -> ctx.gateways.create(ref, settings));
         String text = request == null ? "" : String.join(" ", request).strip();
-        boolean tui = !headless && ctx.terminal;
-        Map<String, String> models = new LinkedHashMap<>();
-        for (Agent a : team.agents()) {
-            try {
-                ModelRef ref = gateways.get().modelFor(a);
-                models.put(a.name(), ref.provider() + ":" + ref.model());
-            } catch (IllegalStateException e) {
-                if (!tui) {
-                    ctx.err.println("error: " + e.getMessage());
-                    return 2;
-                }
-                models.put(a.name(), "no model: press F2 to choose one");
-            }
+        if (!headless && ctx.terminal) {
+            return chat(config, setup, gateways, text);
         }
-        if (tui) {
-            // one lock for the whole chat: agents working in parallel share it
-            var workspaceLock = new dev.buildcli.application.tools.WorkspaceLock();
-            // the conversation history lives in the project's state database, next to runs and events
-            try (SqliteRunStore history = SqliteRunStore.open(ctx.stateDb())) {
-                ChatSession session = new ChatSession(team, config.agents(),
-                        (chatTeam, req, ui, cancelled, dispatcher) -> runOnce(chatTeam, config, gateways.get(), req, ui, cancelled, dispatcher,
-                                workspaceLock),
-                        new dev.buildcli.infrastructure.FileChatStore(ctx.projectStateDir()),
-                        () -> services.settings().number(dev.buildcli.application.Settings.AGENT_HOPS, 6), history);
-                try {
-                    if (!text.isEmpty()) {
-                        session.submit(text, List.of(), agentName);
-                    }
-                    ctx.tui.launch(session, models, services);
-                } finally {
-                    session.close();
-                }
-            }
-            return 0;
-        }
-        RoutingGateway gateway = gateways.get();
         if (text.isEmpty()) {
             ctx.err.println("error: a request is required without the TUI, for example: buildcli run --headless \"add a health endpoint\"");
             return 2;
+        }
+        Team team = resolveTeam(config, setup);
+        if (team == null) {
+            return 2;
+        }
+        RoutingGateway gateway = gateways.get();
+        for (Agent a : team.agents()) {
+            try {
+                gateway.modelFor(a);
+            } catch (IllegalStateException e) {
+                ctx.err.println("error: " + e.getMessage());
+                return 2;
+            }
         }
         ConsoleUi.Policy policy = approve != null ? approve : ctx.terminal ? ConsoleUi.Policy.ASK : ConsoleUi.Policy.NONE;
         execute(team, config, gateway, text, new ConsoleUi(ctx.out, ctx.in, policy));
         return exit.get();
     }
 
-    /** The team's routing with the settings screen's choices on top: a model set for an agent wins; the default fills gaps. */
-    static dev.buildcli.domain.ModelRouting effectiveRouting(Team team, dev.buildcli.application.Settings settings) {
-        Map<String, ModelRef> overrides = new java.util.HashMap<>(team.routing().overrides());
-        for (Agent a : team.agents()) {
-            String m = settings.modelFor(a.name());
-            if (m != null) {
-                try {
-                    overrides.put(a.name(), BuildCli.parseModel(m));
-                } catch (IllegalArgumentException ignored) {
-                    // an unparsable value is shown on the settings screen; the team's model stays in use
-                }
-            }
-        }
-        ModelRef def = team.routing().defaultModel();
-        if (def == null && settings.defaultModel() != null) {
+    /** The chat UI. It opens with any number of agents, even none: they can be created from its settings screen. */
+    private int chat(ConfigRepository config, ChatSetup setup, java.util.function.Supplier<RoutingGateway> gateways, String text)
+            throws Exception {
+        Map<String, String> models = new LinkedHashMap<>();
+        for (Agent a : config.agents()) {
             try {
-                def = BuildCli.parseModel(settings.defaultModel());
-            } catch (IllegalArgumentException ignored) {
-                // as above
+                ModelRef ref = gateways.get().modelFor(a);
+                models.put(a.name(), ref.provider() + ":" + ref.model());
+            } catch (IllegalStateException e) {
+                models.put(a.name(), "no model: press F2 to choose one");
             }
         }
-        return new dev.buildcli.domain.ModelRouting(def, overrides);
+        // one lock for the whole chat: agents working in parallel share it
+        var workspaceLock = new dev.buildcli.application.tools.WorkspaceLock();
+        ChatServices services = new ChatServices(ctx, config, setup);
+        // the conversation history lives in the project's state database, next to runs and events
+        try (SqliteRunStore history = SqliteRunStore.open(ctx.stateDb())) {
+            ChatSession session = new ChatSession(config.agents(), setup.groups(), setup.limits(),
+                    (chatTeam, req, ui, cancelled, dispatcher) -> runOnce(chatTeam, config, gateways.get(), req, ui, cancelled, dispatcher,
+                            workspaceLock),
+                    setup.store, () -> setup.settings.number(dev.buildcli.application.Settings.AGENT_HOPS, 6), history);
+            services.attach(session);
+            try {
+                if (!text.isEmpty()) {
+                    Chat target = teamName == null ? null : setup.group(teamName);
+                    session.submit(text, List.of(), agentName != null ? agentName : target != null ? target.id() : null);
+                }
+                ctx.tui.launch(session, models, services);
+            } finally {
+                session.close();
+            }
+        }
+        return 0;
     }
 
-    private Team resolveTeam(ConfigRepository config) {
-        if (agentName != null && teamName != null) {
-            ctx.err.println("error: use either --team or --agent, not both");
-            return null;
-        }
+    /** Headless: --agent talks to one agent; --group (or --team) to a group; otherwise the only group, or the only agent. */
+    private Team resolveTeam(ConfigRepository config, ChatSetup setup) {
         if (agentName != null) {
             Agent a = config.agent(agentName).orElse(null);
             if (a == null) {
                 ctx.err.println("error: no agent named '" + agentName + "'. Available: " + config.agents().stream().map(Agent::name).toList());
                 return null;
             }
-            // Direct mode: the agent is its own team, so it cannot hand off. It keeps the model (and limits) of the first team
-            // that includes it, since the model belongs to team configuration.
-            Team home = config.teams().stream().filter(t -> t.agent(a.name()).isPresent()).findFirst().orElse(null);
-            return new Team("direct-" + a.name(), a.name(), List.of(a), home == null ? Limits.defaults() : home.limits(),
-                    home == null ? dev.buildcli.domain.ModelRouting.unspecified() : home.routing());
+            return new Team(a.name(), a.name(), List.of(a), setup.limits(), setup.routing());
         }
+        List<Chat> groups = setup.groups();
         if (teamName != null) {
-            Team t = config.team(teamName).orElse(null);
-            if (t == null) {
-                ctx.err.println("error: no team named '" + teamName + "'. Available: " + config.teams().stream().map(Team::name).toList());
+            Chat g = setup.group(teamName);
+            if (g == null || g.members().isEmpty()) {
+                ctx.err.println("error: no group named '" + teamName + "'. Available: " + groups.stream().map(Chat::name).toList());
+                return null;
             }
-            return t;
+            return setup.teamOf(g);
         }
-        if (config.teams().size() == 1) {
-            return config.teams().get(0);
+        if (config.agents().isEmpty()) {
+            ctx.err.println("error: there are no agents yet. Run 'buildcli init' for sample agents, or 'buildcli agent create <name>'.");
+            return null;
         }
-        if (config.teams().isEmpty()) {
-            ctx.err.println("error: no teams are defined. Run 'buildcli init' for a sample team.");
-        } else {
-            ctx.err.println("error: several teams are defined; choose one with --team " + config.teams().stream().map(Team::name).toList());
+        List<Chat> usable = groups.stream().filter(g -> !g.members().isEmpty()).toList();
+        if (usable.size() == 1) {
+            return setup.teamOf(usable.get(0));
         }
+        if (usable.isEmpty() && config.agents().size() == 1) {
+            Agent a = config.agents().get(0);
+            return new Team(a.name(), a.name(), List.of(a), setup.limits(), setup.routing());
+        }
+        ctx.err.println("error: choose who to ask with --agent " + config.agents().stream().map(Agent::name).toList()
+                + (usable.isEmpty() ? "" : " or --group " + usable.stream().map(Chat::name).toList()));
         return null;
     }
 

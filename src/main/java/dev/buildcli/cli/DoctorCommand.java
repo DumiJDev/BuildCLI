@@ -2,7 +2,6 @@ package dev.buildcli.cli;
 
 import dev.buildcli.domain.Agent;
 import dev.buildcli.domain.ModelRef;
-import dev.buildcli.domain.Team;
 import dev.buildcli.infrastructure.OllamaProbe;
 import dev.buildcli.infrastructure.ProviderSettings;
 import dev.buildcli.ports.ConfigException;
@@ -12,7 +11,6 @@ import java.nio.file.Files;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
-import java.util.TreeSet;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 import picocli.CommandLine.Command;
@@ -58,31 +56,31 @@ final class DoctorCommand implements Callable<Integer> {
         ProviderSettings settings = ctx.providerSettings();
         boolean usesOllama = true;
         java.util.TreeSet<String> cloud = new java.util.TreeSet<>();
-        if (config != null && !config.teams().isEmpty()) {
+        java.util.TreeSet<String> wantedOllama = new java.util.TreeSet<>();
+        if (config != null && !config.agents().isEmpty()) {
             usesOllama = false;
-            for (Team t : config.teams()) {
-                for (Agent a : t.agents()) {
-                    ModelRef ref = t.routing().forAgent(a.name());
-                    if (ref == null) {
-                        warn("team '" + t.name() + "': agent '" + a.name() + "' has no model (set runtime.default in the team file"
-                                + " or pass --model when running)");
-                    } else if (ref.provider().equals("ollama")) {
-                        usesOllama = true;
-                    } else {
-                        cloud.add(ref.provider());
-                    }
+            var routing = new ChatSetup(ctx, config).routing();
+            for (Agent a : config.agents()) {
+                ModelRef ref = routing.forAgent(a.name());
+                if (ref == null) {
+                    warn("agent '" + a.name() + "' has no model: choose one in the chat's settings (F2 > Models) or pass --model");
+                } else if (ref.provider().equals("ollama")) {
+                    usesOllama = true;
+                    wantedOllama.add(ref.model());
+                } else {
+                    cloud.add(ref.provider());
                 }
             }
         }
         if (usesOllama) {
-            checkOllama(settings, config);
+            checkOllama(settings, wantedOllama);
         }
         for (String name : cloud) {
             var spec = settings.registry().find(name).orElse(null);
             if (spec == null) {
-                fail("a team uses provider '" + name + "', which is not known (see 'buildcli provider list')");
+                fail("an agent uses provider '" + name + "', which is not known (see 'buildcli provider list')");
             } else if (spec.needsKey() && ctx.env.getOrDefault(spec.apiKeyEnv(), "").isBlank()) {
-                warn("a team uses '" + name + "' but " + spec.apiKeyEnv() + " is not set");
+                warn("an agent uses '" + name + "' but " + spec.apiKeyEnv() + " is not set");
             } else {
                 ok("provider '" + name + "' is configured (" + spec.baseUrl() + ")");
             }
@@ -124,10 +122,10 @@ final class DoctorCommand implements Callable<Integer> {
     private ConfigRepository checkConfig() {
         try {
             var config = new dev.buildcli.infrastructure.FileConfigRepository(ctx.cwd, ctx.globalDir());
-            if (config.agents().isEmpty() && config.teams().isEmpty()) {
-                warn("no agents or teams defined: run 'buildcli init' for a sample team");
+            if (config.agents().isEmpty()) {
+                warn("no agents yet: run 'buildcli init' for three sample agents, or create one in the chat (F2 > Agents)");
             } else {
-                ok(config.agents().size() + " agent(s) and " + config.teams().size() + " team(s) loaded, configuration is valid");
+                ok(config.agents().size() + " agent(s) loaded, configuration is valid");
             }
             return config;
         } catch (ConfigException e) {
@@ -137,23 +135,13 @@ final class DoctorCommand implements Callable<Integer> {
         }
     }
 
-    private void checkOllama(ProviderSettings settings, ConfigRepository config) {
+    private void checkOllama(ProviderSettings settings, java.util.Set<String> wanted) {
         Optional<List<String>> models = OllamaProbe.listModels(settings.ollamaUrl(), Duration.ofSeconds(2));
         if (models.isEmpty()) {
             warn("Ollama is not reachable at " + settings.ollamaUrl() + " (only needed for the ollama provider; set OLLAMA_HOST if it runs elsewhere)");
             return;
         }
         ok("Ollama at " + settings.ollamaUrl() + " has " + models.get().size() + " model(s): " + String.join(", ", models.get()));
-        if (config == null) {
-            return;
-        }
-        TreeSet<String> wanted = new TreeSet<>();
-        config.teams().forEach(t -> t.agents().forEach(a -> {
-            ModelRef ref = t.routing().forAgent(a.name());
-            if (ref != null && ref.provider().equals("ollama")) {
-                wanted.add(ref.model());
-            }
-        }));
         for (String m : wanted) {
             boolean present = models.get().stream().anyMatch(n -> n.equals(m) || n.equals(m + ":latest"));
             if (present) {

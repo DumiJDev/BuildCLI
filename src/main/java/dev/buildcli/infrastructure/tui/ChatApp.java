@@ -31,7 +31,7 @@ public final class ChatApp extends ToolkitApp {
 
     @Override
     protected void onStart() {
-        setWindowTitle("BuildCLI · " + session.team().name());
+        setWindowTitle("BuildCLI");
         runner().focusManager().setFocus("chat");
     }
 
