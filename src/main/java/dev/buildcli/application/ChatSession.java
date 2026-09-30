@@ -142,6 +142,7 @@ public final class ChatSession implements UserInterface {
                     return;
                 }
                 current = job;
+                touch();
                 RUN.set(job.run());
                 try {
                     job.body().run();
@@ -149,7 +150,6 @@ public final class ChatSession implements UserInterface {
                     RUN.remove();
                     current = null;
                     state.put(name, "idle");
-                    pending.decrementAndGet();
                 }
             }
         }
@@ -202,6 +202,8 @@ public final class ChatSession implements UserInterface {
     private final List<Run> runs = new CopyOnWriteArrayList<>();
     private final List<Pending> pending = new CopyOnWriteArrayList<>();
     private final AtomicLong ids = new AtomicLong();
+    /** Goes up on every change a screen could show, so a front end redraws only when something changed. */
+    private final AtomicLong version = new AtomicLong();
     private final AtomicInteger inputTokens = new AtomicInteger();
     private final AtomicInteger outputTokens = new AtomicInteger();
     private volatile boolean closed;
@@ -271,6 +273,7 @@ public final class ChatSession implements UserInterface {
 
     /** A new agent (created on the settings screen) becomes a contact at once. */
     public void addContact(Agent agent) {
+        touch();
         contacts.put(agent.name(), agent);
         actors.computeIfAbsent(agent.name(), Actor::new);
         state.putIfAbsent(agent.name(), "idle");
@@ -351,8 +354,18 @@ public final class ChatSession implements UserInterface {
         }
     }
 
+    /** A number that changes whenever anything visible changes: messages, typing, presence, questions, groups. */
+    public long version() {
+        return version.get();
+    }
+
+    private void touch() {
+        version.incrementAndGet();
+    }
+
     /** Keeps a new or changed message, except local notes (help, command errors) that belong to no chat. */
     private void persist(Message m) {
+        touch();
         if (writer != null && !m.thread().equals(EVERYWHERE)) {
             writes.add(m);
         }
@@ -512,6 +525,7 @@ public final class ChatSession implements UserInterface {
     }
 
     public void openDirect(String agent) {
+        touch();
         if (contacts.containsKey(agent)) {
             synchronized (lock) {
                 directs.add(agent);
@@ -627,6 +641,7 @@ public final class ChatSession implements UserInterface {
             }
             groups.put(id, change.apply(g));
         }
+        touch();
         saveGroups();
     }
 
@@ -1114,6 +1129,7 @@ public final class ChatSession implements UserInterface {
         var answer = new CompletableFuture<Boolean>();
         Pending p = new Pending.Approval(request, answer, threadNow());
         pending.add(p);
+        touch();
         state.put(request.agent(), "waiting for you");
         try {
             return answer.get();
@@ -1121,6 +1137,7 @@ public final class ChatSession implements UserInterface {
             return false;
         } finally {
             pending.remove(p);
+            touch();
             state.put(request.agent(), "working");
         }
     }
@@ -1134,6 +1151,7 @@ public final class ChatSession implements UserInterface {
         var answer = new CompletableFuture<EscalationChoice>();
         Pending p = new Pending.Escalation(taskId, agent, objective, reason, answer, threadNow());
         pending.add(p);
+        touch();
         try {
             return answer.get();
         } catch (Exception e) {
@@ -1160,6 +1178,7 @@ public final class ChatSession implements UserInterface {
 
     @Override
     public void onText(int taskId, String agent, String delta) {
+        touch();
         synchronized (live) {
             live.computeIfAbsent(agent, k -> new StringBuilder()).append(delta);
             liveThread.put(agent, threadNow());
@@ -1169,6 +1188,7 @@ public final class ChatSession implements UserInterface {
 
     @Override
     public void onEvent(Event e) {
+        touch();
         synchronized (lock) {
             events.add(e);
             if (events.size() > MAX_EVENTS) {

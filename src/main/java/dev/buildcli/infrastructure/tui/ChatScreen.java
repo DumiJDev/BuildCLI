@@ -199,6 +199,13 @@ final class ChatScreen implements Element {
         };
     }
 
+    /** True while something on screen moves by itself: an agent working (spinner, dots) or a preview loading. */
+    boolean animating() {
+        return session.busy() || loadingPreviews;
+    }
+
+    private volatile boolean loadingPreviews;
+
     private String modelLabel(String agent) {
         String own = services.settings().modelFor(agent);
         if (own != null) {
@@ -601,9 +608,23 @@ final class ChatScreen implements Element {
         return who;
     }
 
+    private record RowsKey(long version, int width, String chat, String theme, boolean activity, boolean compact, long frame) {}
+
+    private RowsKey rowsKey;
+    private List<Row> rowsCache = List.of();
+
     private void drawConversation(Buffer buf, Rect r, List<Message> msgs) {
         int width = r.width() - 1;
-        List<Row> rows = chatRows(width, msgs);
+        // rebuilding every bubble is the costly part of a frame: reuse the rows until the chat changes or something moves
+        boolean moving = session.isActive(selected) || loadingPreviews;
+        var key = new RowsKey(session.version(), width, selected, Theme.current(), settings().flag(dev.buildcli.application.Settings.SHOW_ACTIVITY),
+                settings().flag(dev.buildcli.application.Settings.COMPACT), moving ? System.currentTimeMillis() / 100 : 0);
+        if (!key.equals(rowsKey)) {
+            loadingPreviews = false;
+            rowsCache = chatRows(width, msgs);
+            rowsKey = key;
+        }
+        List<Row> rows = rowsCache;
         int total = rows.size();
         int viewH = r.height();
         scrollMax = Math.max(0, total - viewH);
@@ -910,6 +931,9 @@ final class ChatScreen implements Element {
     }
 
     private void attachmentLines(List<List<Span>> body, Attachment a, Style base, int max) {
+        if (Previews.loading(a)) {
+            loadingPreviews = true;
+        }
         String size = a.size() >= 1024 * 1024 ? a.size() / 1024 / 1024 + " MB" : Math.max(1, a.size() / 1024) + " KB";
         if (a.kind() == Attachment.Kind.IMAGE) {
             Previews.Image img = Previews.image(a);
