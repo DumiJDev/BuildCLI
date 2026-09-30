@@ -18,6 +18,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -30,7 +31,7 @@ class OrchestratorTest {
             Set.of("filesystem.read", "agent.handoff"), Permissions.none());
     static final Agent BRUNO = new Agent("bruno", "developer", "You implement.",
             Set.of("filesystem.read", "filesystem.write", "command.execute"),
-            new Permissions(List.of("out/**"), List.of(List.of("ls"), List.of("cat", "out/hello.txt")), Duration.ofSeconds(10)));
+            new Permissions(List.of("out/**"), List.of(List.of("java", "-version")), Duration.ofSeconds(30)));
 
     @BeforeEach
     void setUp() {
@@ -56,7 +57,7 @@ class OrchestratorTest {
         var llm = new ScriptedGateway()
                 .call("ana", "handoff", Map.of("to", "bruno", "objective", "write out/hello.txt", "brief", "hi"))
                 .call("bruno", "write_file", Map.of("path", "out/hello.txt", "content", "hello"))
-                .call("bruno", "run_command", Map.of("argv", List.of("cat", "out/hello.txt")))
+                .call("bruno", "run_command", Map.of("argv", List.of("java", "-version")))
                 .say("bruno", "done: file written and verified")
                 .say("ana", "Bruno finished.");
         var ui = ui(true, EscalationChoice.ABORT);
@@ -65,7 +66,7 @@ class OrchestratorTest {
         assertEquals(TaskStatus.DONE, root.status);
         assertEquals("hello", Files.readString(workspace.resolve("out/hello.txt")));
         assertEquals(1, count(ui, "HandoffCreated"));
-        assertEquals(1, ui.approvals.size(), "only the write needs approval; cat is on the allow list");
+        assertEquals(1, ui.approvals.size(), "only the write needs approval; java -version is on the allow list");
         assertEquals(store.list("run1").size(), ui.events.size(), "every event is persisted");
     }
 
@@ -279,5 +280,25 @@ class OrchestratorTest {
         Task root = orch(llm, ui, Limits.defaults()).run("go");
         assertEquals(TaskStatus.DONE, root.status);
         assertEquals(3, count(ui, "HandoffCreated"), "the 4th handoff is rejected by the runtime");
+    }
+
+    @Test
+    void symlinkInsideTheWorkspaceCannotEscapeIt() throws Exception {
+        Path outside = Files.createTempDirectory("outside-");
+        Files.createDirectories(workspace.resolve("out"));
+        try {
+            Files.createSymbolicLink(workspace.resolve("out/link"), outside);
+        } catch (UnsupportedOperationException | java.io.IOException e) {
+            Assumptions.abort("symlinks not available on this platform/user: " + e);
+        }
+        var llm = new ScriptedGateway()
+                .call("ana", "handoff", Map.of("to", "bruno", "objective", "x"))
+                .call("bruno", "write_file", Map.of("path", "out/link/pwned.txt", "content", "x"))
+                .say("bruno", "ok")
+                .say("ana", "ok");
+        var ui = ui(true, EscalationChoice.ABORT);
+        orch(llm, ui, Limits.defaults()).run("go");
+        assertFalse(Files.exists(outside.resolve("pwned.txt")), "write escaped through the symlink");
+        assertTrue(ui.approvals.isEmpty(), "must be refused before asking the user");
     }
 }

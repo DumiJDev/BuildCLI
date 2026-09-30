@@ -10,6 +10,7 @@ import dev.buildcli.spike.ports.UserInterface;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
+import java.nio.file.LinkOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -158,11 +159,21 @@ public final class ToolRuntime {
         return granted;
     }
 
-    /** Confines every path to the workspace root. */
-    private Path resolve(String rel) {
+    /**
+     * Confines every path to the workspace root, including through symlinks: the deepest existing ancestor is
+     * resolved to its real path and must still be inside the (real) workspace.
+     */
+    private Path resolve(String rel) throws IOException {
         Path p = workspace.resolve(rel).normalize();
         if (!p.startsWith(workspace)) {
             throw new IllegalArgumentException("path escapes the workspace: " + rel);
+        }
+        Path existing = p;
+        while (existing != null && !Files.exists(existing, LinkOption.NOFOLLOW_LINKS)) {
+            existing = existing.getParent();
+        }
+        if (existing != null && !existing.toRealPath().startsWith(workspace.toRealPath())) {
+            throw new IllegalArgumentException("path escapes the workspace through a symlink: " + rel);
         }
         return p;
     }
