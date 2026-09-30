@@ -483,6 +483,7 @@ public final class ChatSession implements UserInterface {
         }
         String history = history(run.messageId, run.thread);
         int before = messages().size();
+        state.put(me, "thinking");
         try {
             Task root = executor.execute(new Orchestrator.Request(text, target, history, attachments), this, run.stop::get, dispatcher);
             flushLive(me);
@@ -572,7 +573,7 @@ public final class ChatSession implements UserInterface {
             state.put(from, "waiting for " + to);
             try {
                 target.inbox.add(new Job(run, () -> {
-                    state.put(to, "reading");
+                    state.put(to, "thinking");
                     try {
                         answer.complete(work.get());
                     } catch (Throwable t) {

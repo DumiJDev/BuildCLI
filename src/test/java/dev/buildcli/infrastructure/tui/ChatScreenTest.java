@@ -234,6 +234,42 @@ class ChatScreenTest {
     }
 
     @Test
+    void settingsOpenFromTheCommandAndChangeTheThemeLive() {
+        var screen = screen(session());
+        render(screen, 120, 36);
+        type(screen, "/settings");
+        key(screen, KeyCode.ENTER);
+        assertTrue(screen.settingsOpenForTest());
+        String out = render(screen, 120, 36);
+        assertTrue(out.contains("Settings") && out.contains("Appearance") && out.contains("Providers"), out);
+        type(screen, "2");
+        key(screen, KeyCode.ENTER);
+        render(screen, 120, 36);
+        assertEquals("light", Theme.current());
+        key(screen, KeyCode.ESCAPE);
+        assertFalse(screen.settingsOpenForTest());
+        Theme.use("dark");
+    }
+
+    @Test
+    void withEnterSendsOffEnterAddsALineAndAltEnterSends() throws Exception {
+        var s = session();
+        var screen = screen(s);
+        render(screen, 120, 36);
+        type(screen, "/settings");
+        key(screen, KeyCode.ENTER);
+        key(screen, KeyCode.ENTER); // General > Enter sends: on -> off
+        key(screen, KeyCode.ESCAPE);
+        type(screen, "a");
+        key(screen, KeyCode.ENTER);
+        type(screen, "b");
+        assertEquals("a\nb", screen.inputForTest().text());
+        screen.handleKeyEvent(KeyEvent.ofKey(KeyCode.ENTER, KeyModifiers.ALT), true);
+        idle(s);
+        assertEquals(List.of("a\nb"), requests);
+    }
+
+    @Test
     void aTinyTerminalGetsAMessageNotACrash() {
         assertTrue(render(screen(session()), 30, 8).contains("Terminal too small"));
     }

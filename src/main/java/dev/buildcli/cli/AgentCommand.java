@@ -128,7 +128,7 @@ final class AgentCommand implements Callable<Integer> {
                 return 2;
             }
             Files.createDirectories(file.getParent());
-            Files.writeString(file, template(caps), StandardCharsets.UTF_8);
+            Files.writeString(file, template(name, role, caps, ""), StandardCharsets.UTF_8);
             ctx.out.println("created  " + file);
             ctx.out.println("Edit its instructions and permissions, then add it to a team with 'buildcli team create'.");
             if (!global) {
@@ -137,7 +137,10 @@ final class AgentCommand implements Callable<Integer> {
             return 0;
         }
 
-        private String template(List<String> caps) {
+        /** The agent file; {@code how} is the instructions, or a placeholder telling the user what to write there. */
+        static String template(String name, String role, List<String> caps, String how) {
+            String body = how == null || how.isBlank()
+                    ? "Describe how this agent should behave: its responsibility, what it must not do, and how it reports back." : how.strip();
             return """
                     ---
                     schema: 1
@@ -148,8 +151,8 @@ final class AgentCommand implements Callable<Integer> {
                       filesystem:
                         read: ["**"]
                     ---
-                    Describe how this agent should behave: its responsibility, what it must not do, and how it reports back.
-                    """.formatted(name, role, String.join(", ", caps));
+                    %s
+                    """.formatted(name, role, String.join(", ", caps), body);
         }
     }
 

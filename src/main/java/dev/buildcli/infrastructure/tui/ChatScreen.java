@@ -66,7 +66,8 @@ final class ChatScreen implements Element {
             new Command("stop", "", "Stop the team's current work", "Ctrl+X"),
             new Command("retry", "", "Send the last failed message again", ""),
             new Command("queue", "[clear]", "Show or drop messages waiting their turn", ""),
-            new Command("team", "", "Show or hide the team sidebar", "Ctrl+B"),
+            new Command("settings", "", "Providers, models, agents, theme and more", "F2"),
+            new Command("team", "", "Show or hide the chat list", "Ctrl+B"),
             new Command("clear", "", "Clear the conversation from the screen", "Ctrl+L"),
             new Command("help", "", "Keys, commands and tips", ""),
             new Command("quit", "", "Leave BuildCLI", "Ctrl+C"));
@@ -108,11 +109,93 @@ final class ChatScreen implements Element {
     private int inputFirstRow;
     private int inputWidth = 40;
 
+    private final SettingsServices services;
+    private final SettingsView settingsView;
+    private boolean settingsOpen;
+
     ChatScreen(ChatSession session, Map<String, String> models, Path cwd, Runnable quit) {
+        this(session, models, cwd, quit, basicServices(session, models));
+    }
+
+    ChatScreen(ChatSession session, Map<String, String> models, Path cwd, Runnable quit, SettingsServices services) {
         this.session = session;
         this.models = models;
         this.cwd = cwd;
         this.quit = quit;
+        this.services = services;
+        this.settingsView = new SettingsView(services, () -> settingsOpen = false, file -> {
+            settingsOpen = false;
+            runCommand("/open " + file);
+        });
+    }
+
+    /** Settings kept in memory, no providers or agent files: for tests and the demo. */
+    static SettingsServices basicServices(ChatSession session, Map<String, String> models) {
+        dev.buildcli.application.Settings settings = dev.buildcli.application.Settings.defaults();
+        return new SettingsServices() {
+            @Override
+            public dev.buildcli.application.Settings settings() {
+                return settings;
+            }
+
+            @Override
+            public List<Provider> providers() {
+                return List.of();
+            }
+
+            @Override
+            public void addProvider(String name, String url, String keyEnv) {
+                throw new IllegalStateException("not available in the demo");
+            }
+
+            @Override
+            public void removeProvider(String name) {
+                throw new IllegalStateException("not available in the demo");
+            }
+
+            @Override
+            public java.util.concurrent.CompletableFuture<String> test(String model) {
+                return java.util.concurrent.CompletableFuture.completedFuture("not available in the demo");
+            }
+
+            @Override
+            public java.util.concurrent.CompletableFuture<dev.buildcli.infrastructure.ModelCatalog.Result> models(String provider) {
+                return java.util.concurrent.CompletableFuture.completedFuture(new dev.buildcli.infrastructure.ModelCatalog.Result(List.of(), null));
+            }
+
+            @Override
+            public List<AgentInfo> agents() {
+                return session.team().agents().stream().map(a -> new AgentInfo(a.name(), a.role(), "built in", "", List.copyOf(a.capabilities()))).toList();
+            }
+
+            @Override
+            public String createAgent(String name, String role, String instructions, List<String> capabilities, boolean global) {
+                throw new IllegalStateException("not available in the demo");
+            }
+
+            @Override
+            public void deleteAgent(String name) {
+                throw new IllegalStateException("not available in the demo");
+            }
+
+            @Override
+            public String teamModel(String agent) {
+                return models.get(agent);
+            }
+        };
+    }
+
+    private String modelLabel(String agent) {
+        String own = services.settings().modelFor(agent);
+        if (own != null) {
+            return own;
+        }
+        String team = services.teamModel(agent);
+        return team != null ? team : services.settings().defaultModel() == null ? models.getOrDefault(agent, "") : services.settings().defaultModel();
+    }
+
+    private dev.buildcli.application.Settings settings() {
+        return services.settings();
     }
 
     // ---- Element ----
@@ -122,6 +205,7 @@ final class ChatScreen implements Element {
         area = rect;
         hits.clear();
         scrollTrack = Rect.ZERO;
+        Theme.use(settings().get(dev.buildcli.application.Settings.THEME));
         Buffer buf = frame.buffer();
         fill(buf, rect, Theme.on(Theme.TEXT, Theme.BG));
         if (rect.width() < 44 || rect.height() < 12) {
@@ -135,11 +219,14 @@ final class ChatScreen implements Element {
         if (sideW > 0) {
             drawChatList(buf, new Rect(rect.x(), rect.y(), sideW, rect.height()), all);
             for (int y = rect.y(); y < rect.bottom(); y++) {
-                put(buf, rect.x() + sideW, y, "│", st(Color.rgb(34, 45, 52), Theme.BG), rect.right());
+                put(buf, rect.x() + sideW, y, "│", st(Theme.LINE, Theme.BG), rect.right());
             }
         }
         Rect pane = new Rect(rect.x() + sideW + (sideW > 0 ? 1 : 0), rect.y(), rect.width() - sideW - (sideW > 0 ? 1 : 0), rect.height());
-        if (view != null) {
+        if (settingsOpen) {
+            settingsView.render(buf, pane);
+            frame.clearCursor();
+        } else if (view != null) {
             drawViewer(buf, pane);
             frame.clearCursor();
         } else {
@@ -249,7 +336,9 @@ final class ChatScreen implements Element {
         fill(buf, r, base);
         fill(buf, new Rect(r.x(), r.y(), r.width(), 2), st(Theme.TEXT, Theme.PANEL));
         put(buf, r.x() + 2, r.y(), "BuildCLI", st(Theme.TEXT, Theme.PANEL).bold(), r.right());
-        put(buf, r.x() + 2, r.y() + 1, "your local AI engineering team", st(Theme.DIM, Theme.PANEL), r.right());
+        put(buf, r.x() + 2, r.y() + 1, "local AI engineering team", st(Theme.DIM, Theme.PANEL), r.right() - 4);
+        put(buf, r.right() - 4, r.y(), " ⚙ ", st(Theme.DIM, Theme.PANEL), r.right());
+        hits.add(new Hit(new Rect(r.right() - 4, r.y(), 3, 2), () -> settingsOpen = true));
         int y = r.y() + 3;
         int limit = r.right() - 1;
         List<String> threads = threads();
@@ -301,7 +390,7 @@ final class ChatScreen implements Element {
                 put(buf, limit - Wrap.width(b), y + 1, b, st(Theme.BG, Theme.GREEN).bold(), limit + 1);
             }
             y += 2;
-            put(buf, r.x() + 6, y, "─".repeat(Math.max(0, r.width() - 7)), st(Color.rgb(34, 45, 52), Theme.SIDEBAR), limit + 1);
+            put(buf, r.x() + 6, y, "─".repeat(Math.max(0, r.width() - 7)), st(Theme.LINE, Theme.SIDEBAR), limit + 1);
             y++;
         }
         int q = session.queued();
@@ -344,7 +433,7 @@ final class ChatScreen implements Element {
         String name = team ? session.team().name() : thread;
         String initial = name.isEmpty() ? "?" : name.substring(0, 1).toUpperCase(Locale.ROOT);
         Color c = team ? Theme.ACCENT : Theme.agentColor(thread);
-        put(buf, x, y, " " + initial + " ", st(Color.rgb(11, 20, 26), c).bold(), x + 3);
+        put(buf, x, y, " " + initial + " ", st(Theme.ON_ACCENT, c).bold(), x + 3);
         String state = team ? "" : session.agentState(thread);
         if (!state.isEmpty() && !state.equals("idle")) {
             put(buf, x + 3, y, "●", st(state.startsWith("waiting") || state.equals("needs you") ? Theme.AMBER : Theme.GREEN, Theme.SIDEBAR), x + 4);
@@ -421,7 +510,7 @@ final class ChatScreen implements Element {
             sb.append(", you");
             sub = sb.toString();
         } else {
-            sub = "online · " + clean(roleOf(selected)) + " · " + clean(models.getOrDefault(selected, ""));
+            sub = "online · " + clean(roleOf(selected)) + " · " + clean(modelLabel(selected));
         }
         put(buf, nx, r.y() + 1, sub, subStyle, r.right() - 30);
         int bx = r.right() - 1;
@@ -435,7 +524,7 @@ final class ChatScreen implements Element {
         if (session.isActive(selected)) {
             String stop = " ■ Stop ";
             int sx = r.right() - 1 - Wrap.width(stop);
-            put(buf, sx, r.y() + 1, stop, st(Theme.TEXT, Color.rgb(120, 40, 45)), r.right());
+            put(buf, sx, r.y() + 1, stop, st(Theme.TEXT, Theme.DANGER), r.right());
             hits.add(new Hit(new Rect(sx, r.y() + 1, Wrap.width(stop), 1), () -> session.stop(selected)));
         }
     }
@@ -514,8 +603,11 @@ final class ChatScreen implements Element {
             }
             boolean sameAuthor = prev != null && prev.kind() == m.kind() && prev.author().equals(m.author())
                     && (m.kind() == ChatSession.Kind.USER || m.kind() == ChatSession.Kind.AGENT);
+            if (m.kind() == ChatSession.Kind.ACTIVITY && !settings().flag(dev.buildcli.application.Settings.SHOW_ACTIVITY)) {
+                continue;
+            }
             boolean bothQuiet = prev != null && isQuiet(prev) && isQuiet(m);
-            if (prev != null && !sameAuthor && !bothQuiet) {
+            if (prev != null && !sameAuthor && !bothQuiet && !settings().flag(dev.buildcli.application.Settings.COMPACT)) {
                 rows.add(new Row(0, List.of()));
             }
             switch (m.kind()) {
@@ -873,7 +965,7 @@ final class ChatScreen implements Element {
         for (int i = 0; i < h; i++) {
             MenuItem it = items.get(first + i);
             boolean sel = first + i == menuIndex;
-            Color rowBg = sel ? Color.rgb(66, 66, 66) : Theme.DIALOG;
+            Color rowBg = sel ? Theme.SELECTED : Theme.DIALOG;
             Rect row = new Rect(box.x(), y0 + 1 + i, w, 1);
             fill(buf, row, st(Theme.TEXT, rowBg));
             put(buf, row.x() + 2, row.y(), it.label(), st(Theme.TEXT, rowBg).bold(), row.right() - 1);
@@ -928,7 +1020,7 @@ final class ChatScreen implements Element {
             int x = r.x() + 2;
             if (view.numbered()) {
                 String num = String.format("%" + (gutter - 1) + "d ", n + 1);
-                put(buf, x, y, num, st(Color.rgb(100, 100, 100), Theme.BG), r.right());
+                put(buf, x, y, num, st(Theme.FAINT, Theme.BG), r.right());
                 x += gutter;
             }
             Style s = base;
@@ -941,11 +1033,11 @@ final class ChatScreen implements Element {
                 } else if (l.startsWith("@@")) {
                     s = st(Theme.BLUE, Theme.BG);
                 } else if (l.startsWith("+")) {
-                    fill(buf, new Rect(r.x(), y, r.width(), 1), st(Theme.TEXT, Color.rgb(22, 50, 32)));
-                    s = st(Color.rgb(140, 220, 150), Color.rgb(22, 50, 32));
+                    fill(buf, new Rect(r.x(), y, r.width(), 1), st(Theme.TEXT, Theme.ADD_BG));
+                    s = st(Theme.ADD_FG, Theme.ADD_BG);
                 } else if (l.startsWith("-")) {
-                    fill(buf, new Rect(r.x(), y, r.width(), 1), st(Theme.TEXT, Color.rgb(60, 24, 24)));
-                    s = st(Color.rgb(240, 150, 150), Color.rgb(60, 24, 24));
+                    fill(buf, new Rect(r.x(), y, r.width(), 1), st(Theme.TEXT, Theme.DEL_BG));
+                    s = st(Theme.DEL_FG, Theme.DEL_BG);
                 }
             }
             put(buf, x, y, l, s, r.right() - 1);
@@ -1011,7 +1103,7 @@ final class ChatScreen implements Element {
             for (int i = 0; i < Math.min(limit, lines.size()); i++) {
                 String l = lines.get(i);
                 Color c = l.startsWith("+++") || l.startsWith("---") ? Theme.DIM : l.startsWith("@@") ? Theme.BLUE
-                        : l.startsWith("+") ? Color.rgb(140, 220, 150) : l.startsWith("-") ? Color.rgb(240, 150, 150) : Theme.TEXT;
+                        : l.startsWith("+") ? Theme.ADD_FG : l.startsWith("-") ? Theme.DEL_FG : Theme.TEXT;
                 body.add(List.of(new Span(CharWidth.substringByWidth(l.replace("\t", "    "), w - 4), st(c, Theme.DIALOG))));
             }
             if (lines.size() > limit) {
@@ -1039,7 +1131,7 @@ final class ChatScreen implements Element {
         int x = r.x() + (r.width() - w) / 2;
         int y = r.y() + Math.max(1, (r.height() - h) / 2);
         fill(buf, new Rect(x, y, w, h), base);
-        Style border = st(Color.rgb(90, 90, 90), Theme.DIALOG);
+        Style border = st(Theme.FAINT, Theme.DIALOG);
         put(buf, x, y, "╭" + "─".repeat(w - 2) + "╮", border, x + w);
         for (int i = 1; i < h - 1; i++) {
             put(buf, x, y + i, "│", border, x + w);
@@ -1054,8 +1146,8 @@ final class ChatScreen implements Element {
         for (int i = 0; i < buttons.size(); i++) {
             Style bs = switch (buttons.get(i)[1]) {
                 case "primary" -> st(Theme.BG, Theme.TEXT).bold();
-                case "danger" -> st(Theme.TEXT, Color.rgb(150, 40, 40)).bold();
-                default -> st(Theme.TEXT, Color.rgb(70, 70, 70));
+                case "danger" -> st(Theme.TEXT, Theme.DANGER).bold();
+                default -> st(Theme.TEXT, Theme.FIELD);
             };
             int bw = put(buf, bx, y + h - 2, buttons.get(i)[0], bs, x + w - 1);
             hits.add(new Hit(new Rect(bx, y + h - 2, bw, 1), actions.get(i)));
@@ -1078,6 +1170,18 @@ final class ChatScreen implements Element {
         KeyCode code = key.code();
         char ch = code == KeyCode.CHAR ? Character.toLowerCase(key.character()) : 0;
 
+        if (settingsOpen) {
+            if (ctrl && ch == 'c') {
+                settingsOpen = false;
+            } else {
+                settingsView.key(key);
+            }
+            return EventResult.HANDLED;
+        }
+        if (code == KeyCode.F2) {
+            settingsOpen = true;
+            return EventResult.HANDLED;
+        }
         if (ctrl && ch == 'c') {
             if (view != null) {
                 view = null;
@@ -1165,13 +1269,15 @@ final class ChatScreen implements Element {
         }
         switch (code) {
             case ENTER -> {
-                if (alt || ctrl || key.hasShift() || endsWithBackslash()) {
-                    if (endsWithBackslash()) {
-                        input.backspace();
-                    }
+                boolean modified = alt || ctrl || key.hasShift();
+                boolean enterSends = settings().flag(dev.buildcli.application.Settings.ENTER_SENDS);
+                if (endsWithBackslash() && enterSends && !modified) {
+                    input.backspace();
                     input.insert("\n");
-                } else {
+                } else if (enterSends != modified) {
                     submit();
+                } else {
+                    input.insert("\n");
                 }
             }
             case BACKSPACE -> {
@@ -1358,6 +1464,7 @@ final class ChatScreen implements Element {
                     }
                 }
                 case "team" -> toggleSidebar();
+                case "settings" -> settingsOpen = true;
                 case "clear" -> session.clearMessages();
                 case "help" -> open(new View("Help", help(), false, false));
                 case "quit" -> quit.run();
@@ -1440,6 +1547,10 @@ final class ChatScreen implements Element {
 
     @Override
     public EventResult handlePasteEvent(PasteEvent paste) {
+        if (settingsOpen) {
+            settingsView.paste(paste.text());
+            return EventResult.HANDLED;
+        }
         List<Attachment> files = filesIn(paste.text());
         if (!files.isEmpty()) {
             attachments.addAll(files);
@@ -1472,6 +1583,10 @@ final class ChatScreen implements Element {
     @Override
     public EventResult handleMouseEvent(MouseEvent m) {
         MouseEventKind kind = m.kind();
+        if (settingsOpen && !(sideWidth > 0 && m.x() < area.x() + sideWidth)) {
+            settingsView.mouse(m);
+            return EventResult.HANDLED;
+        }
         if (kind == MouseEventKind.SCROLL_UP || kind == MouseEventKind.SCROLL_DOWN) {
             int d = kind == MouseEventKind.SCROLL_UP ? 3 : -3;
             if (view != null) {
@@ -1519,6 +1634,10 @@ final class ChatScreen implements Element {
 
     String selectedForTest() {
         return selected;
+    }
+
+    boolean settingsOpenForTest() {
+        return settingsOpen;
     }
 
     boolean viewerOpenForTest() {
