@@ -55,9 +55,9 @@ final class DoctorCommand implements Callable<Integer> {
         checkGit();
         checkState();
         ConfigRepository config = checkConfig();
-        ProviderSettings settings = ProviderSettings.fromEnvironment(ctx.env);
+        ProviderSettings settings = ctx.providerSettings();
         boolean usesOllama = true;
-        boolean usesOpenAi = false;
+        java.util.TreeSet<String> cloud = new java.util.TreeSet<>();
         if (config != null && !config.teams().isEmpty()) {
             usesOllama = false;
             for (Team t : config.teams()) {
@@ -69,7 +69,7 @@ final class DoctorCommand implements Callable<Integer> {
                     } else if (ref.provider().equals("ollama")) {
                         usesOllama = true;
                     } else {
-                        usesOpenAi = true;
+                        cloud.add(ref.provider());
                     }
                 }
             }
@@ -77,12 +77,14 @@ final class DoctorCommand implements Callable<Integer> {
         if (usesOllama) {
             checkOllama(settings, config);
         }
-        if (usesOpenAi) {
-            String key = ctx.env.get("OPENAI_API_KEY");
-            if (key == null || key.isBlank()) {
-                warn("a team uses the openai provider but OPENAI_API_KEY is not set (fine for local OpenAI-compatible servers)");
+        for (String name : cloud) {
+            var spec = settings.registry().find(name).orElse(null);
+            if (spec == null) {
+                fail("a team uses provider '" + name + "', which is not known (see 'buildcli provider list')");
+            } else if (spec.needsKey() && ctx.env.getOrDefault(spec.apiKeyEnv(), "").isBlank()) {
+                warn("a team uses '" + name + "' but " + spec.apiKeyEnv() + " is not set");
             } else {
-                ok("OPENAI_API_KEY is set; endpoint " + settings.openAiUrl());
+                ok("provider '" + name + "' is configured (" + spec.baseUrl() + ")");
             }
         }
         ctx.out.println();

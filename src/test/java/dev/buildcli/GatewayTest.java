@@ -1,6 +1,7 @@
 package dev.buildcli;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -10,7 +11,9 @@ import dev.buildcli.domain.ModelRef;
 import dev.buildcli.domain.ModelRouting;
 import dev.buildcli.domain.Permissions;
 import dev.buildcli.infrastructure.LangChain4jGateway;
+import dev.buildcli.infrastructure.ProviderRegistry;
 import dev.buildcli.infrastructure.ProviderSettings;
+import dev.buildcli.infrastructure.ProviderSpec;
 import dev.buildcli.infrastructure.RoutingGateway;
 import dev.buildcli.ports.LlmGateway;
 import dev.buildcli.ports.LlmMessage;
@@ -178,13 +181,36 @@ class GatewayTest {
     void providerSettingsComeFromTheEnvironmentWithSafeDefaults() {
         var d = ProviderSettings.fromEnvironment(Map.of());
         assertEquals("http://localhost:11434", d.ollamaUrl());
-        assertEquals("https://api.openai.com/v1", d.openAiUrl());
-        assertEquals("not-needed", d.openAiApiKey(), "local servers ignore the key; nothing secret is invented");
-        var custom = ProviderSettings.fromEnvironment(Map.of("OLLAMA_HOST", "gpu-box:11434", "OPENAI_API_KEY", "k",
-                "OPENAI_BASE_URL", "http://vllm:8000/v1"));
+        assertEquals("https://api.openai.com/v1", d.registry().find("openai").orElseThrow().baseUrl());
+        var custom = ProviderSettings.fromEnvironment(Map.of("OLLAMA_HOST", "gpu-box:11434", "OPENAI_BASE_URL", "http://vllm:8000/v1"));
         assertEquals("http://gpu-box:11434", custom.ollamaUrl());
-        assertEquals("k", custom.openAiApiKey());
-        assertEquals("http://vllm:8000/v1", custom.openAiUrl());
+        assertEquals("http://vllm:8000/v1", custom.registry().find("openai").orElseThrow().baseUrl());
+    }
+
+    @Test
+    void cloudProvidersNeedTheirKeyFromTheEnvironmentAndSayWhichOne() {
+        for (String p : List.of("openrouter", "deepseek", "kimi", "moonshot", "openai", "groq")) {
+            assertTrue(ProviderSettings.fromEnvironment(Map.of()).registry().find(p).isPresent(), p);
+        }
+        var ex = assertThrows(IllegalStateException.class,
+                () -> ProviderSettings.fromEnvironment(Map.of()).gatewayFor(new ModelRef("openrouter", "openrouter/free")));
+        assertTrue(ex.getMessage().contains("OPENROUTER_API_KEY"), ex.getMessage());
+        assertNotNull(ProviderSettings.fromEnvironment(Map.of("OPENROUTER_API_KEY", "k")).gatewayFor(new ModelRef("openrouter", "openrouter/free")));
+        assertNotNull(ProviderSettings.fromEnvironment(Map.of()).gatewayFor(new ModelRef("lmstudio", "x")), "local servers need no key");
+    }
+
+    @Test
+    void userProvidersAreLoadedFromTheGlobalDirectoryAndValidated(@org.junit.jupiter.api.io.TempDir java.nio.file.Path dir) throws Exception {
+        ProviderRegistry.save(dir, new ProviderSpec("my-vllm", ProviderSpec.Kind.OPENAI_COMPATIBLE, "http://gpu:8000/v1", "VLLM_KEY", ""));
+        var settings = ProviderSettings.fromEnvironment(Map.of("VLLM_KEY", "k"), dir);
+        assertEquals("http://gpu:8000/v1", settings.registry().find("my-vllm").orElseThrow().baseUrl());
+        assertTrue(settings.registry().find("openrouter").isPresent(), "built-ins stay");
+        assertNotNull(settings.gatewayFor(new ModelRef("my-vllm", "m")));
+        assertThrows(IllegalArgumentException.class, () -> ProviderRegistry.save(dir,
+                new ProviderSpec("bad", ProviderSpec.Kind.OPENAI_COMPATIBLE, "ftp://x", null, "")));
+        assertThrows(IllegalArgumentException.class, () -> ProviderRegistry.save(dir,
+                new ProviderSpec("bad", ProviderSpec.Kind.OPENAI_COMPATIBLE, "http://x", "sk-secret-value", "")),
+                "a key pasted where the variable name goes must be refused, not stored");
     }
 
     @Test

@@ -26,7 +26,7 @@ final class DevCommands {
 
     /** Provider options shared by the commands below. The API key is only ever read from the environment. */
     static final class ModelOptions {
-        @Option(names = "--provider", defaultValue = "ollama", description = "ollama | openai (any OpenAI-compatible endpoint)") String provider;
+        @Option(names = "--provider", defaultValue = "ollama", description = "any provider from 'buildcli provider list'") String provider;
         @Option(names = "--model", defaultValue = "qwen2.5:3b") String model;
         @Option(names = "--url", description = "Base URL of the provider") String url;
         @Option(names = "--threads", defaultValue = "4", description = "Ollama num_thread") int threads;
@@ -34,9 +34,7 @@ final class DevCommands {
         @Option(names = "--temperature", defaultValue = "0", description = "0 makes runs identical; use > 0 to measure real variance") double temperature;
 
         LlmGateway gateway(Map<String, String> env) {
-            ProviderSettings base = ProviderSettings.fromEnvironment(env);
-            ProviderSettings s = new ProviderSettings(provider.equals("ollama") && url != null ? url : base.ollamaUrl(),
-                    provider.equals("openai") && url != null ? url : base.openAiUrl(), base.openAiApiKey(), threads, temperature, !noStream);
+            ProviderSettings s = ProviderSettings.fromEnvironment(env).withBaseUrl(provider, url).with(threads, temperature, !noStream);
             return s.gatewayFor(new ModelRef(provider, model));
         }
     }
