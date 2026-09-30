@@ -2,35 +2,80 @@ package dev.buildcli.infrastructure;
 
 import dev.buildcli.domain.ModelRef;
 import dev.buildcli.ports.LlmGateway;
+import java.nio.file.Path;
 import java.util.Map;
 
 /**
- * Where each provider lives and how to talk to it. Model choice ("ollama / qwen3-coder") is team configuration; this
- * is machine configuration: URLs, the API key (read from the environment, never stored) and generation settings.
+ * Machine configuration for talking to models: which providers exist (built in, plus the user's {@code providers.yaml}),
+ * the environment the API keys are read from (never stored), and generation settings. Model choice ("openrouter /
+ * openrouter/free") is team configuration.
  */
-public record ProviderSettings(String ollamaUrl, String openAiUrl, String openAiApiKey, int ollamaThreads, double temperature,
+public record ProviderSettings(ProviderRegistry registry, Map<String, String> env, int ollamaThreads, double temperature,
                                boolean streaming) {
 
     public static final String DEFAULT_OLLAMA_URL = "http://localhost:11434";
-    public static final String DEFAULT_OPENAI_URL = "https://api.openai.com/v1";
+    private static final int LOCAL_MAX_OUTPUT = 512;
+    private static final int CLOUD_MAX_OUTPUT = 4096;
 
-    /** Reads OLLAMA_HOST, OPENAI_BASE_URL and OPENAI_API_KEY; everything else takes its default. */
+    /** Built-in providers only, with OLLAMA_HOST and OPENAI_BASE_URL applied. */
     public static ProviderSettings fromEnvironment(Map<String, String> env) {
-        String ollama = env.getOrDefault("OLLAMA_HOST", DEFAULT_OLLAMA_URL);
-        if (!ollama.startsWith("http")) {
-            ollama = "http://" + ollama;
+        return of(ProviderRegistry.builtIn(), env);
+    }
+
+    /** Built-in providers plus {@code <globalDir>/providers.yaml}. */
+    public static ProviderSettings fromEnvironment(Map<String, String> env, Path globalDir) {
+        return of(ProviderRegistry.load(globalDir), env);
+    }
+
+    private static ProviderSettings of(ProviderRegistry registry, Map<String, String> env) {
+        String ollama = env.get("OLLAMA_HOST");
+        if (ollama != null && !ollama.isBlank()) {
+            registry = registry.withBaseUrl("ollama", ollama.startsWith("http") ? ollama : "http://" + ollama);
         }
-        String key = env.get("OPENAI_API_KEY");
-        return new ProviderSettings(ollama, env.getOrDefault("OPENAI_BASE_URL", DEFAULT_OPENAI_URL),
-                key == null || key.isBlank() ? "not-needed" : key, 4, 0.0, true);
+        String openai = env.get("OPENAI_BASE_URL");
+        if (openai != null && !openai.isBlank()) {
+            registry = registry.withBaseUrl("openai", openai);
+        }
+        return new ProviderSettings(registry, env, 4, 0.0, true);
+    }
+
+    public ProviderSettings with(Integer threads, Double temperature, boolean streaming) {
+        return new ProviderSettings(registry, env, threads == null ? ollamaThreads : threads,
+                temperature == null ? this.temperature : temperature, streaming);
+    }
+
+    public ProviderSettings withBaseUrl(String provider, String url) {
+        return new ProviderSettings(registry.withBaseUrl(provider, url), env, ollamaThreads, temperature, streaming);
+    }
+
+    public String ollamaUrl() {
+        return registry.find("ollama").map(ProviderSpec::baseUrl).orElse(DEFAULT_OLLAMA_URL);
+    }
+
+    /** The API key for a provider, or null when it needs none. Throws with a fix when it needs one and it is not set. */
+    public String keyFor(ProviderSpec spec) {
+        if (!spec.needsKey()) {
+            return null;
+        }
+        String key = env.get(spec.apiKeyEnv());
+        if (key == null || key.isBlank()) {
+            throw new IllegalStateException("no API key for '" + spec.name() + "': set " + spec.apiKeyEnv() + " in the environment");
+        }
+        return key;
     }
 
     /** Builds the gateway for one provider/model pair. */
     public LlmGateway gatewayFor(ModelRef ref) {
-        return switch (ref.provider()) {
-            case "ollama" -> LangChain4jGateway.ollama(ollamaUrl, ref.model(), ollamaThreads, temperature, streaming);
-            case "openai" -> LangChain4jGateway.openAiCompatible(openAiUrl, openAiApiKey, ref.model(), temperature, streaming);
-            default -> throw new IllegalArgumentException("unknown provider '" + ref.provider() + "' (expected ollama or openai)");
+        ProviderSpec spec = registry.find(ref.provider()).orElseThrow(() -> new IllegalArgumentException(
+                "unknown provider '" + ref.provider() + "'. Known: " + registry.all().stream().map(ProviderSpec::name).toList()
+                        + ". Add your own with: buildcli provider add"));
+        return switch (spec.kind()) {
+            case OLLAMA -> LangChain4jGateway.ollama(spec.baseUrl(), ref.model(), ollamaThreads, temperature, streaming);
+            case OPENAI_COMPATIBLE -> {
+                boolean local = !spec.needsKey();
+                yield LangChain4jGateway.openAiCompatible(spec.baseUrl(), local ? "not-needed" : keyFor(spec), ref.model(), temperature,
+                        streaming, local ? LOCAL_MAX_OUTPUT : CLOUD_MAX_OUTPUT);
+            }
         };
     }
 }

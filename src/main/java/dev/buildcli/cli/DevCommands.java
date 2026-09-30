@@ -10,7 +10,6 @@ import dev.buildcli.eval.Scenario;
 import dev.buildcli.infrastructure.ProviderSettings;
 import dev.buildcli.infrastructure.ScriptedGateway;
 import dev.buildcli.infrastructure.SqliteRunStore;
-import dev.buildcli.infrastructure.TamboUiApp;
 import dev.buildcli.ports.LlmGateway;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -26,7 +25,7 @@ final class DevCommands {
 
     /** Provider options shared by the commands below. The API key is only ever read from the environment. */
     static final class ModelOptions {
-        @Option(names = "--provider", defaultValue = "ollama", description = "ollama | openai (any OpenAI-compatible endpoint)") String provider;
+        @Option(names = "--provider", defaultValue = "ollama", description = "any provider from 'buildcli provider list'") String provider;
         @Option(names = "--model", defaultValue = "qwen2.5:3b") String model;
         @Option(names = "--url", description = "Base URL of the provider") String url;
         @Option(names = "--threads", defaultValue = "4", description = "Ollama num_thread") int threads;
@@ -34,9 +33,7 @@ final class DevCommands {
         @Option(names = "--temperature", defaultValue = "0", description = "0 makes runs identical; use > 0 to measure real variance") double temperature;
 
         LlmGateway gateway(Map<String, String> env) {
-            ProviderSettings base = ProviderSettings.fromEnvironment(env);
-            ProviderSettings s = new ProviderSettings(provider.equals("ollama") && url != null ? url : base.ollamaUrl(),
-                    provider.equals("openai") && url != null ? url : base.openAiUrl(), base.openAiApiKey(), threads, temperature, !noStream);
+            ProviderSettings s = ProviderSettings.fromEnvironment(env).withBaseUrl(provider, url).with(threads, temperature, !noStream);
             return s.gatewayFor(new ModelRef(provider, model));
         }
     }
@@ -92,13 +89,58 @@ final class DevCommands {
             var team = Scenario.team(Limits.defaults());
             Map<String, String> models = new java.util.LinkedHashMap<>();
             team.agents().forEach(a -> models.put(a.name(), fake ? "scripted" : m.provider + "/" + m.model));
-            new TamboUiApp(team, models, ask ? null : Scenario.REQUEST, (request, ui) -> {
+            var session = new dev.buildcli.application.ChatSession(team, (request, ui, cancelled) -> {
+                LlmGateway model = fake ? demoModel(script(escalate && request.target() == null), request) : llm;
                 try (SqliteRunStore store = new SqliteRunStore(SqliteRunStore.IN_MEMORY)) {
                     Events events = new Events(store, "demo", ui);
-                    new Orchestrator(team, llm, new ToolRuntime(workspace, ui, events), ui, events).run(request);
+                    Orchestrator o = new Orchestrator(team, model, new ToolRuntime(workspace, ui, events), ui, events);
+                    o.cancelWhen(cancelled);
+                    return o.run(request);
                 }
-            }).run();
+            });
+            if (!ask) {
+                session.submit(Scenario.REQUEST);
+            }
+            new dev.buildcli.infrastructure.tui.ChatApp(session, models, workspace, !"0".equals(ctx.env.get("BUILDCLI_MOUSE"))).run();
             return 0;
+        }
+
+        /**
+         * The scripted scenario for team requests about the greeting; a friendly canned answer otherwise, so the chat can be
+         * tried without a model. Replies are streamed a few characters at a time, like a real model, so typing shows.
+         */
+        static LlmGateway demoModel(ScriptedGateway scenario, Orchestrator.Request request) {
+            boolean scripted = request.target() == null && request.text().toLowerCase(java.util.Locale.ROOT).contains("greeting");
+            return new LlmGateway() {
+                @Override
+                public dev.buildcli.ports.LlmReply chat(dev.buildcli.domain.Agent agent, List<dev.buildcli.ports.LlmMessage> messages,
+                        List<dev.buildcli.ports.ToolSpec> tools) {
+                    if (scripted) {
+                        return scenario.chat(agent, messages, tools);
+                    }
+                    return new dev.buildcli.ports.LlmReply("Hi, I am **" + agent.name() + "** (" + agent.role() + "). This is the demo, "
+                            + "so I am not really thinking. You said:\n\n> " + request.text().replace("\n", " ")
+                            + "\n\nWith a real model I would work on it with my tools, for example:\n```\nread_file src/Main.java\n```",
+                            List.of(), 120, 60);
+                }
+
+                @Override
+                public dev.buildcli.ports.LlmReply chatStreaming(dev.buildcli.domain.Agent agent, List<dev.buildcli.ports.LlmMessage> messages,
+                        List<dev.buildcli.ports.ToolSpec> tools, java.util.function.Consumer<String> onText) {
+                    var reply = chat(agent, messages, tools);
+                    String text = reply.text() == null ? "" : reply.text();
+                    try {
+                        Thread.sleep(600);
+                        for (int i = 0; i < text.length(); i += 3) {
+                            onText.accept(text.substring(i, Math.min(text.length(), i + 3)));
+                            Thread.sleep(18);
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    return reply;
+                }
+            };
         }
 
         private static ScriptedGateway script(boolean escalate) {
@@ -113,8 +155,8 @@ final class DevCommands {
             }
             return g.call("bruno", "write_file", Map.of("path", "out/greeting.txt", "content", "hello from bruno"))
                     .call("bruno", "run_command", Map.of("argv", List.of("rm", "-rf", "out")))
-                    .call("bruno", "run_command", Map.of("argv", List.of("cat", "out/greeting.txt")))
-                    .say("bruno", "Created out/greeting.txt and verified it with cat.")
+                    .call("bruno", "read_file", Map.of("path", "out/greeting.txt"))
+                    .say("bruno", "Created `out/greeting.txt` and read it back: it says *hello from bruno*.")
                     .say("ana", "Done: Bruno created and verified out/greeting.txt.");
         }
     }

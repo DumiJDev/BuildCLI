@@ -51,7 +51,7 @@ class CliTest {
                 (ref, settings) -> {
                     modelsRequested.add(ref);
                     return gateway.get();
-                }, (team, models, request, job) -> {
+                }, (session, models) -> {
                     throw new AssertionError("the TUI must not open in these tests");
                 });
         int code = BuildCli.run(args, ctx);

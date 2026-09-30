@@ -10,7 +10,7 @@ import picocli.CommandLine.IFactory;
 @Command(name = "buildcli", mixinStandardHelpOptions = true, versionProvider = BuildCli.Version.class,
         description = "Your local AI engineering team: a runtime that executes a configurable team of agents.",
         subcommands = {InitCommand.class, AgentCommand.class, TeamCommand.class, RunCommand.class, RunsCommand.class,
-                TaskCommand.class, UsageCommand.class, DoctorCommand.class, ConfigCommand.class, DevCommands.BenchCmd.class,
+                TaskCommand.class, UsageCommand.class, DoctorCommand.class, ConfigCommand.class, ProviderCommand.class, DevCommands.BenchCmd.class,
                 DevCommands.DemoCmd.class})
 public final class BuildCli implements Callable<Integer> {
     /** Set by picocli; used to open the TUI or print help when no subcommand is given. */
