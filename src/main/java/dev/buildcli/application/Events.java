@@ -9,7 +9,7 @@ import java.time.Instant;
 
 /**
  * Records everything that happens in one run: appends to the event log, snapshots tasks and notifies the UI.
- * One log feeds persistence, audit, usage and display.
+ * One log feeds persistence, audit, usage and display. Payloads are scrubbed of secrets before they are stored.
  */
 public final class Events {
     private final RunStore store;
@@ -28,7 +28,7 @@ public final class Events {
 
     /** For events that consume tokens (the model was called). */
     public void emit(String type, int taskId, String agent, String payload, int inputTokens, int outputTokens) {
-        Event e = new Event(Instant.now(), type, taskId, agent, payload == null ? "" : payload, inputTokens, outputTokens);
+        Event e = new Event(Instant.now(), type, taskId, agent, payload == null ? "" : Redactor.redact(payload), inputTokens, outputTokens);
         store.append(runId, e);
         ui.onEvent(e);
     }

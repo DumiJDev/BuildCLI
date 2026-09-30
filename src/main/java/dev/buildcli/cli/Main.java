@@ -38,6 +38,7 @@ public final class Main implements Runnable {
         @Option(names = "--url", description = "Base URL (default: Ollama http://localhost:11434, OpenAI https://api.openai.com/v1)") String url;
         @Option(names = "--api-key-env", defaultValue = "OPENAI_API_KEY", description = "Environment variable holding the API key (openai provider)") String apiKeyEnv;
         @Option(names = "--threads", defaultValue = "4", description = "Ollama num_thread (the default 16 was ~50x slower on the WSL2 spike box)") int threads;
+        @Option(names = "--no-stream", description = "Disable streaming (wait for each complete reply)") boolean noStream;
         @Option(names = "--temperature", defaultValue = "0", description = "0 makes runs identical; use > 0 to measure real variance") double temperature;
 
         LlmGateway gateway() {
@@ -46,9 +47,9 @@ public final class Main implements Runnable {
                 if (key == null || key.isBlank()) {
                     key = "not-needed"; // local servers (vLLM, LM Studio, Ollama /v1) ignore it
                 }
-                return LangChain4jGateway.openAiCompatible(url == null ? "https://api.openai.com/v1" : url, key, model, temperature);
+                return LangChain4jGateway.openAiCompatible(url == null ? "https://api.openai.com/v1" : url, key, model, temperature, !noStream);
             }
-            return LangChain4jGateway.ollama(url == null ? "http://localhost:11434" : url, model, threads, temperature);
+            return LangChain4jGateway.ollama(url == null ? "http://localhost:11434" : url, model, threads, temperature, !noStream);
         }
     }
 
@@ -57,12 +58,24 @@ public final class Main implements Runnable {
         @CommandLine.Mixin ModelOptions m;
         @Option(names = "--runs", defaultValue = "10") int runs;
         @Option(names = "-v") boolean verbose;
+        @Option(names = "--fixed-objective", description = "Script the lead: it hands this exact objective to bruno, so the run measures bruno alone")
+        String fixedObjective;
 
         @Override
         public Integer call() throws Exception {
-            Bench.run(m.gateway(), runs, m.provider + ":" + m.model + " t=" + m.temperature, verbose);
+            LlmGateway real = m.gateway();
+            String label = m.provider + ":" + m.model + " t=" + m.temperature + (fixedObjective == null ? "" : " fixed-objective");
+            Bench.run(() -> fixedObjective == null ? real : withScriptedLead(real, fixedObjective), runs, label, verbose);
             return 0;
         }
+    }
+
+    /** The lead (ana) is scripted to hand off {@code objective}; every other agent uses the real model. */
+    static LlmGateway withScriptedLead(LlmGateway real, String objective) {
+        ScriptedGateway lead = new ScriptedGateway()
+                .call("ana", "handoff", Map.of("to", "bruno", "objective", objective))
+                .say("ana", "Done.");
+        return (agent, messages, tools) -> agent.name().equals("ana") ? lead.chat(agent, messages, tools) : real.chat(agent, messages, tools);
     }
 
     @Command(name = "demo", description = "Run the scenario in the TamboUI TUI (real model, or --fake for a scripted one)")

@@ -55,6 +55,10 @@ public final class FileConfigRepository implements ConfigRepository {
     private final Map<String, Agent> agents = new LinkedHashMap<>();
     private final Map<String, Team> teams = new LinkedHashMap<>();
     private final String context;
+    private final java.security.MessageDigest digest = sha256();
+    private boolean projectFilesSeen;
+    private final Path projectRoot;
+    private String projectDigest = "";
     private final List<String> problems = new ArrayList<>();
 
     /**
@@ -64,6 +68,7 @@ public final class FileConfigRepository implements ConfigRepository {
      */
     public FileConfigRepository(Path projectDir, Path globalDir) {
         Path project = projectDir.toAbsolutePath().normalize();
+        this.projectRoot = project;
         loadAgents(globalDir.resolve("agents"), Origin.GLOBAL);
         loadAgents(project.resolve(".buildcli").resolve("agents"), Origin.PROJECT);
         List<RawTeam> raw = new ArrayList<>();
@@ -73,6 +78,7 @@ public final class FileConfigRepository implements ConfigRepository {
             buildTeam(r);
         }
         context = readContext(project.resolve("AGENTS.md"));
+        projectDigest = projectFilesSeen ? java.util.HexFormat.of().formatHex(digest.digest()) : "";
         if (!problems.isEmpty()) {
             throw new ConfigException(problems);
         }
@@ -96,6 +102,11 @@ public final class FileConfigRepository implements ConfigRepository {
     @Override
     public Optional<Team> team(String name) {
         return Optional.ofNullable(teams.get(name));
+    }
+
+    @Override
+    public String projectDigest() {
+        return projectDigest;
     }
 
     @Override
@@ -400,6 +411,18 @@ public final class FileConfigRepository implements ConfigRepository {
                 : text.substring(0, MAX_CONTEXT_CHARS) + "\n[AGENTS.md truncated at " + MAX_CONTEXT_CHARS + " characters]";
     }
 
+    private boolean isProjectDefinition(Path file) {
+        return file.toAbsolutePath().normalize().startsWith(projectRoot.resolve(".buildcli"));
+    }
+
+    private static java.security.MessageDigest sha256() {
+        try {
+            return java.security.MessageDigest.getInstance("SHA-256");
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     private List<Path> files(Path dir, String... extensions) {
         if (!Files.isDirectory(dir)) {
             return List.of();
@@ -419,7 +442,13 @@ public final class FileConfigRepository implements ConfigRepository {
 
     private String read(Path file) {
         try {
-            return Files.readString(file, StandardCharsets.UTF_8);
+            String text = Files.readString(file, StandardCharsets.UTF_8);
+            if (isProjectDefinition(file)) {
+                digest.update((projectRoot.relativize(file).toString().replace('\\', '/') + "\0" + text + "\0")
+                        .getBytes(StandardCharsets.UTF_8));
+                projectFilesSeen = true;
+            }
+            return text;
         } catch (IOException e) {
             problem(file, "cannot read file: " + e.getMessage());
             return null;

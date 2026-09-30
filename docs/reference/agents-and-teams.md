@@ -14,7 +14,7 @@ once.
 | `~/.buildcli/agents`, `~/.buildcli/teams` | Global (per-user) definitions. `BUILDCLI_HOME` overrides `~/.buildcli`. | n/a |
 | `~/.buildcli/projects/<id>/state.db` | Operational state (runs, tasks, events), keyed by project. **Never inside the project tree.** | Never |
 
-Project definitions override global ones with the same name. (`.agents/` compatibility is planned for 1.4.)
+Project definitions override global ones with the same name. Definitions from a project are **untrusted until you approve them** (see the [security model](../security-model.md)). (`.agents/` compatibility is planned for 1.4.)
 
 ## Agent
 
@@ -51,7 +51,7 @@ Prefer small, focused changes.
 | `permissions` | no | `filesystem.read`, `filesystem.write` (glob lists), `command.allow`, `command.timeout`. |
 | `description`, `personality`, `memory` | no | Accepted; `personality` is style only, `memory` arrives in 1.1. |
 
-**Capabilities**: `filesystem.read`, `filesystem.write`, `search`, `git.read`, `command.execute`, `agent.handoff`.
+**Capabilities**: `filesystem.read`, `filesystem.write`, `search`, `git.read`, `git.commit`, `command.execute`, `agent.handoff` (see [tools](tools.md)).
 An agent asks for capabilities, never for tool names; the runtime resolves the tool.
 
 Notes on permissions:
