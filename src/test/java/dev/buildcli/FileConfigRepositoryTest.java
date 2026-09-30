@@ -1,0 +1,253 @@
+package dev.buildcli;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import dev.buildcli.domain.Agent;
+import dev.buildcli.domain.Origin;
+import dev.buildcli.domain.Team;
+import dev.buildcli.infrastructure.FileConfigRepository;
+import dev.buildcli.ports.ConfigException;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.util.List;
+import java.util.Set;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+class FileConfigRepositoryTest {
+    @TempDir Path root;
+    Path project;
+    Path global;
+
+    static final String ANA = """
+            ---
+            schema: 1
+            name: ana
+            role: architect
+            instructions: |
+              You are the software architect.
+            capabilities: [filesystem.read, agent.handoff]
+            permissions:
+              filesystem:
+                read: ["**"]
+            ---
+            Challenge unnecessary complexity.
+            """;
+
+    static final String BRUNO = """
+            schema: 1
+            name: bruno
+            role: developer
+            instructions: You implement.
+            capabilities: [filesystem.read, filesystem.write, command.execute]
+            permissions:
+              filesystem:
+                write: ["src/**"]
+              command:
+                allow: [["mvn", "test"], ["./mvnw", "-q", "verify"]]
+                timeout: 10m
+            """;
+
+    static final String TEAM = """
+            schema: 1
+            name: backend
+            lead: ana
+            agents: [ana, bruno]
+            runtime:
+              default: { provider: ollama, model: qwen3-coder }
+              ana: { provider: openai, model: some-model }
+            limits:
+              max_retries: 2
+              max_tokens_per_task: 20000
+            """;
+
+    @BeforeEach
+    void setUp() throws IOException {
+        project = Files.createDirectories(root.resolve("project"));
+        global = Files.createDirectories(root.resolve("home/.buildcli"));
+    }
+
+    void write(Path base, String rel, String content) throws IOException {
+        Path f = base.resolve(rel);
+        Files.createDirectories(f.getParent());
+        Files.writeString(f, content);
+    }
+
+    void writeProject(String rel, String content) throws IOException {
+        write(project, ".buildcli/" + rel, content);
+    }
+
+    FileConfigRepository load() {
+        return new FileConfigRepository(project, global);
+    }
+
+    List<String> problems(Runnable load) {
+        return assertThrows(ConfigException.class, load::run).problems();
+    }
+
+    static boolean anyContains(List<String> problems, String text) {
+        return problems.stream().anyMatch(p -> p.contains(text));
+    }
+
+    @Test
+    void loadsAgentsAndTeamsFromTheProject() throws IOException {
+        writeProject("agents/ana.md", ANA);
+        writeProject("agents/bruno.yaml", BRUNO);
+        writeProject("teams/backend.yaml", TEAM);
+        var repo = load();
+
+        Agent ana = repo.agent("ana").orElseThrow();
+        assertEquals("architect", ana.role());
+        assertEquals(Set.of("filesystem.read", "agent.handoff"), ana.capabilities());
+        assertTrue(ana.instructions().contains("software architect"));
+        assertTrue(ana.instructions().contains("Challenge unnecessary complexity."), "the Markdown body is appended");
+        assertEquals(Origin.PROJECT, ana.origin());
+
+        Agent bruno = repo.agent("bruno").orElseThrow();
+        assertEquals(List.of("src/**"), bruno.permissions().writeGlobs());
+        assertEquals(List.of("**"), bruno.permissions().readGlobs(), "reads default to the whole workspace");
+        assertEquals(List.of(List.of("mvn", "test"), List.of("./mvnw", "-q", "verify")), bruno.permissions().commandAllow());
+        assertEquals(Duration.ofMinutes(10), bruno.permissions().commandTimeout());
+
+        Team team = repo.team("backend").orElseThrow();
+        assertEquals("ana", team.lead());
+        assertEquals(List.of("ana", "bruno"), team.agents().stream().map(Agent::name).toList());
+        assertEquals(2, team.limits().maxRetries());
+        assertEquals(20_000, team.limits().maxTokensPerTask());
+        assertEquals(12, team.limits().maxSteps(), "unspecified limits keep their defaults");
+        assertEquals("ollama", team.routing().forAgent("bruno").provider());
+        assertEquals("openai", team.routing().forAgent("ana").provider());
+    }
+
+    @Test
+    void projectDefinitionsOverrideGlobalOnesOfTheSameName() throws IOException {
+        write(global, "agents/ana.md", ANA.replace("architect", "global-architect"));
+        writeProject("agents/ana.md", ANA);
+        Agent ana = load().agent("ana").orElseThrow();
+        assertEquals("architect", ana.role());
+        assertEquals(Origin.PROJECT, ana.origin());
+    }
+
+    @Test
+    void globalDefinitionsAreUsedWhenTheProjectHasNone() throws IOException {
+        write(global, "agents/ana.md", ANA);
+        assertEquals(Origin.GLOBAL, load().agent("ana").orElseThrow().origin());
+    }
+
+    @Test
+    void noConfigurationAtAllIsValidAndEmpty() {
+        var repo = load();
+        assertTrue(repo.agents().isEmpty());
+        assertTrue(repo.teams().isEmpty());
+        assertEquals("", repo.projectContext());
+    }
+
+    @Test
+    void agentsMdIsReadAsContextAndTruncated() throws IOException {
+        write(project, "AGENTS.md", "Build with mvn verify.");
+        assertEquals("Build with mvn verify.", load().projectContext());
+        write(project, "AGENTS.md", "x".repeat(FileConfigRepository.MAX_CONTEXT_CHARS + 500));
+        String ctx = load().projectContext();
+        assertTrue(ctx.length() < FileConfigRepository.MAX_CONTEXT_CHARS + 100);
+        assertTrue(ctx.contains("truncated"));
+    }
+
+    @Test
+    void aMissingSchemaIsRejected() throws IOException {
+        writeProject("agents/a.yaml", "name: a\nrole: r\n");
+        assertTrue(anyContains(problems(this::load), "missing 'schema'"));
+    }
+
+    @Test
+    void anUnsupportedSchemaIsRejectedWithAClearMessage() throws IOException {
+        writeProject("agents/a.yaml", "schema: 2\nname: a\nrole: r\n");
+        assertTrue(anyContains(problems(this::load), "unsupported schema 2"));
+    }
+
+    @Test
+    void aTypoInAKeyIsAnErrorNotSilentlyIgnored() throws IOException {
+        writeProject("agents/a.yaml", "schema: 1\nname: a\nrole: r\ncapabilites: [filesystem.read]\n");
+        assertTrue(anyContains(problems(this::load), "unknown key 'capabilites'"));
+    }
+
+    @Test
+    void unknownCapabilitiesListTheKnownOnes() throws IOException {
+        writeProject("agents/a.yaml", "schema: 1\nname: a\nrole: r\ncapabilities: [jira.issue.read]\n");
+        var p = problems(this::load);
+        assertTrue(anyContains(p, "unknown capability"));
+        assertTrue(anyContains(p, "filesystem.read"));
+    }
+
+    @Test
+    void networkPermissionsAreRejectedBecauseTheyCannotBeEnforced() throws IOException {
+        writeProject("agents/a.yaml", "schema: 1\nname: a\nrole: r\npermissions:\n  network: false\n");
+        assertTrue(anyContains(problems(this::load), "network is not supported"));
+    }
+
+    @Test
+    void shellStringsInTheCommandAllowListAreRejected() throws IOException {
+        writeProject("agents/a.yaml", "schema: 1\nname: a\nrole: r\npermissions:\n  command:\n    allow: [\"mvn test\"]\n");
+        assertTrue(anyContains(problems(this::load), "not a shell string"));
+    }
+
+    @Test
+    void invalidTimeoutsAreRejected() throws IOException {
+        writeProject("agents/a.yaml", "schema: 1\nname: a\nrole: r\npermissions:\n  command:\n    timeout: soon\n");
+        assertTrue(anyContains(problems(this::load), "invalid timeout"));
+    }
+
+    @Test
+    void aMarkdownAgentWithoutFrontMatterIsRejected() throws IOException {
+        writeProject("agents/a.md", "Just some text");
+        assertTrue(anyContains(problems(this::load), "front matter"));
+    }
+
+    @Test
+    void teamsMustReferenceDefinedAgentsAndHaveAMemberAsLead() throws IOException {
+        writeProject("agents/ana.md", ANA);
+        writeProject("teams/t.yaml", "schema: 1\nname: t\nlead: zoe\nagents: [ana, ghost]\n");
+        var p = problems(this::load);
+        assertTrue(anyContains(p, "agent 'ghost' is not defined"));
+        assertTrue(anyContains(p, "lead 'zoe' must be one of the team's agents"));
+    }
+
+    @Test
+    void runtimeEntriesNeedAKnownProviderAndAMemberAgent() throws IOException {
+        writeProject("agents/ana.md", ANA);
+        writeProject("teams/t.yaml", "schema: 1\nname: t\nlead: ana\nagents: [ana]\nruntime:\n"
+                + "  default: { provider: mystery, model: x }\n  bob: { provider: ollama, model: y }\n");
+        var p = problems(this::load);
+        assertTrue(anyContains(p, "runtime.default needs provider"));
+        assertTrue(anyContains(p, "runtime.bob refers to an agent that is not in the team"));
+    }
+
+    @Test
+    void limitsAreBounded() throws IOException {
+        writeProject("agents/ana.md", ANA);
+        writeProject("teams/t.yaml", "schema: 1\nname: t\nlead: ana\nagents: [ana]\nlimits:\n  max_retries: 99\n");
+        assertTrue(anyContains(problems(this::load), "limits.max_retries must be an integer between 0 and 10"));
+    }
+
+    @Test
+    void everyProblemIsReportedAtOnce() throws IOException {
+        writeProject("agents/one.yaml", "name: one\nrole: r\n");
+        writeProject("agents/two.yaml", "schema: 1\nname: Two\nrole: r\n");
+        writeProject("agents/three.yaml", "schema: 1: nope");
+        var p = problems(this::load);
+        assertTrue(p.size() >= 3, p.toString());
+        assertFalse(p.isEmpty());
+    }
+
+    @Test
+    void twoAgentsWithTheSameNameInOneDirectoryClash() throws IOException {
+        writeProject("agents/a.yaml", "schema: 1\nname: dup\nrole: r\n");
+        writeProject("agents/b.yaml", "schema: 1\nname: dup\nrole: r\n");
+        assertTrue(anyContains(problems(this::load), "is also defined in"));
+    }
+}
