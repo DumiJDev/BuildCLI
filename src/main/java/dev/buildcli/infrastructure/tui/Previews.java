@@ -41,6 +41,13 @@ final class Previews {
         return f.isDone() ? f.getNow(null) : null;
     }
 
+    /** True while a preview is still being made. */
+    static boolean loading(Attachment a) {
+        var i = IMAGES.get(key(a));
+        var s = AUDIO.get(key(a));
+        return i != null && !i.isDone() || s != null && !s.isDone();
+    }
+
     static Audio audio(Attachment a) {
         var f = AUDIO.computeIfAbsent(key(a), k -> CompletableFuture.supplyAsync(() -> analyse(a)));
         return f.isDone() ? f.getNow(null) : null;

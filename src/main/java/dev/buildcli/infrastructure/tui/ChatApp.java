@@ -26,13 +26,26 @@ public final class ChatApp extends ToolkitApp {
 
     @Override
     protected TuiConfig configure() {
-        return TuiConfig.builder().tickRate(Duration.ofMillis(80)).mouseCapture(mouse).bracketedPaste(true).build();
+        // no fixed tick: the screen is drawn when you type or click, and when the chat changes (see onStart)
+        return TuiConfig.builder().noTick().mouseCapture(mouse).bracketedPaste(true).build();
     }
 
     @Override
     protected void onStart() {
         setWindowTitle("BuildCLI");
         runner().focusManager().setFocus("chat");
+        // Check 12 times a second whether anything changed; draw only then, or while something moves (typing, spinner).
+        // Idle, this costs almost nothing, unlike redrawing the whole screen on every tick.
+        long[] seen = {-1};
+        long start = System.nanoTime();
+        runner().scheduleRepeating(() -> {
+            long v = session.version();
+            if (v != seen[0] || screen.animating()) {
+                seen[0] = v;
+                long ms = (System.nanoTime() - start) / 1_000_000;
+                runner().tuiRunner().dispatch(dev.tamboui.tui.event.TickEvent.of(ms, Duration.ofMillis(ms)));
+            }
+        }, Duration.ofMillis(80));
     }
 
     @Override
