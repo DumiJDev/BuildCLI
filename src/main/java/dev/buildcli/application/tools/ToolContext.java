@@ -21,10 +21,25 @@ public final class ToolContext {
 
     private final Path workspace;
     private final Approval approval;
+    private final WorkspaceLock lock;
+    private final String agent;
+    private final java.util.function.Consumer<String> onWait;
 
     public ToolContext(Path workspace, Approval approval) {
+        this(workspace, approval, new WorkspaceLock(), "agent", who -> { });
+    }
+
+    public ToolContext(Path workspace, Approval approval, WorkspaceLock lock, String agent, java.util.function.Consumer<String> onWait) {
         this.workspace = workspace.toAbsolutePath().normalize();
         this.approval = approval;
+        this.lock = lock;
+        this.agent = agent;
+        this.onWait = onWait;
+    }
+
+    /** Runs a change to the workspace while no other agent reads or changes it. Call it after any approval. */
+    public <T> T exclusive(java.util.concurrent.Callable<T> work) throws Exception {
+        return lock.exclusive(agent, onWait, work);
     }
 
     public Path workspace() {
