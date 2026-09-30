@@ -76,7 +76,7 @@ LAUNCHER="$BIN_DIR/buildcli"
 cat > "$LAUNCHER" <<LAUNCH
 #!/bin/sh
 exec java -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xss512k -XX:+AutoCreateSharedArchive \\
-  -XX:SharedArchiveFile="$JAR.jsa" -Xlog:cds=off -Xlog:cds+dynamic=off -Xlog:aot=off \$BUILDCLI_JAVA_OPTS -jar "$JAR" "\$@"
+  -XX:SharedArchiveFile="$JAR.jsa" -Xlog:disable \$BUILDCLI_JAVA_OPTS -jar "$JAR" "\$@"
 LAUNCH
 chmod +x "$LAUNCHER"
 
