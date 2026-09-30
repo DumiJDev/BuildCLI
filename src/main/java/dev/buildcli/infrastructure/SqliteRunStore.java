@@ -41,7 +41,11 @@ public final class SqliteRunStore implements RunStore, dev.buildcli.ports.ChatLo
                     "CREATE TABLE chat_messages (id INTEGER PRIMARY KEY, thread TEXT NOT NULL, kind TEXT NOT NULL,"
                             + " author TEXT NOT NULL, text TEXT NOT NULL, at TEXT NOT NULL, state TEXT NOT NULL,"
                             + " attachments TEXT NOT NULL DEFAULT '', position INTEGER NOT NULL DEFAULT 0)",
-                    "CREATE INDEX chat_messages_by_position ON chat_messages (position, id)"));
+                    "CREATE INDEX chat_messages_by_position ON chat_messages (position, id)"),
+            List.of(
+                    "CREATE TABLE file_changes (message_id INTEGER NOT NULL, seq INTEGER NOT NULL, agent TEXT NOT NULL,"
+                            + " path TEXT NOT NULL, existed INTEGER NOT NULL, before_text TEXT, after_text TEXT,"
+                            + " PRIMARY KEY (message_id, seq))"));
 
     /** The schema version this build writes. */
     public static final int SCHEMA_VERSION = MIGRATIONS.size();
@@ -157,7 +161,67 @@ public final class SqliteRunStore implements RunStore, dev.buildcli.ports.ChatLo
 
     @Override
     public synchronized void clear(String thread) {
+        run("DELETE FROM file_changes WHERE message_id IN (SELECT id FROM chat_messages WHERE thread = ?)", ps -> ps.setString(1, thread));
         run("DELETE FROM chat_messages WHERE thread = ?", ps -> ps.setString(1, thread));
+    }
+
+    /** Newest change sets kept; older ones are dropped so the database does not grow with every edit. */
+    private static final int KEEP_CHANGE_SETS = 50;
+
+    /** Largest file whose content is kept for undo after a restart. */
+    private static final int MAX_KEPT_FILE = 200_000;
+
+    /**
+     * Content of files that may hold secrets is never written to disk: unlike messages it cannot be redacted, because
+     * undo must restore the exact text. Those files can still be undone while BuildCLI stays open.
+     */
+    static boolean mayHoldSecrets(String path) {
+        String p = path.toLowerCase(java.util.Locale.ROOT);
+        String name = p.substring(p.lastIndexOf('/') + 1);
+        return name.startsWith(".env") || name.endsWith(".pem") || name.endsWith(".key") || name.endsWith(".p12") || name.endsWith(".pfx")
+                || name.endsWith(".jks") || name.startsWith("id_rsa") || name.startsWith("id_ed25519") || name.contains("secret")
+                || name.contains("credential") || name.contains("password") || name.equals(".netrc") || name.equals(".npmrc")
+                || name.equals(".pgpass") || name.equals("settings-security.xml") || p.contains(".aws/") || p.contains(".ssh/");
+    }
+
+    @Override
+    public synchronized void saveChanges(long messageId, List<dev.buildcli.domain.FileChange> changes) {
+        run("DELETE FROM file_changes WHERE message_id = ?", ps -> ps.setLong(1, messageId));
+        int seq = 0;
+        for (dev.buildcli.domain.FileChange c : changes) {
+            boolean keep = !mayHoldSecrets(c.path()) && c.after().length() <= MAX_KEPT_FILE
+                    && (c.before() == null || c.before().length() <= MAX_KEPT_FILE);
+            int n = seq++;
+            run("INSERT INTO file_changes (message_id, seq, agent, path, existed, before_text, after_text) VALUES (?,?,?,?,?,?,?)", ps -> {
+                ps.setLong(1, messageId);
+                ps.setInt(2, n);
+                ps.setString(3, c.agent());
+                ps.setString(4, c.path());
+                ps.setInt(5, c.existed() ? 1 : 0);
+                ps.setString(6, keep ? c.before() : null);
+                ps.setString(7, keep ? c.after() : null);
+            });
+        }
+        run("DELETE FROM file_changes WHERE message_id NOT IN (SELECT DISTINCT message_id FROM file_changes ORDER BY message_id DESC LIMIT "
+                + KEEP_CHANGE_SETS + ")", ps -> { });
+    }
+
+    @Override
+    public synchronized List<dev.buildcli.domain.FileChange> changes(long messageId) {
+        List<dev.buildcli.domain.FileChange> out = new ArrayList<>();
+        try (PreparedStatement ps = connection.prepareStatement(
+                "SELECT agent, path, existed, before_text, after_text FROM file_changes WHERE message_id = ? ORDER BY seq")) {
+            ps.setLong(1, messageId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    // a null "after" means the content was not kept (a sensitive or very large file)
+                    out.add(new dev.buildcli.domain.FileChange(rs.getString(1), rs.getString(2), rs.getInt(3) == 1, rs.getString(4), rs.getString(5)));
+                }
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("cannot read the saved changes: " + e.getMessage(), e);
+        }
+        return out;
     }
 
     /** One line per attachment: kind, mime type, size and path, separated by tabs. */
