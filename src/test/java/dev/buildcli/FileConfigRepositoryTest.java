@@ -218,12 +218,12 @@ class FileConfigRepositoryTest {
     }
 
     @Test
-    void runtimeEntriesNeedAKnownProviderAndAMemberAgent() throws IOException {
+    void runtimeEntriesNeedAWellFormedProviderAndAMemberAgent() throws IOException {
         writeProject("agents/ana.md", ANA);
         writeProject("teams/t.yaml", "schema: 1\nname: t\nlead: ana\nagents: [ana]\nruntime:\n"
-                + "  default: { provider: mystery, model: x }\n  bob: { provider: ollama, model: y }\n");
+                + "  default: { provider: \"Not A Name!\", model: x }\n  bob: { provider: ollama, model: y }\n");
         var p = problems(this::load);
-        assertTrue(anyContains(p, "runtime.default needs provider"));
+        assertTrue(anyContains(p, "runtime.default needs a provider"), p.toString());
         assertTrue(anyContains(p, "runtime.bob refers to an agent that is not in the team"));
     }
 

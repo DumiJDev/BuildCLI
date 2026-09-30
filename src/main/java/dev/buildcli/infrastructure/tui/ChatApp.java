@@ -15,9 +15,13 @@ public final class ChatApp extends ToolkitApp {
     private final boolean mouse;
 
     public ChatApp(ChatSession session, Map<String, String> models, Path cwd, boolean mouse) {
+        this(session, models, cwd, mouse, ChatScreen.basicServices(session, models));
+    }
+
+    public ChatApp(ChatSession session, Map<String, String> models, Path cwd, boolean mouse, SettingsServices services) {
         this.session = session;
         this.mouse = mouse;
-        this.screen = new ChatScreen(session, models, cwd, this::leave);
+        this.screen = new ChatScreen(session, models, cwd, this::leave, services);
     }
 
     @Override
