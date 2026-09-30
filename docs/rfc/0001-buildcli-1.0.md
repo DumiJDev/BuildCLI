@@ -403,6 +403,12 @@ Each milestone has **acceptance criteria**; a milestone is closed only when they
 
 ### M3: TUI, CLI and preview (0.x)
 
+> **Status: implemented, verification partial.** TamboUI app (team panel, task tree, diff approvals, escalation, live output,
+> request input), the commands `init`, `agent`, `team`, `run`, `runs`, `task`, `usage`, `doctor`, `config`, and install scripts
+> (see [`docs/reference/cli.md`](../reference/cli.md)). CI exercises the CLI smoke test and both installers on Linux, macOS and
+> Windows; the TUI itself has only been driven on Linux, and the "new user completes the scenario in 10 minutes" criterion has
+> not been verified with a real user or a capable model.
+
 - **TamboUI app**: team panel, task/handoff tree, streaming agent output, approvals with diffs, escalation dialog, usage status bar.
 - Scripting commands (`init`, `agent`, `team`, `run --headless`, `task`, `usage`, `doctor`).
 - Packaging (single JAR, `install.sh`/`install.bat` updated). **Public 0.x preview.**

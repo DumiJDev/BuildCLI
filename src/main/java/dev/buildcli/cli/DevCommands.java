@@ -1,14 +1,15 @@
 package dev.buildcli.cli;
 
-import dev.buildcli.infrastructure.LangChain4jGateway;
 import dev.buildcli.application.Events;
-import dev.buildcli.eval.Bench;
-import dev.buildcli.eval.Scenario;
 import dev.buildcli.application.Orchestrator;
 import dev.buildcli.application.ToolRuntime;
 import dev.buildcli.domain.Limits;
-import dev.buildcli.infrastructure.SqliteRunStore;
+import dev.buildcli.domain.ModelRef;
+import dev.buildcli.eval.Bench;
+import dev.buildcli.eval.Scenario;
+import dev.buildcli.infrastructure.ProviderSettings;
 import dev.buildcli.infrastructure.ScriptedGateway;
+import dev.buildcli.infrastructure.SqliteRunStore;
 import dev.buildcli.infrastructure.TamboUiApp;
 import dev.buildcli.ports.LlmGateway;
 import java.nio.file.Files;
@@ -16,54 +17,47 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
-import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
-@Command(name = "buildcli", mixinStandardHelpOptions = true, subcommands = {Main.BenchCmd.class, Main.DemoCmd.class})
-public final class Main implements Runnable {
-    public static void main(String[] args) {
-        System.exit(new CommandLine(new Main()).execute(args));
-    }
+/** Tools for developing and qualifying BuildCLI itself. Hidden from the normal help. */
+final class DevCommands {
+    private DevCommands() {}
 
-    @Override
-    public void run() {
-        new CommandLine(this).usage(System.out);
-    }
-
-    /** Provider options shared by the commands that talk to a real model. The API key is only read from the environment. */
+    /** Provider options shared by the commands below. The API key is only ever read from the environment. */
     static final class ModelOptions {
         @Option(names = "--provider", defaultValue = "ollama", description = "ollama | openai (any OpenAI-compatible endpoint)") String provider;
         @Option(names = "--model", defaultValue = "qwen2.5:3b") String model;
-        @Option(names = "--url", description = "Base URL (default: Ollama http://localhost:11434, OpenAI https://api.openai.com/v1)") String url;
-        @Option(names = "--api-key-env", defaultValue = "OPENAI_API_KEY", description = "Environment variable holding the API key (openai provider)") String apiKeyEnv;
-        @Option(names = "--threads", defaultValue = "4", description = "Ollama num_thread (the default 16 was ~50x slower on the WSL2 spike box)") int threads;
-        @Option(names = "--no-stream", description = "Disable streaming (wait for each complete reply)") boolean noStream;
+        @Option(names = "--url", description = "Base URL of the provider") String url;
+        @Option(names = "--threads", defaultValue = "4", description = "Ollama num_thread") int threads;
+        @Option(names = "--no-stream", description = "Disable streaming") boolean noStream;
         @Option(names = "--temperature", defaultValue = "0", description = "0 makes runs identical; use > 0 to measure real variance") double temperature;
 
-        LlmGateway gateway() {
-            if (provider.equals("openai")) {
-                String key = System.getenv(apiKeyEnv);
-                if (key == null || key.isBlank()) {
-                    key = "not-needed"; // local servers (vLLM, LM Studio, Ollama /v1) ignore it
-                }
-                return LangChain4jGateway.openAiCompatible(url == null ? "https://api.openai.com/v1" : url, key, model, temperature, !noStream);
-            }
-            return LangChain4jGateway.ollama(url == null ? "http://localhost:11434" : url, model, threads, temperature, !noStream);
+        LlmGateway gateway(Map<String, String> env) {
+            ProviderSettings base = ProviderSettings.fromEnvironment(env);
+            ProviderSettings s = new ProviderSettings(provider.equals("ollama") && url != null ? url : base.ollamaUrl(),
+                    provider.equals("openai") && url != null ? url : base.openAiUrl(), base.openAiApiKey(), threads, temperature, !noStream);
+            return s.gatewayFor(new ModelRef(provider, model));
         }
     }
 
-    @Command(name = "bench", description = "Run the scenario headless against Ollama N times")
+    @Command(name = "bench", hidden = true, description = "Run the demo scenario headless against a real model N times")
     static final class BenchCmd implements Callable<Integer> {
-        @CommandLine.Mixin ModelOptions m;
+        private final CliContext ctx;
+
+        @picocli.CommandLine.Mixin ModelOptions m;
         @Option(names = "--runs", defaultValue = "10") int runs;
         @Option(names = "-v") boolean verbose;
         @Option(names = "--fixed-objective", description = "Script the lead: it hands this exact objective to bruno, so the run measures bruno alone")
         String fixedObjective;
 
+        BenchCmd(CliContext ctx) {
+            this.ctx = ctx;
+        }
+
         @Override
         public Integer call() throws Exception {
-            LlmGateway real = m.gateway();
+            LlmGateway real = m.gateway(ctx.env);
             String label = m.provider + ":" + m.model + " t=" + m.temperature + (fixedObjective == null ? "" : " fixed-objective");
             Bench.run(() -> fixedObjective == null ? real : withScriptedLead(real, fixedObjective), runs, label, verbose);
             return 0;
@@ -78,23 +72,30 @@ public final class Main implements Runnable {
         return (agent, messages, tools) -> agent.name().equals("ana") ? lead.chat(agent, messages, tools) : real.chat(agent, messages, tools);
     }
 
-    @Command(name = "demo", description = "Run the scenario in the TamboUI TUI (real model, or --fake for a scripted one)")
+    @Command(name = "demo", hidden = true, description = "Run the demo scenario in the TUI, with a real model or --fake")
     static final class DemoCmd implements Callable<Integer> {
-        @CommandLine.Mixin ModelOptions m;
+        private final CliContext ctx;
+
+        @picocli.CommandLine.Mixin ModelOptions m;
         @Option(names = "--fake", description = "Use a scripted LLM (no Ollama needed)") boolean fake;
         @Option(names = "--escalate", description = "With --fake: make Bruno fail so the escalation dialog shows") boolean escalate;
+        @Option(names = "--ask", description = "Start by asking for the request, like 'buildcli run' without one") boolean ask;
+
+        DemoCmd(CliContext ctx) {
+            this.ctx = ctx;
+        }
 
         @Override
         public Integer call() throws Exception {
             Path workspace = Files.createTempDirectory("buildcli-");
-            LlmGateway llm = fake ? script(escalate) : m.gateway();
-            new TamboUiApp(ui -> {
+            LlmGateway llm = fake ? script(escalate) : m.gateway(ctx.env);
+            var team = Scenario.team(Limits.defaults());
+            Map<String, String> models = new java.util.LinkedHashMap<>();
+            team.agents().forEach(a -> models.put(a.name(), fake ? "scripted" : m.provider + "/" + m.model));
+            new TamboUiApp(team, models, ask ? null : Scenario.REQUEST, (request, ui) -> {
                 try (SqliteRunStore store = new SqliteRunStore(SqliteRunStore.IN_MEMORY)) {
                     Events events = new Events(store, "demo", ui);
-                    new Orchestrator(Scenario.team(Limits.defaults()), llm, new ToolRuntime(workspace, ui, events), ui, events)
-                            .run(Scenario.REQUEST);
-                } catch (java.sql.SQLException e) {
-                    throw new IllegalStateException(e);
+                    new Orchestrator(team, llm, new ToolRuntime(workspace, ui, events), ui, events).run(request);
                 }
             }).run();
             return 0;
@@ -117,5 +118,4 @@ public final class Main implements Runnable {
                     .say("ana", "Done: Bruno created and verified out/greeting.txt.");
         }
     }
-
 }
