@@ -109,13 +109,8 @@ public final class TamboUiApp extends ToolkitApp implements UserInterface {
             case "ApprovalRequested" -> taskStatus.put(e.taskId(), "WAITING_APPROVAL");
             case "ApprovalGranted", "ApprovalDenied" -> taskStatus.put(e.taskId(), "RUNNING");
             case "AgentInvoked" -> {
-                for (String part : e.payload().split(" ")) {
-                    if (part.startsWith("in=")) {
-                        inputTokens += Integer.parseInt(part.substring(3));
-                    } else if (part.startsWith("out=")) {
-                        outputTokens += Integer.parseInt(part.substring(4));
-                    }
-                }
+                inputTokens += e.inputTokens();
+                outputTokens += e.outputTokens();
             }
             default -> {}
         }
