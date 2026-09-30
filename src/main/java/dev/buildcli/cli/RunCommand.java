@@ -1,5 +1,6 @@
 package dev.buildcli.cli;
 
+import dev.buildcli.application.ChatSession;
 import dev.buildcli.application.Events;
 import dev.buildcli.application.Orchestrator;
 import dev.buildcli.application.RunAborted;
@@ -104,8 +105,12 @@ final class RunCommand implements Callable<Integer> {
         String text = request == null ? "" : String.join(" ", request).strip();
         boolean tui = !headless && ctx.terminal;
         if (tui) {
-            ctx.tui.launch(team, models, text.isEmpty() ? null : text, (req, ui) -> execute(team, config, gateway, req, ui));
-            return exit.get();
+            ChatSession session = new ChatSession(team, (req, ui, cancelled) -> runOnce(team, config, gateway, req, ui, cancelled));
+            if (!text.isEmpty()) {
+                session.submit(text, List.of(), agentName);
+            }
+            ctx.tui.launch(session, models);
+            return 0;
         }
         if (text.isEmpty()) {
             ctx.err.println("error: a request is required without the TUI, for example: buildcli run --headless \"add a health endpoint\"");
@@ -151,32 +156,44 @@ final class RunCommand implements Callable<Integer> {
         return null;
     }
 
-    /** Runs on the calling thread (headless) or on the TUI's worker thread. Records its exit code in {@link #exit}. */
-    private void execute(Team team, ConfigRepository config, RoutingGateway gateway, String requestText, UserInterface ui) {
+    /** One request, start to finish: trust check, a fresh run id and store, the orchestrator. Throws if it cannot run. */
+    private Task runOnce(Team team, ConfigRepository config, RoutingGateway gateway, Orchestrator.Request request, UserInterface ui,
+            java.util.function.BooleanSupplier cancelled) throws Exception {
         String runId = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + "-"
                 + HexFormat.of().formatHex(randomBytes());
         try (SqliteRunStore store = SqliteRunStore.open(ctx.stateDb())) {
             if (!TrustGate.ensureTrusted(team, config, new FileTrustStore(ctx.trustFile()), ctx.projectKey(), ui)) {
-                ctx.err.println("The project's agent definitions were not trusted, so nothing was run.");
-                exit.set(1);
-                return;
+                throw new IllegalStateException("the project's agent definitions were not trusted, so nothing was run");
             }
             Events events = new Events(store, runId, ui);
             Orchestrator orchestrator = new Orchestrator(team, gateway, new ToolRuntime(ctx.cwd, ui, events), ui, events,
                     config.projectContext());
-            Task root = orchestrator.run(requestText);
+            orchestrator.cancelWhen(cancelled);
+            Task root = orchestrator.run(request);
+            lastRunId = runId;
+            lastUsage = store.usage(runId);
+            return root;
+        }
+    }
+
+    private String lastRunId;
+    private List<AgentUsage> lastUsage = List.of();
+
+    /** Headless: runs on the calling thread and records the exit code in {@link #exit}. */
+    private void execute(Team team, ConfigRepository config, RoutingGateway gateway, String requestText, UserInterface ui) {
+        try {
+            Task root = runOnce(team, config, gateway, new Orchestrator.Request(requestText), ui, () -> false);
             exit.set(root.status == TaskStatus.DONE ? 0 : 1);
-            summarize(root, runId, store.usage(runId));
+            summarize(root, lastRunId, lastUsage);
         } catch (RunAborted e) {
             exit.set(1);
             ctx.out.println();
-            ctx.out.println("Run " + runId + " aborted: " + e.getMessage());
+            ctx.out.println("Run aborted: " + e.getMessage());
         } catch (Exception e) {
             exit.set(1);
-            ctx.err.println("error: " + (e.getMessage() == null ? e.toString() : e.getMessage()));
-        }
-        if (ui instanceof dev.buildcli.infrastructure.TamboUiApp tuiApp) {
-            tuiApp.setOutcome("run " + runId + (exit.get() == 0 ? " done" : " failed") + " (buildcli task list)");
+            String msg = e.getMessage() == null ? e.toString() : e.getMessage();
+            ctx.err.println(msg.startsWith("the project's agent definitions were not trusted")
+                    ? "The project's agent definitions were not trusted, so nothing was run." : "error: " + msg);
         }
     }
 
