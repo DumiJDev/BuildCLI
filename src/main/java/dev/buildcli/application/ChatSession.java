@@ -183,6 +183,8 @@ public final class ChatSession implements UserInterface {
     private final dev.buildcli.ports.ChatLog log;
     /** The files behind each changes card, loaded from the log the first time a restored card asks. */
     private final Map<Long, List<dev.buildcli.domain.FileChange>> changeSets = new ConcurrentHashMap<>();
+    /** "Always allow" answers: thread, agent and what, to what it means. In memory only: a grant never outlives the session. */
+    private final Map<String, String> grants = new ConcurrentHashMap<>();
     private final java.util.Set<Long> savedChanges = ConcurrentHashMap.newKeySet();
     private volatile java.nio.file.Path workspace;
     private volatile dev.buildcli.application.tools.WorkspaceLock workspaceLock;
@@ -819,7 +821,11 @@ public final class ChatSession implements UserInterface {
 
     /** The oldest open question, or null. */
     public Pending pending() {
-        return pending.isEmpty() ? null : pending.get(0);
+        // one read of the list: checking isEmpty() and then get(0) fails when an answer removes the request in between
+        for (Pending p : pending) {
+            return p;
+        }
+        return null;
     }
 
     public int pendingCount() {
@@ -1229,11 +1235,50 @@ public final class ChatSession implements UserInterface {
         return r == null ? EVERYWHERE : r.thread;
     }
 
+    private static String grantId(String thread, ApprovalRequest r) {
+        return thread + "\u0001" + r.agent() + "\u0001" + r.grantKey();
+    }
+
+    /** Answers yes to this request and to the same kind of request from this agent in this chat from now on. */
+    public void approveAlways(Pending.Approval a) {
+        ApprovalRequest r = a.request();
+        if (r.grantKey() != null) {
+            grants.put(grantId(a.thread(), r), r.grantLabel());
+        }
+        a.answer().complete(true);
+    }
+
+    /** What is being approved automatically in this chat. */
+    public List<String> grants(String thread) {
+        List<String> out = new ArrayList<>();
+        grants.forEach((id, label) -> {
+            if (id.startsWith(thread + "\u0001")) {
+                out.add(label);
+            }
+        });
+        java.util.Collections.sort(out);
+        return out;
+    }
+
+    /** Asks again from now on. @return how many permissions were taken back */
+    public int revokeGrants(String thread) {
+        int before = grants.size();
+        grants.keySet().removeIf(id -> id.startsWith(thread + "\u0001"));
+        int n = before - grants.size();
+        if (n > 0) {
+            touch();
+        }
+        return n;
+    }
+
     @Override
     public boolean approve(ApprovalRequest request) {
         Run run = RUN.get();
         if (run != null && run.stop.get()) {
             return false;
+        }
+        if (request.grantKey() != null && grants.containsKey(grantId(threadNow(), request))) {
+            return true;
         }
         var answer = new CompletableFuture<Boolean>();
         Pending p = new Pending.Approval(request, answer, threadNow());

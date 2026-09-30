@@ -71,6 +71,7 @@ final class ChatScreen implements Element {
             new Command("retry", "", "Send the last failed message again", ""),
             new Command("review", "", "See the files agents changed in this chat", ""),
             new Command("undo", "", "Put back the files an agent changed last (shows them first)", ""),
+            new Command("revoke", "", "Stop approving automatically in this chat (shows what was allowed)", ""),
             new Command("queue", "[clear]", "Show or drop messages waiting their turn", ""),
             new Command("settings", "", "Providers, models, agents, theme and more", "F2"),
             new Command("connect", "", "Connect a provider and choose the default model", ""),
@@ -1386,6 +1387,13 @@ final class ChatScreen implements Element {
             }
             buttons.add(new String[] {" Approve  Y ", "primary"});
             actions.add(() -> a.answer().complete(true));
+            if (a.request().grantKey() != null) {
+                buttons.add(new String[] {" Always here  A ", "plain"});
+                actions.add(() -> session.approveAlways(a));
+                body.add(List.of());
+                body.add(List.of(new Span("A: " + clean(a.request().grantLabel()) + ". Until you close BuildCLI; /revoke takes it back.",
+                        st(Theme.DIM, Theme.DIALOG))));
+            }
             buttons.add(new String[] {" Deny  N ", "plain"});
             actions.add(() -> a.answer().complete(false));
         } else {
@@ -1493,8 +1501,16 @@ final class ChatScreen implements Element {
                 a.answer().complete(ch == 'y');
                 return EventResult.HANDLED;
             }
+            if (p instanceof ChatSession.Pending.Approval a && ch == 'a' && a.request().grantKey() != null) {
+                session.approveAlways(a);
+                return EventResult.HANDLED;
+            }
             if (p instanceof ChatSession.Pending.Escalation e && "rsa".indexOf(ch) >= 0) {
                 e.answer().complete(ch == 'r' ? EscalationChoice.RETRY : ch == 's' ? EscalationChoice.SKIP : EscalationChoice.ABORT);
+                return EventResult.HANDLED;
+            }
+            if (input.isEmpty() && !ctrl && !alt) {
+                // a letter that answers nothing must not start a message: it would make Y and N stop working
                 return EventResult.HANDLED;
             }
         }
@@ -1745,6 +1761,15 @@ final class ChatScreen implements Element {
                     }
                 }
                 case "undo" -> undoLast();
+                case "revoke" -> {
+                    List<String> was = session.grants(selected);
+                    if (was.isEmpty()) {
+                        session.system("Nothing is approved automatically in this chat.");
+                    } else {
+                        session.revokeGrants(selected);
+                        session.system("Asking again from now on. Was allowed: " + String.join("; ", was) + ".");
+                    }
+                }
                 case "status" -> open(new View("git status", LocalViews.status(cwd), false, false));
                 case "log" -> open(new View("Recent commits", LocalViews.log(cwd), false, false));
                 case "open" -> {
