@@ -8,6 +8,11 @@
 [`legacy`](../../tree/legacy) branch, tag `v0.14.0`). The design is in [`docs/rfc/0001-buildcli-1.0.md`](docs/rfc/0001-buildcli-1.0.md).
 Read [Known limitations](#known-limitations) before relying on it.
 
+![The BuildCLI chat: a group where ana delegates to bruno, who writes a file after you approve it, a command the policy denied, and a Review button](docs/images/chat.png)
+
+*The scripted demo (`buildcli demo --fake`, no model needed): the group on the left, ana delegating to bruno, a command
+the policy denied, and the changes with a Review button. Your own agents look the same.*
+
 ## The idea
 
 ```text
