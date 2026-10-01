@@ -593,6 +593,14 @@ public final class ChatSession implements UserInterface {
         }
     }
 
+    /**
+     * Deletes messages from the chat, for you and for the agents' memory of it (what they remember of a chat is built from
+     * what is in it). Messages being worked on and cards of changed files stay. @return how many were deleted
+     */
+    public int deleteMessages(java.util.Collection<Long> ids) {
+        return transcript.delete(ids);
+    }
+
     public void close() {
         closed = true;
         stop();

@@ -211,6 +211,32 @@ final class MessageStore {
         }
     }
 
+    /**
+     * Deletes these messages, on screen and on disk. A message still being worked on (queued or running) and a card of changed
+     * files (it is how they are undone) stay. @return how many were deleted
+     */
+    int delete(java.util.Collection<Long> ids) {
+        List<Long> gone = new ArrayList<>();
+        synchronized (messages) {
+            messages.removeIf(m -> {
+                boolean wanted = ids.contains(m.id()) && m.kind() != Kind.CHANGES && m.state() != State.QUEUED && m.state() != State.RUNNING;
+                if (wanted) {
+                    gone.add(m.id());
+                }
+                return wanted;
+            });
+        }
+        if (!gone.isEmpty()) {
+            try {
+                log.delete(gone);
+            } catch (RuntimeException e) {
+                // they are gone from the screen; the saved copy may come back after a restart
+            }
+            changed.run();
+        }
+        return gone.size();
+    }
+
     // ---- the files behind a "changed N files" card ----
 
     /** Keeps the files a run wrote, so the card can be reviewed and undone, also after a restart. */
