@@ -24,6 +24,8 @@ itself mean safe, so this page states what the **runtime** enforces, what it doe
 | **Untrusted text cannot drive your terminal** | Everything printed or drawn (model replies, file contents, command output, configuration text) has control characters and escape sequences made visible, and bidirectional overrides ("Trojan Source") replaced, so an approval dialog cannot be disguised. | `TerminalSafetyTest`, `untrustedTextCannotDriveTheTerminalInHeadlessOutput` |
 | **Windows `cmd.exe` argument guard** | Tools like `mvn` run through `cmd.exe` on Windows, which interprets `& \| < > ^ %` and quotes; arguments containing them are refused so a crafted argument cannot turn an allowed command into another. This is defence in depth: some JDK releases also reject such arguments themselves, and BuildCLI does not rely on that. Verified only as a unit test of the rule, not against a real `.cmd` on Windows. | `windowsRefusesArgumentsThatCmdExeWouldInterpret` |
 | **Bounded inputs** | File reads load only what is returned (a multi-gigabyte file cannot exhaust memory); huge files are not diffed in memory; configuration files over 256 KB are refused and YAML aliases are not expanded; invalid globs are rejected when the configuration loads. | `readingAHugeFileReturnsOnlyTheStartWithoutLoadingItAll`, `aYamlAliasBombInsideAnIgnoredValueIsNotExpanded`, `anInvalidGlobIsAConfigurationErrorNotARuntimeSurprise` |
+| **API keys you type into BuildCLI** | A key entered in the app (`/connect`) or with `buildcli provider login` is checked with the provider first, then kept in **one file in your own BuildCLI folder** (`~/.buildcli/credentials.json`), created readable by you only (mode 600, or an owner-only ACL on Windows) *before* the key is written and replaced atomically. It is never written to a project, never printed (the screen shows dots and the last four characters), and sent only to the provider it belongs to. A variable set in your environment always wins over a saved key. A damaged file is never overwritten. | `CredentialsTest`, `InAppKeyTest` |
+| **BuildCLI's own folder is off limits to tools** | `read_file`, `write_file`, `list_files` and `search` refuse `~/.buildcli` (saved keys, trust decisions, global settings) even when it is inside the workspace, for example when BuildCLI is started from your home directory, also through a symlink. An agent can neither read your keys nor rewrite the trust file. | `anAgentCannotReadWriteListOrSearchBuildclisOwnFolderEvenWhenItIsInsideTheWorkspace`, `aSymlinkIntoBuildclisFolderDoesNotOpenIt` |
 | **Stored state is scrubbed** | The request, task objectives, results and run summaries are redacted before they are written to the state database, not only the event log. | `secretsAreAlsoScrubbedFromWhatIsStoredAboutTasksAndRuns` |
 | **State stays out of the repo** | Runs, tasks and events live in `~/.buildcli/projects/<id>/`, never in the project tree. | `StateLocationsTest` |
 
@@ -39,6 +41,12 @@ call. The model may be *fooled*; it cannot be *given more power*.
   `["sh"]`) as a prefix, since that allows anything. A container sandbox is planned for 1.2.
 - **No network permission.** It cannot be enforced without a sandbox, so the schema rejects `permissions.network` rather
   than pretend. Commands you allow can use the network.
+- **Saved API keys are plain text, protected by file permissions** (like the credential files of most command line
+  tools), not encrypted and not in the operating system's keychain. Anyone who can read your files as you, and any backup of
+  your home directory, can read them. If that is not acceptable, do not save keys: set the environment variable instead,
+  and BuildCLI will never write it down. An agent's `run_command` is *not* kept away from the file by the tool path rules (they
+  only cover the file tools): do not allow `cat`, `type` or an interpreter as a command prefix for an agent that should not see your keys
+  (the output of a command is redacted for key formats, which is a safety net, not a guarantee).
 - **Redaction is best effort.** It recognises common credential formats and secret-named assignments. A password written
   in prose, or a secret with an unusual format, is invisible to it. Do not point an agent at files that contain secrets
   you would not want a model provider to see; with a hosted provider, what an agent reads is sent to it.

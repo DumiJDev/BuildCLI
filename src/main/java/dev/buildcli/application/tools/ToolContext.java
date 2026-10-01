@@ -25,6 +25,7 @@ public final class ToolContext {
     private final String agent;
     private final java.util.function.Consumer<String> onWait;
     private java.util.function.Consumer<dev.buildcli.domain.FileChange> onChange = c -> { };
+    private List<Path> protectedPaths = List.of();
 
     public ToolContext(Path workspace, Approval approval) {
         this(workspace, approval, new WorkspaceLock(), "agent", who -> { });
@@ -41,6 +42,15 @@ public final class ToolContext {
     /** Runs a change to the workspace while no other agent reads or changes it. Call it after any approval. */
     public <T> T exclusive(java.util.concurrent.Callable<T> work) throws Exception {
         return lock.exclusive(agent, onWait, work);
+    }
+
+    /**
+     * Folders no tool may read or write even when they are inside the workspace (BuildCLI's own folder, which holds the
+     * saved API keys and the trust decisions: an agent must not read the first or rewrite the second).
+     */
+    public ToolContext protect(List<Path> paths) {
+        this.protectedPaths = paths.stream().map(p -> p.toAbsolutePath().normalize()).toList();
+        return this;
     }
 
     /** Where to report the files this call writes, so they can be reviewed and undone. */
@@ -77,7 +87,32 @@ public final class ToolContext {
         if (existing != null && !existing.toRealPath().startsWith(workspace.toRealPath())) {
             throw new IllegalArgumentException("path escapes the workspace through a symlink: " + rel);
         }
+        if (isProtected(p)) {
+            throw new IllegalArgumentException("that is BuildCLI's own folder (saved keys and trust decisions); tools cannot use it: " + rel);
+        }
         return p;
+    }
+
+    /** True for BuildCLI's own folder and everything in it, also through a symlink. Walks of the workspace must skip it. */
+    public boolean isProtected(Path path) {
+        Path abs = path.toAbsolutePath().normalize();
+        for (Path forbidden : protectedPaths) {
+            if (abs.startsWith(forbidden)) {
+                return true;
+            }
+            try {
+                Path existing = abs;
+                while (existing != null && !Files.exists(existing, LinkOption.NOFOLLOW_LINKS)) {
+                    existing = existing.getParent();
+                }
+                if (existing != null && Files.exists(forbidden) && existing.toRealPath().startsWith(forbidden.toRealPath())) {
+                    return true;
+                }
+            } catch (IOException e) {
+                return true; // cannot tell: do not risk it
+            }
+        }
+        return false;
     }
 
     /** The workspace-relative path with forward slashes, the form permission globs are matched against. */

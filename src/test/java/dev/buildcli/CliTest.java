@@ -367,7 +367,7 @@ class CliTest {
     void configShowsLocationsAndNeverTheApiKey() {
         Result r = cli(() -> null, "", Map.of("OPENAI_API_KEY", "sk-very-secret-value-123456", "BUILDCLI_HOME", home.resolve("custom").toString()), "config");
         assertTrue(r.out.contains("global directory  : " + home.resolve("custom")), r.out);
-        assertTrue(r.out.contains("OPENAI_API_KEY    : set (not shown)"));
+        assertTrue(r.out.contains("OPENAI_API_KEY    : set in the environment (not shown)"), r.out);
         assertFalse(r.out.contains("very-secret"));
     }
 

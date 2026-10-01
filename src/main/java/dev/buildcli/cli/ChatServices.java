@@ -6,6 +6,7 @@ import dev.buildcli.domain.Capability;
 import dev.buildcli.domain.ModelRef;
 import dev.buildcli.domain.Origin;
 import dev.buildcli.domain.Team;
+import dev.buildcli.infrastructure.FileCredentialStore;
 import dev.buildcli.infrastructure.ModelCatalog;
 import dev.buildcli.infrastructure.ProviderProbe;
 import dev.buildcli.infrastructure.ProviderRegistry;
@@ -18,6 +19,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
 
@@ -61,8 +63,11 @@ final class ChatServices implements SettingsServices {
         List<Provider> out = new ArrayList<>();
         for (ProviderSpec s : providerSettings().registry().all()) {
             boolean keySet = s.needsKey() && !ctx.env.getOrDefault(s.apiKeyEnv(), "").isBlank();
+            // a set variable wins over a saved key, so that is what the key is "from" when both exist
+            boolean fromEnvironment = s.needsKey() && !ctx.processEnv.getOrDefault(s.apiKeyEnv(), "").isBlank();
+            String from = !keySet ? "" : fromEnvironment ? "environment" : "saved";
             out.add(new Provider(s.name(), s.baseUrl(), s.apiKeyEnv(), keySet, mine.contains(s.name()) && !ProviderRegistry.isBuiltIn(s.name()),
-                    s.description() == null ? "" : s.description()));
+                    s.description() == null ? "" : s.description(), from));
         }
         return out;
     }
@@ -103,6 +108,40 @@ final class ChatServices implements SettingsServices {
             catalog = c;
         }
         return c.models(provider);
+    }
+
+    @Override
+    public void saveKey(String provider, String key) throws Exception {
+        ProviderSpec spec = providerSettings().registry().find(provider).orElseThrow(() -> new IllegalArgumentException("unknown provider " + provider));
+        if (!spec.needsKey()) {
+            throw new IllegalArgumentException(provider + " needs no key");
+        }
+        ctx.credentials.put(spec.apiKeyEnv(), key);
+        catalog = null;
+    }
+
+    @Override
+    public CompletableFuture<ModelCatalog.Result> checkKey(String provider, String key) {
+        ProviderSpec spec = providerSettings().registry().find(provider).orElse(null);
+        if (spec == null || !spec.needsKey()) {
+            return CompletableFuture.completedFuture(new ModelCatalog.Result(List.of(), "unknown provider or no key needed"));
+        }
+        // a catalog of its own, with only this key in its environment: nothing is saved and nothing is cached
+        var settings = ProviderSettings.fromEnvironment(Map.of(spec.apiKeyEnv(), FileCredentialStore.clean(key)), ctx.globalDir());
+        return new ModelCatalog(settings).models(provider);
+    }
+
+    @Override
+    public boolean forgetKey(String provider) throws Exception {
+        ProviderSpec spec = providerSettings().registry().find(provider).orElseThrow(() -> new IllegalArgumentException("unknown provider " + provider));
+        boolean removed = spec.needsKey() && ctx.credentials.remove(spec.apiKeyEnv());
+        catalog = null;
+        return removed;
+    }
+
+    @Override
+    public String keyFile() {
+        return ctx.credentials.file().toString();
     }
 
     @Override
