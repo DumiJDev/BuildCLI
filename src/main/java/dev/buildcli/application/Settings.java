@@ -26,6 +26,7 @@ public final class Settings {
     public static final String DEFAULT_MODEL = "models.default";
     public static final String AGENT_MODEL = "models.agent.";
     public static final String AGENT_HOPS = "chat.agentMessages";
+    public static final String BELL = "notify.bell";
 
     public static final List<Definition> DEFINITIONS = List.of(
             new Definition(THEME, "Appearance", "Theme", "Colours of the chat", Type.CHOICE, List.of("dark", "light", "contrast"), "dark"),
@@ -36,6 +37,8 @@ public final class Settings {
                     Type.BOOLEAN, List.of(), "true"),
             new Definition(MOUSE, "General", "Mouse", "Click and scroll with the mouse (takes effect on the next start)", Type.BOOLEAN,
                     List.of(), "true"),
+            new Definition(BELL, "General", "Sound when an agent needs you", "Rings the terminal bell (many terminals flash the taskbar) "
+                    + "when an agent asks for approval, and when a job of 15 seconds or more ends", Type.BOOLEAN, List.of(), "true"),
             new Definition(AGENT_HOPS, "General", "Agent-to-agent messages", "How many messages agents may send each other before "
                     + "they pause and wait for you", Type.NUMBER, List.of(), "6"),
             new Definition(DEFAULT_MODEL, "Models", "Default model", "Used by agents that have no model of their own, e.g. "
