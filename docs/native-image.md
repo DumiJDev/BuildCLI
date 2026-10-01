@@ -47,6 +47,7 @@ send one message to a real model through OpenRouter) — treat the ratios as the
   so an attached image shows as `▣ photo.png · 6 KB` and is still sent to the model.
 - **Only Linux x86-64 was built and run.** Windows and macOS executables have to be built on those systems (add them to the CI matrix);
   the terminal layer on Windows (JLine through its native provider, the Windows backend of BuildCLI) was not exercised in native mode.
+- **The H2 state database** (`storage.backend: h2` or `memory`) is not covered by the reflection metadata: use SQLite in a native executable.
 - **The metadata is only as complete as the scenarios that produced it.** See above.
 
 ## Is it worth it?

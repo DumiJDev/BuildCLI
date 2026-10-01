@@ -18,7 +18,7 @@ import dev.buildcli.domain.Permissions;
 import dev.buildcli.domain.Task;
 import dev.buildcli.domain.Team;
 import dev.buildcli.infrastructure.ScriptedGateway;
-import dev.buildcli.infrastructure.SqliteRunStore;
+import dev.buildcli.infrastructure.StateStore;
 import dev.buildcli.ports.ApprovalRequest;
 import dev.buildcli.ports.LlmGateway;
 import java.nio.file.Path;
@@ -43,7 +43,7 @@ class ChatSessionTest {
     ChatSession.Executor orchestrated(LlmGateway llm, List<Orchestrator.Request> seen) {
         return (team, request, ui, cancelled, dispatcher) -> {
             seen.add(request);
-            try (SqliteRunStore store = new SqliteRunStore(SqliteRunStore.IN_MEMORY)) {
+            try (StateStore store = new StateStore(StateStore.IN_MEMORY)) {
                 Events events = new Events(store, "run", ui);
                 Orchestrator o = new Orchestrator(team, llm, new ToolRuntime(workspace, ui, events), ui, events);
                 o.cancelWhen(cancelled);

@@ -10,7 +10,7 @@ import dev.buildcli.domain.Event;
 import dev.buildcli.domain.RunInfo;
 import dev.buildcli.domain.Task;
 import dev.buildcli.domain.TaskStatus;
-import dev.buildcli.infrastructure.SqliteRunStore;
+import dev.buildcli.infrastructure.StateStore;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -20,7 +20,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-class SqliteRunStoreTest {
+class StateStoreTest {
     @TempDir Path dir;
 
     static RunInfo run(String id) {
@@ -29,15 +29,15 @@ class SqliteRunStoreTest {
 
     @Test
     void newDatabaseIsAtTheCurrentSchemaVersion() throws Exception {
-        try (var store = new SqliteRunStore(SqliteRunStore.IN_MEMORY)) {
-            assertEquals(SqliteRunStore.SCHEMA_VERSION, store.schemaVersion());
+        try (var store = new StateStore(StateStore.IN_MEMORY)) {
+            assertEquals(StateStore.SCHEMA_VERSION, store.schemaVersion());
         }
     }
 
     @Test
     void stateSurvivesReopeningTheFile() throws Exception {
         Path file = dir.resolve("nested/state.db");
-        try (var store = SqliteRunStore.open(file)) {
+        try (var store = StateStore.open(file)) {
             store.startRun(run("r1"));
             Task t = new Task(1, null, "user", "ana", "objective", "brief");
             t.status = TaskStatus.DONE;
@@ -48,7 +48,7 @@ class SqliteRunStoreTest {
             store.append("r1", new Event(Instant.now(), "TaskCreated", 1, "ana", "payload"));
             store.finishRun("r1", "DONE", "summary");
         }
-        try (var store = SqliteRunStore.open(file)) {
+        try (var store = StateStore.open(file)) {
             RunInfo r = store.listRuns(10).get(0);
             assertEquals("r1", r.id());
             assertEquals("DONE", r.status());
@@ -66,7 +66,7 @@ class SqliteRunStoreTest {
 
     @Test
     void savingATaskAgainUpdatesItInsteadOfDuplicatingIt() throws Exception {
-        try (var store = new SqliteRunStore(SqliteRunStore.IN_MEMORY)) {
+        try (var store = new StateStore(StateStore.IN_MEMORY)) {
             store.startRun(run("r1"));
             Task t = new Task(1, null, "user", "ana", "o", "b");
             store.saveTask("r1", t);
@@ -82,7 +82,7 @@ class SqliteRunStoreTest {
 
     @Test
     void usageIsAggregatedPerAgentFromTheEvents() throws Exception {
-        try (var store = new SqliteRunStore(SqliteRunStore.IN_MEMORY)) {
+        try (var store = new StateStore(StateStore.IN_MEMORY)) {
             store.startRun(run("r1"));
             store.append("r1", new Event(Instant.now(), "AgentInvoked", 1, "ana", "step=1", 100, 10));
             store.append("r1", new Event(Instant.now(), "AgentInvoked", 1, "ana", "step=2", 200, 20));
@@ -95,7 +95,7 @@ class SqliteRunStoreTest {
 
     @Test
     void recentRunsComeFirst() throws Exception {
-        try (var store = new SqliteRunStore(SqliteRunStore.IN_MEMORY)) {
+        try (var store = new StateStore(StateStore.IN_MEMORY)) {
             store.startRun(new RunInfo("old", "t", "r", Instant.parse("2026-01-01T00:00:00Z"), null, "DONE", null));
             store.startRun(new RunInfo("new", "t", "r", Instant.parse("2026-02-01T00:00:00Z"), null, "DONE", null));
             assertEquals("new", store.listRuns(10).get(0).id());
@@ -111,7 +111,7 @@ class SqliteRunStoreTest {
             st.execute("PRAGMA user_version=99");
             st.execute("CREATE TABLE marker (x INTEGER)");
         }
-        var ex = assertThrows(IllegalStateException.class, () -> new SqliteRunStore(url));
+        var ex = assertThrows(IllegalStateException.class, () -> new StateStore(url));
         assertTrue(ex.getMessage().contains("schema version 99"), ex.getMessage());
         try (Connection c = DriverManager.getConnection(url); Statement st = c.createStatement();
                 var rs = st.executeQuery("SELECT name FROM sqlite_master WHERE name = 'events'")) {

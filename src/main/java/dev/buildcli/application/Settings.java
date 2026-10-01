@@ -27,6 +27,7 @@ public final class Settings {
     public static final String AGENT_MODEL = "models.agent.";
     public static final String AGENT_HOPS = "chat.agentMessages";
     public static final String BELL = "notify.bell";
+    public static final String STORAGE = "storage.backend";
 
     public static final List<Definition> DEFINITIONS = List.of(
             new Definition(THEME, "Appearance", "Theme", "Colours of the chat", Type.CHOICE, List.of("dark", "light", "contrast"), "dark"),
@@ -41,6 +42,10 @@ public final class Settings {
                     + "when an agent asks for approval, and when a job of 15 seconds or more ends", Type.BOOLEAN, List.of(), "true"),
             new Definition(AGENT_HOPS, "General", "Agent-to-agent messages", "How many messages agents may send each other before "
                     + "they pause and wait for you", Type.NUMBER, List.of(), "6"),
+            new Definition(STORAGE, "General", "State database", "Where runs, events and chat history are kept. sqlite: a file, readable "
+                    + "from several terminals. h2: a file, several times faster, one BuildCLI at a time. memory: fastest, forgotten when "
+                    + "BuildCLI closes. Each keeps its own history (takes effect on the next start; BUILDCLI_STORAGE overrides it)",
+                    Type.CHOICE, List.of("sqlite", "h2", "memory"), "sqlite"),
             new Definition(DEFAULT_MODEL, "Models", "Default model", "Used by agents that have no model of their own, e.g. "
                     + "openrouter:openrouter/free", Type.MODEL, List.of(), ""));
 

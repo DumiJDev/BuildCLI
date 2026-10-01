@@ -6,7 +6,7 @@ import dev.buildcli.application.RunAborted;
 import dev.buildcli.application.ToolRuntime;
 import dev.buildcli.domain.*;
 import dev.buildcli.infrastructure.HeadlessUi;
-import dev.buildcli.infrastructure.SqliteRunStore;
+import dev.buildcli.infrastructure.StateStore;
 import dev.buildcli.ports.EscalationChoice;
 import dev.buildcli.ports.LlmGateway;
 import java.util.function.Supplier;
@@ -29,7 +29,7 @@ public final class Bench {
             long t0 = System.currentTimeMillis();
             String failure;
             int tokens = 0;
-            try (SqliteRunStore store = new SqliteRunStore(SqliteRunStore.IN_MEMORY)) {
+            try (StateStore store = new StateStore(StateStore.IN_MEMORY)) {
                 Events events = new Events(store, "run" + i, ui);
                 Orchestrator o = new Orchestrator(Scenario.team(Limits.defaults()), gateways.get(),
                         new ToolRuntime(ws, ui, events), ui, events);
