@@ -3,6 +3,7 @@ package dev.buildcli.infrastructure.tui;
 import static dev.buildcli.infrastructure.tui.Draw.clean;
 import static dev.buildcli.infrastructure.tui.Draw.fill;
 import static dev.buildcli.infrastructure.tui.Draw.put;
+import static dev.buildcli.infrastructure.tui.Draw.putFit;
 import static dev.buildcli.infrastructure.tui.Draw.st;
 import dev.buildcli.application.ChatSession;
 import dev.buildcli.application.ChatSession.Message;
@@ -323,7 +324,7 @@ final class ChatScreen implements Element {
             }
         });
         ensureSelection();
-        if (services.canConnect() && noModelAnywhere()) {
+        if (services.canConnect() && !session.contacts().isEmpty() && noModelAnywhere()) {
             openConnect("None of your agents has a model yet. Connect one to start chatting; it takes a minute.");
         }
     }
@@ -1031,7 +1032,7 @@ final class ChatScreen implements Element {
             Rect row = new Rect(box.x(), y0 + 1 + i, w, 1);
             fill(buf, row, st(Theme.TEXT, rowBg));
             put(buf, row.x() + 2, row.y(), it.label(), st(Theme.TEXT, rowBg).bold(), row.right() - 1);
-            put(buf, row.x() + 4 + labelW, row.y(), clean(it.detail()), st(Theme.DIM, rowBg), row.right() - 10);
+            putFit(buf, row.x() + 4 + labelW, row.y(), clean(it.detail()), st(Theme.DIM, rowBg), row.right() - 10);
             put(buf, row.right() - 2 - Wrap.width(it.right()), row.y(), it.right(), st(Theme.DIM, rowBg), row.right() - 1);
             int idx = first + i;
             hits.add(new Hit(row, () -> {
