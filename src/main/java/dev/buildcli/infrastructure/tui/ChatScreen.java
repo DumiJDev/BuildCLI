@@ -77,6 +77,7 @@ final class ChatScreen implements Element {
             new Command("queue", "[clear]", "Show or drop messages waiting their turn", ""),
             new Command("settings", "", "Providers, models, agents, theme and more", "F2"),
             new Command("connect", "", "Connect a provider and choose the default model", ""),
+            new Command("model", "[@agent] [provider:model]", "Show the models, or change the default (or one agent's) model", ""),
             new Command("dm", "@agent", "Open a direct chat with an agent", ""),
             new Command("newgroup", "<name> [@agents]", "Create a group with some agents", ""),
             new Command("add", "@agent", "Add an agent to this group", ""),
@@ -1062,6 +1063,49 @@ final class ChatScreen implements Element {
                 + "Every write asks you first, and you can undo it.", st(Theme.FAINT, Theme.BG));
     }
 
+    /**
+     * /model: with no argument, the Models settings (the default and each agent's model). With {@code provider:model} it
+     * becomes the default model of this project; with {@code @agent provider:model}, that agent's model. The model is not
+     * tested here (use /connect for that); a typo shows up as an error on the next message, with Retry.
+     */
+    private void changeModel(String arg) {
+        if (arg.isBlank()) {
+            settingsOpen = true;
+            settingsView.showModels();
+            return;
+        }
+        String[] words = arg.strip().split("\\s+");
+        String agent = null;
+        String model = words[words.length - 1];
+        if (words.length == 2 && words[0].startsWith("@")) {
+            agent = words[0].substring(1);
+        } else if (words.length != 1) {
+            say("Use /model provider:model, or /model @agent provider:model");
+            return;
+        }
+        int colon = model.indexOf(':');
+        if (colon <= 0 || colon == model.length() - 1) {
+            say("A model is written provider:model, for example openrouter:openrouter/free");
+            return;
+        }
+        String provider = model.substring(0, colon);
+        if (services.providers().stream().noneMatch(p -> p.name().equals(provider))) {
+            say("Unknown provider '" + provider + "'. Try /connect to see them.");
+            return;
+        }
+        if (agent != null && session.contact(agent) == null) {
+            say("There is no agent called " + agent + ".");
+            return;
+        }
+        try {
+            settings().set(dev.buildcli.ports.SettingsStore.Scope.PROJECT,
+                    agent == null ? dev.buildcli.application.Settings.DEFAULT_MODEL : dev.buildcli.application.Settings.AGENT_MODEL + agent, model);
+            say((agent == null ? "Default model: " : agent + " now uses ") + model + " (this project)");
+        } catch (RuntimeException e) {
+            say("Could not save it: " + e.getMessage());
+        }
+    }
+
     /** The "add the sample team" button of an empty chat: writes the agents, adds them live and opens their group. */
     private void addSampleAgents() {
         try {
@@ -2018,6 +2062,7 @@ final class ChatScreen implements Element {
                 case "team" -> toggleSidebar();
                 case "settings" -> settingsOpen = true;
                 case "connect" -> openConnect(null);
+                case "model" -> changeModel(arg);
                 case "info" -> openInfo(ChatInfoView.Mode.INFO);
                 case "dm" -> {
                     String who = firstMention(arg);
