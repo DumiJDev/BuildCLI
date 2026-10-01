@@ -90,6 +90,8 @@ ready-to-copy agents in [`examples/`](examples). New to the ideas? Read [concept
 - **Who may contact whom**: `/reach @bruno @ana off` stops one agent from contacting another (they are told they cannot).
 - **You stay in control**: file writes show as diffs; `/review` lists what agents changed and `/undo` puts it back (files
   changed since are left alone); approvals can be allowed "always here" and taken back with `/revoke`.
+- **Search your chats** (`Ctrl+K`, or click the box above the list): by name, role or something said in a chat, like a
+  messaging app; an agent you have no chat with yet is offered as "Start a chat".
 - **Work with the output**: `/copy` copies a code block, `Ctrl+F` searches the chat, `/diff`, `/status`, `/log`, `/open`,
   image and audio attachments, a title and bell when an agent needs you, mouse support (Windows included).
 - **Models**: `/model` shows or changes the default model, or one agent's.
