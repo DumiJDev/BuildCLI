@@ -57,8 +57,8 @@ call. The model may be *fooled*; it cannot be *given more power*.
 - **Git hooks run.** `git_commit` triggers the repository's hooks, exactly as your own commit would. Hooks are project
   code: this is another reason project definitions need your approval.
 - **Symlink races.** The symlink check happens when a path is resolved. A process that swaps a directory for a symlink
-  between the check and the use could still escape. Agents run one at a time, so this needs something else on your
-  machine acting concurrently.
+  between the check and the use could still escape. Agents in the chat can run in parallel, but writes and commands are
+  serialised by the workspace lock, so this needs something else on your machine acting concurrently.
 - **Approvals are only as good as your attention.** A diff you approve without reading is still applied.
 - **Small models make mistakes.** The runtime bounds what a mistake can do; it cannot make a weak model reliable. See the
   M0 findings for measurements.

@@ -17,7 +17,6 @@ import dev.tamboui.tui.event.MouseEventKind;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -380,7 +379,4 @@ final class ChatInfoView {
         }
     }
 
-    static String lower(String s) {
-        return s.toLowerCase(Locale.ROOT);
-    }
 }
