@@ -116,7 +116,7 @@ BuildCLI 1.0 is a rebuild; the previous CLI lives on the `legacy` branch (tag `v
 ```bash
 mvn verify                     # compile, unit tests, architecture tests, Checkstyle, shaded jar
 java -jar target/buildcli.jar --help
-java -jar target/buildcli.jar demo --fake    # try the TUI without a model
+java -jar target/buildcli.jar               # open the chat (AgentFather works without a model)
 ```
 
 - **Architecture is enforced by tests** (`ArchitectureTest`, ArchUnit): `domain` knows nothing internal, `ports`

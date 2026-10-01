@@ -5,7 +5,7 @@
 2. **Before a release, verify by hand what CI cannot** (record the result in the release notes):
    - drive the TUI on a **macOS** terminal and a **Windows** terminal (`buildcli init`, then `buildcli`: request input, an
      approval with a diff, a denial, an escalation);
-   - run `buildcli bench --runs 10 --temperature 0.5` against each model you claim support for;
+   - run a few real tasks (`buildcli run --headless --temperature 0.5 ...`, repeated) against each model you claim support for;
    - follow the README quick start on a clean machine.
 3. **Update `CHANGELOG.md`** and set the version: `mvn versions:set -DnewVersion=1.0.0 -DgenerateBackupPoms=false`.
 4. **Tag and publish**: commit, tag `v1.0.0`, and publish a GitHub release for the tag. The `Release` workflow builds the
