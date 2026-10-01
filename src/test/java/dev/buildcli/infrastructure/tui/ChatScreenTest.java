@@ -315,7 +315,7 @@ class ChatScreenTest {
                 dev.buildcli.ports.ChatStore.NONE, () -> 6, dev.buildcli.ports.ChatLog.NONE);
         var screen = screen(s);
         String out = render(screen, 120, 36);
-        assertTrue(out.contains("No agents yet") && out.contains("Add the sample team: ana, bruno and carla") && out.contains("Create your own agent")
+        assertTrue(out.contains("No agents yet") && out.contains("Add the sample team: wheslley, breno, matheus and dumildes") && out.contains("Create your own agent")
                 && out.contains("Connect a model and provider"), out);
         int[] button = CopyAndFindScreenTest.find(out, "Add the sample team", 0);
         screen.handleMouseEvent(MouseEvent.press(MouseButton.LEFT, button[0] + 2, button[1]));

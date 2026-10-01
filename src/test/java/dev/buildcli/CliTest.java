@@ -71,13 +71,13 @@ class CliTest {
         }, "", Map.of(), args);
     }
 
-    /** ana hands off to bruno, who writes src/Hello.java and finishes. */
+    /** wheslley hands off to matheus, who writes src/Hello.java and finishes. */
     static ScriptedGateway happyScript() {
         return new ScriptedGateway()
-                .call("ana", "handoff", Map.of("to", "bruno", "objective", "add Hello", "brief", "keep it small"))
-                .call("bruno", "write_file", Map.of("path", "src/Hello.java", "content", "class Hello {}\n"))
-                .say("bruno", "Added src/Hello.java.")
-                .say("ana", "Hello was added.");
+                .call("wheslley", "handoff", Map.of("to", "matheus", "objective", "add Hello", "brief", "keep it small"))
+                .call("matheus", "write_file", Map.of("path", "src/Hello.java", "content", "class Hello {}\n"))
+                .say("matheus", "Added src/Hello.java.")
+                .say("wheslley", "Hello was added.");
     }
 
     // ---- init, agents, teams ----
@@ -86,13 +86,13 @@ class CliTest {
     void initCreatesSampleAgentsAndAGroupThatLoadAndAreAlreadyTrusted() throws Exception {
         Result r = cli("init");
         assertEquals(0, r.code, r.err);
-        for (String f : List.of(".buildcli/agents/ana.md", ".buildcli/agents/bruno.md", ".buildcli/agents/carla.md", "AGENTS.md")) {
+        for (String f : List.of(".buildcli/agents/wheslley.md", ".buildcli/agents/matheus.md", ".buildcli/agents/breno.md", "AGENTS.md")) {
             assertTrue(Files.exists(project.resolve(f)), f);
         }
         assertFalse(Files.exists(project.resolve(".buildcli/teams")), "no team: agents, and a group kept outside the project");
-        assertTrue(r.out.contains("Next steps") && r.out.contains("group 'backend'"), r.out);
+        assertTrue(r.out.contains("Next steps") && r.out.contains("group 'maintainers'"), r.out);
         Path state = stateDir();
-        assertTrue(Files.readString(state.resolve("chats.yaml")).contains("backend"));
+        assertTrue(Files.readString(state.resolve("chats.yaml")).contains("maintainers"));
         assertTrue(Files.readString(state.resolve("settings.yaml")).contains("ollama:qwen2.5:7b"));
         assertEquals(0, cli("agent", "list").code, "the generated files pass validation");
         assertTrue(Files.exists(home.resolve(".buildcli/trust.json")), "init approves what it just generated");
@@ -106,7 +106,7 @@ class CliTest {
         assertEquals("my notes", Files.readString(project.resolve("AGENTS.md")));
         assertTrue(r.out.contains("skipped  AGENTS.md"));
         assertTrue(Files.readString(stateDir().resolve("settings.yaml")).contains("openai:gpt-x"));
-        assertEquals("skipped", cli("init").out.lines().filter(l -> l.contains("ana.md")).findFirst().orElseThrow().substring(0, 7));
+        assertEquals("skipped", cli("init").out.lines().filter(l -> l.contains("wheslley.md")).findFirst().orElseThrow().substring(0, 7));
     }
 
     @Test
@@ -121,9 +121,9 @@ class CliTest {
     void agentListShowAndCreate() throws Exception {
         cli("init");
         Result list = cli("agent", "list");
-        assertTrue(list.out.contains("ana") && list.out.contains("architect") && list.out.contains("project"), list.out);
-        Result show = cli("agent", "show", "bruno");
-        assertTrue(show.out.contains("may write:    [src/**]"), show.out);
+        assertTrue(list.out.contains("wheslley") && list.out.contains("architect") && list.out.contains("project"), list.out);
+        Result show = cli("agent", "show", "matheus");
+        assertTrue(show.out.contains("may write:    [src/**, docs/**]"), show.out);
         assertTrue(show.out.contains("[mvn, -q, verify]"), show.out);
         assertEquals(2, cli("agent", "show", "nobody").code);
 
@@ -139,12 +139,12 @@ class CliTest {
     @Test
     void teamCreateValidatesAgentsAndLead() throws Exception {
         cli("init");
-        assertEquals(0, cli("team", "create", "review", "--agents", "carla,ana", "--lead", "ana", "--model", "ollama:qwen2.5:7b").code);
+        assertEquals(0, cli("team", "create", "review", "--agents", "breno,wheslley", "--lead", "wheslley", "--model", "ollama:qwen2.5:7b").code);
         Result show = cli("team", "show", "review");
-        assertTrue(show.out.contains("lead: ana"), show.out);
-        assertEquals(2, cli("team", "create", "x", "--agents", "ana,ghost").code);
-        assertEquals(2, cli("team", "create", "y", "--agents", "ana", "--lead", "carla").code);
-        assertEquals(2, cli("team", "create", "review", "--agents", "ana").code, "no overwrite");
+        assertTrue(show.out.contains("lead: wheslley"), show.out);
+        assertEquals(2, cli("team", "create", "x", "--agents", "wheslley,ghost").code);
+        assertEquals(2, cli("team", "create", "y", "--agents", "wheslley", "--lead", "breno").code);
+        assertEquals(2, cli("team", "create", "review", "--agents", "wheslley").code, "no overwrite");
     }
 
     @Test
@@ -199,18 +199,18 @@ class CliTest {
     @Test
     void oldTeamFilesBecomeGroups() throws Exception {
         cli("init");
-        cli("team", "create", "review", "--agents", "carla,ana", "--lead", "carla");
+        cli("team", "create", "review", "--agents", "breno,wheslley", "--lead", "breno");
         ChatSession session = openChat();
         var review = session.groups().stream().filter(g -> g.name().equals("review")).findFirst().orElseThrow();
-        assertEquals(List.of("carla", "ana"), review.members());
-        assertEquals(List.of("carla"), review.admins(), "the lead becomes the admin");
-        assertTrue(session.groups().stream().anyMatch(g -> g.name().equals("backend")));
+        assertEquals(List.of("breno", "wheslley"), review.members());
+        assertEquals(List.of("breno"), review.admins(), "the lead becomes the admin");
+        assertTrue(session.groups().stream().anyMatch(g -> g.name().equals("maintainers")));
     }
 
     @Test
     void runHeadlessExecutesTheTeamPersistsTheRunAndReportsTheResult() throws Exception {
         cli("init");
-        Result r = cli(CliTest::happyScript, "", Map.of(), "run", "--team", "backend", "--headless", "--approve", "writes", "add a Hello class");
+        Result r = cli(CliTest::happyScript, "", Map.of(), "run", "--team", "maintainers", "--headless", "--approve", "writes", "add a Hello class");
         assertEquals(0, r.code, r.err + r.out);
         assertTrue(r.out.contains("Hello was added."), r.out);
         assertTrue(r.out.contains("HandoffCreated"), r.out);
@@ -221,10 +221,10 @@ class CliTest {
 
         assertTrue(cli("runs").out.contains("DONE") && cli("runs").out.contains("add a Hello class"));
         Result tasks = cli("task", "list");
-        assertTrue(tasks.out.contains("#1") && tasks.out.contains("ana -> bruno") && tasks.out.contains("DONE"), tasks.out + tasks.err);
+        assertTrue(tasks.out.contains("#1") && tasks.out.contains("wheslley -> matheus") && tasks.out.contains("DONE"), tasks.out + tasks.err);
         assertTrue(cli("task", "show", "2").out.contains("Added src/Hello.java."));
         Result usage = cli("usage");
-        assertTrue(usage.out.contains("ana") && usage.out.contains("bruno") && usage.out.contains("total"), usage.out);
+        assertTrue(usage.out.contains("wheslley") && usage.out.contains("matheus") && usage.out.contains("total"), usage.out);
         assertTrue(cli("usage", "--json").out.contains("\"totals\":{\"calls\":4,\"inputTokens\":400,\"outputTokens\":80}"));
     }
 
@@ -248,7 +248,7 @@ class CliTest {
     @Test
     void theOnlyTeamIsUsedAndADirectAgentRunWorks() throws Exception {
         cli("init");
-        Result direct = cli(() -> new ScriptedGateway().say("carla", "Looks good."), "", Map.of(), "run", "--headless", "--agent", "carla", "review it");
+        Result direct = cli(() -> new ScriptedGateway().say("breno", "Looks good."), "", Map.of(), "run", "--headless", "--agent", "breno", "review it");
         assertEquals(0, direct.code, direct.err);
         assertTrue(direct.out.contains("Looks good."));
     }
@@ -259,7 +259,7 @@ class CliTest {
         cli("init");
         assertTrue(cli("run", "--group", "nope", "--headless", "x").err.contains("no group named 'nope'"));
         assertTrue(cli("run", "--agent", "nope", "--headless", "x").err.contains("no agent named 'nope'"));
-        assertTrue(cli("run", "--team", "backend", "--agent", "ana", "--headless", "x").err.contains("either --group or --agent"));
+        assertTrue(cli("run", "--team", "maintainers", "--agent", "wheslley", "--headless", "x").err.contains("either --group or --agent"));
         assertTrue(cli("run", "--headless").err.contains("a request is required"));
         assertEquals(2, cli("run", "--model", "justamodel", "--headless", "x").code);
     }
@@ -270,7 +270,7 @@ class CliTest {
         Files.delete(stateDir().resolve("settings.yaml"));
         Result refused = cli("run", "--headless", "x");
         assertEquals(2, refused.code);
-        assertTrue(refused.err.contains("no model configured for agent 'ana'"), refused.err);
+        assertTrue(refused.err.contains("no model configured for agent 'wheslley'"), refused.err);
         Result given = cli(CliTest::happyScript, "", Map.of(), "run", "--headless", "--approve", "all", "--model", "ollama:m", "add Hello");
         assertEquals(0, given.code, given.err + given.out);
         assertEquals("m", modelsRequested.get(0).model());
@@ -279,8 +279,8 @@ class CliTest {
     @Test
     void changedProjectDefinitionsMustBeTrustedAgainBeforeAnythingRuns() throws Exception {
         cli("init");
-        Files.writeString(project.resolve(".buildcli/agents/bruno.md"),
-                Files.readString(project.resolve(".buildcli/agents/bruno.md")).replace("src/**", "**"));
+        Files.writeString(project.resolve(".buildcli/agents/matheus.md"),
+                Files.readString(project.resolve(".buildcli/agents/matheus.md")).replace("src/**", "**"));
         Result r = cli(CliTest::happyScript, "", Map.of(), "run", "--headless", "--approve", "writes", "add Hello");
         assertEquals(1, r.code);
         assertTrue(r.err.contains("were not trusted, so nothing was run"), r.err);
@@ -296,7 +296,7 @@ class CliTest {
         Result r = cli(() -> {
             var g = new ScriptedGateway();
             for (int i = 0; i < 4; i++) {
-                g.then("ana", new RuntimeException("provider down"));
+                g.then("wheslley", new RuntimeException("provider down"));
             }
             return g;
         }, "", Map.of(), "run", "--headless", "--approve", "all", "do it");
@@ -330,7 +330,7 @@ class CliTest {
         Result r = cli(() -> null, "", Map.of("OLLAMA_HOST", "127.0.0.1:1"), "doctor");
         assertEquals(0, r.code, r.out);
         assertTrue(r.out.contains("warn  Ollama is not reachable at http://127.0.0.1:1"), r.out);
-        assertTrue(r.out.contains("3 agent(s) loaded, configuration is valid"), r.out);
+        assertTrue(r.out.contains("4 agent(s) loaded, configuration is valid"), r.out);
     }
 
     @Test
@@ -388,10 +388,10 @@ class CliTest {
         cli("init");
         Files.writeString(project.resolve("notes.txt"), "\u001b[2Jcleared \u001b]0;pwned\u0007 \u202Edisguised");
         Result r = cli(() -> new ScriptedGateway()
-                .call("ana", "handoff", Map.of("to", "carla", "objective", "read \u001b[31mnotes"))
-                .call("carla", "read_file", Map.of("path", "notes.txt"))
-                .say("carla", "read it \u001b[1mbold")
-                .say("ana", "final \u001b]0;title\u0007 report"), "", Map.of(), "run", "--headless", "--approve", "all", "look at the notes");
+                .call("wheslley", "handoff", Map.of("to", "breno", "objective", "read \u001b[31mnotes"))
+                .call("breno", "read_file", Map.of("path", "notes.txt"))
+                .say("breno", "read it \u001b[1mbold")
+                .say("wheslley", "final \u001b]0;title\u0007 report"), "", Map.of(), "run", "--headless", "--approve", "all", "look at the notes");
         assertEquals(0, r.code, r.out + r.err);
         assertFalse(r.out.contains("\u001b"), "an ESC reached the terminal");
         assertFalse(r.out.contains("\u0007"), "a BEL reached the terminal");
