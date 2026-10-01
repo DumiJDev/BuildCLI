@@ -86,6 +86,25 @@ class ReachAndPostTest {
     }
 
     @Test
+    void whenAnAgentIsHandedWorkInAPrivateChatTheirExchangeHappensInAChatOfTheirOwn() throws Exception {
+        AtomicReference<String> insideRun = new AtomicReference<>();
+        var session = new ChatSession(ROSTER, (team, request, ui, cancelled, dispatcher) -> {
+            dispatcher.run("ana", "bruno", "check the build", () -> {
+                insideRun.set("done");
+                return "build is green";
+            });
+            return done("ana", "bruno says it is green");
+        });
+        session.submit("ask bruno to check the build", List.of(), "ana");
+        awaitIdle(session);
+        assertEquals("done", insideRun.get());
+        assertEquals(List.of("ana~bruno"), session.agentChats(), "the handoff opened their chat");
+        assertEquals(List.of("check the build"), in(session, "ana~bruno").stream().map(ChatSession.Message::text).toList());
+        assertEquals(List.of("bruno says it is green"), in(session, "ana").stream().map(ChatSession.Message::text).toList(),
+                "the chat with the user only gets the answer");
+    }
+
+    @Test
     void anAgentTheUserBlockedCannotBeContactedAndTheAgentIsToldSo() throws Exception {
         AtomicReference<String> result = new AtomicReference<>();
         AtomicReference<Boolean> sees = new AtomicReference<>();

@@ -22,17 +22,31 @@ final class Run {
     final String thread;
     final String me;
     final int hops;
-    final AtomicBoolean stop = new AtomicBoolean();
+    final AtomicBoolean stop;
     /** The tasks of this run (guarded by the map itself). */
-    final Map<Integer, Task> tasks = new LinkedHashMap<>();
-    final Set<String> handedOffTo = ConcurrentHashMap.newKeySet();
+    final Map<Integer, Task> tasks;
+    final Set<String> handedOffTo;
     /** Files written during this run, by its agent or by teammates it handed work to. */
-    final List<FileChange> changes = new CopyOnWriteArrayList<>();
+    final List<FileChange> changes;
 
     Run(long messageId, String thread, String me, int hops) {
+        this(messageId, thread, me, hops, new AtomicBoolean(), new LinkedHashMap<>(), ConcurrentHashMap.newKeySet(), new CopyOnWriteArrayList<>());
+    }
+
+    private Run(long messageId, String thread, String me, int hops, AtomicBoolean stop, Map<Integer, Task> tasks, Set<String> handedOffTo,
+            List<FileChange> changes) {
         this.messageId = messageId;
         this.thread = thread;
         this.me = me;
         this.hops = hops;
+        this.stop = stop;
+        this.tasks = tasks;
+        this.handedOffTo = handedOffTo;
+        this.changes = changes;
+    }
+
+    /** The same run seen from a teammate who was handed part of it: what they say goes to {@code otherThread}, the rest is shared. */
+    Run handedTo(String agent, String otherThread) {
+        return new Run(messageId, otherThread, agent, hops, stop, tasks, handedOffTo, changes);
     }
 }
