@@ -148,6 +148,27 @@ final class ChatInfoView {
                         out.add(new Row(m + (g.isAdmin(m) ? "  · admin" : ""), roleOf(m) + " · " + presence(m), Theme.agentColor(m), actions));
                     }
                     out.add(new Row("+ Add member", "", Theme.ACCENT, List.of(new Action("Add", 'a', () -> open(Mode.ADD_MEMBER)))));
+                    out.add(new Row("Context", g.context().isEmpty() ? "optional: background the agents read before answering" : g.context().replace('\n', ' '),
+                            g.context().isEmpty() ? Theme.DIM : Theme.TEXT, List.of(new Action("Edit", 'c',
+                                    () -> ask("Context for " + g.name(), g.context(), text -> run(() -> session.setGroupContext(g.id(), text, g.files()),
+                                            "Context saved"))),
+                                    new Action("Add file", 'f', () -> ask("File to add to the context", "path to a text file", path -> run(() -> {
+                                        java.nio.file.Path file = java.nio.file.Path.of(path.strip()).toAbsolutePath().normalize();
+                                        if (!java.nio.file.Files.isRegularFile(file)) {
+                                            throw new IllegalArgumentException("there is no file " + path.strip());
+                                        }
+                                        List<String> now = new ArrayList<>(g.files());
+                                        if (!now.contains(file.toString())) {
+                                            now.add(file.toString());
+                                        }
+                                        session.setGroupContext(g.id(), g.context(), now);
+                                    }, "File added"))))));
+                    for (String f : g.files()) {
+                        java.nio.file.Path fp = java.nio.file.Path.of(f);
+                        out.add(new Row("  " + fp.getFileName(), fp.getParent() == null ? "" : fp.getParent().toString(), Theme.DIM, List.of(new Action("Remove", 'v',
+                                () -> run(() -> session.setGroupContext(g.id(), g.context(), g.files().stream().filter(x -> !x.equals(f)).toList()),
+                                        "File removed")))));
+                    }
                     out.add(new Row("Rename group", g.name(), Theme.TEXT, List.of(new Action("Rename", 'n',
                             () -> ask("New name", g.name(), name -> run(() -> session.renameGroup(g.id(), name), "Renamed"))))));
                     if (!g.id().equals(ChatSession.MAIN)) {

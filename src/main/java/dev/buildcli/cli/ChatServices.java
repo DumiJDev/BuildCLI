@@ -166,12 +166,27 @@ final class ChatServices implements SettingsServices {
 
     @Override
     public List<String> createSampleAgents() throws Exception {
-        SampleAgents.writeFiles(ctx.cwd, msg -> { });
+        return createSampleAgents(SampleKits.DEV.key());
+    }
+
+    @Override
+    public List<String> sampleTeams() {
+        return SampleKits.ALL.stream().map(k -> k.key() + ": " + k.title() + " (" + k.about() + ")").toList();
+    }
+
+    @Override
+    public List<String> createSampleAgents(String kitKey) throws Exception {
+        SampleKits.Kit kit = SampleKits.find(kitKey);
+        if (kit == null) {
+            throw new IllegalArgumentException("there is no sample team '" + kitKey + "'; the ones I have are "
+                    + String.join(", ", SampleKits.ALL.stream().map(SampleKits.Kit::key).toList()));
+        }
+        SampleKits.writeFiles(ctx.cwd, kit, msg -> { });
         retrust();
         var fresh = new dev.buildcli.infrastructure.FileConfigRepository(ctx.cwd, ctx.globalDir()); // reads exactly what was written
         List<String> added = new ArrayList<>();
         var s = session;
-        for (String name : SampleAgents.NAMES) {
+        for (String name : kit.names()) {
             Agent agent = fresh.agent(name).orElse(null);
             boolean known = (config.agent(name).isPresent() || created.containsKey(name)) && !deleted.contains(name);
             if (agent == null || known) {
@@ -185,10 +200,10 @@ final class ChatServices implements SettingsServices {
             }
         }
         if (added.isEmpty()) {
-            throw new IllegalArgumentException("the sample agents are already here");
+            throw new IllegalArgumentException("those sample agents are already here");
         }
-        if (s != null && s.group("#" + SampleAgents.GROUP) == null) {
-            s.createGroup(SampleAgents.GROUP, SampleAgents.NAMES); // the first member, wheslley, becomes its admin
+        if (s != null && s.group("#" + kit.group()) == null) {
+            s.createGroup(kit.group(), kit.names()); // the first member becomes its admin
         }
         return added;
     }
@@ -208,7 +223,7 @@ final class ChatServices implements SettingsServices {
         Path file = (global ? ctx.globalDir() : ctx.cwd.resolve(".buildcli")).resolve("agents").resolve(name + ".md");
         Files.createDirectories(file.getParent());
         List<String> caps = capabilities.isEmpty() ? List.of(Capability.FILESYSTEM_READ, Capability.SEARCH) : capabilities;
-        String r = role.isBlank() ? "developer" : role;
+        String r = role.isBlank() ? "assistant" : role;
         Files.writeString(file, AgentCommand.CreateCmd.template(name, r, caps, instructions), StandardCharsets.UTF_8);
         deleted.remove(name);
         retrust();

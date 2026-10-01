@@ -50,6 +50,8 @@ final class ChatScreen implements Element {
     private final ChatSession session;
     private final Map<String, String> models;
     private final Path cwd;
+    /** Whether the folder is a git repository; if not, nothing about "changes" or "tests" is offered. */
+    private final boolean gitFolder;
     private final Runnable quit;
     private final InputEditor input = new InputEditor();
     private final PendingDialog pending;
@@ -106,6 +108,7 @@ final class ChatScreen implements Element {
 
     ChatScreen(ChatSession session, Map<String, String> models, Path cwd, Runnable quit, SettingsServices services) {
         this.session = session;
+        this.gitFolder = java.nio.file.Files.exists(cwd.resolve(".git"));
         this.menu = new SlashMenu(input, session, () -> selected, this::runCommand, (rect, action) -> hits.add(new Hit(rect, action)));
         this.pending = new PendingDialog(session, input, (rect, action) -> hits.add(new Hit(rect, action)), this::pendingChatTitle);
         this.viewer = new ViewerPane(session, (rect, action) -> hits.add(new Hit(rect, action)), this::reviewChanges);
@@ -126,6 +129,11 @@ final class ChatScreen implements Element {
             @Override
             public String selected() {
                 return selected;
+            }
+
+            @Override
+            public String draft(String thread) {
+                return thread.equals(selected) ? input.text() : drafts.getOrDefault(thread, "");
             }
 
             @Override
@@ -247,6 +255,11 @@ final class ChatScreen implements Element {
             }
 
             @Override
+            public boolean codeFolder() {
+                return gitFolder;
+            }
+
+            @Override
             public void review(long changesId, boolean undo) {
                 reviewChanges(changesId, undo);
             }
@@ -309,6 +322,8 @@ final class ChatScreen implements Element {
                 session.system(message);
             }
         });
+        session.profile(() -> dev.buildcli.application.UserProfile.describe(settings()));
+        session.approvalMode(dev.buildcli.application.ApprovalMode.parse(settings().get(dev.buildcli.application.Settings.APPROVAL_MODE)));
         ensureSelection();
         if (services.canConnect() && !session.contacts().isEmpty() && noModelAnywhere()) {
             openConnect("None of your agents has a model yet. Connect one to start chatting; it takes a minute.");
@@ -526,6 +541,10 @@ final class ChatScreen implements Element {
             input.set(drafts.getOrDefault(thread, ""));
         }
         selected = thread;
+        // choosing a chat from the list leaves whatever screen was over the conversation (settings, connect, the chat's info)
+        settingsOpen = false;
+        infoOpen = false;
+        connectOpen = false;
         searching = false;
         chatList.closeSearch();
         if (ChatSession.FATHER.equals(thread)) {
@@ -620,19 +639,32 @@ final class ChatScreen implements Element {
         put(buf, nx, r.y() + 1, sub, subStyle, r.right() - 30);
         hits.add(new Hit(new Rect(x, r.y(), Math.max(1, r.right() - 32 - x), 2), () -> openInfo(ChatInfoView.Mode.INFO)));
         int bx = r.right() - 1;
-        String[][] buttons = {{" Help ", "help"}, {" Tasks ", "tasks"}, {" Changes ", "diff"}};
+        String[][] buttons = gitFolder ? new String[][] {{" Help ", "help"}, {" Tasks ", "tasks"}, {" Changes ", "diff"}}
+                : new String[][] {{" Help ", "help"}, {" Tasks ", "tasks"}};
         for (String[] b : buttons) {
             bx -= Wrap.width(b[0]) + 1;
             put(buf, bx, r.y(), b[0], st(Theme.TEXT, Theme.FIELD), r.right());
             String cmd = b[1];
             hits.add(new Hit(new Rect(bx, r.y(), Wrap.width(b[0]), 1), () -> runCommand("/" + cmd)));
         }
+        int px = r.right() - 1;
         if (session.isActive(selected)) {
             String stop = " ■ Stop ";
-            int sx = r.right() - 1 - Wrap.width(stop);
-            put(buf, sx, r.y() + 1, stop, st(Theme.TEXT, Theme.DANGER), r.right());
-            hits.add(new Hit(new Rect(sx, r.y() + 1, Wrap.width(stop), 1), () -> session.stop(selected)));
+            px -= Wrap.width(stop);
+            put(buf, px, r.y() + 1, stop, st(Theme.TEXT, Theme.DANGER), r.right());
+            hits.add(new Hit(new Rect(px, r.y() + 1, Wrap.width(stop), 1), () -> session.stop(selected)));
+            px -= 1;
         }
+        var mode = session.approvalMode();
+        String pill = " " + mode.label() + " ⇄ ";
+        px -= Wrap.width(pill);
+        Style pillStyle = switch (mode) {
+            case MANUAL -> st(Theme.DIM, Theme.FIELD);
+            case EDITS -> st(Theme.BG, Theme.ACCENT).bold();
+            case AUTO -> st(Theme.TEXT, Theme.DANGER).bold();
+        };
+        put(buf, px, r.y() + 1, pill, pillStyle, r.right());
+        hits.add(new Hit(new Rect(px, r.y() + 1, Wrap.width(pill), 1), () -> commands.setMode(session.approvalMode().next())));
     }
 
     /** The agent currently working in {@code thread}, preferring one that is not just waiting for a teammate. */
@@ -1079,7 +1111,11 @@ final class ChatScreen implements Element {
             case PAGE_UP -> scroll(Math.max(3, area.height() / 2));
             case PAGE_DOWN -> scroll(-Math.max(3, area.height() / 2));
             case ESCAPE -> scrollOff = 0;
-            case TAB -> { }
+            case TAB -> {
+                if (key.hasShift()) {
+                    commands.setMode(session.approvalMode().next());
+                }
+            }
             case CHAR -> {
                 if (ctrl) {
                     switch (ch) {

@@ -88,4 +88,35 @@ class SampleAgentsTest {
         assertEquals("my own matheus", session.contact("matheus").role());
         session.close();
     }
+
+    @Test
+    void theNonTechnicalTeamsLoadAsValidAgentsThatCannotRunCommandsOrCommit() throws Exception {
+        Path project = Files.createDirectories(root.resolve("project"));
+        Path home = Files.createDirectories(root.resolve("home"));
+        var out = new PrintStream(new ByteArrayOutputStream());
+        var ctx = new CliContext(project, home, Map.of(), out, out, new BufferedReader(new StringReader("")), false, (r, s) -> null,
+                (session, models, services) -> { });
+        var config = ctx.loadConfig();
+        var setup = new ChatSetup(ctx, config);
+        var services = new ChatServices(ctx, config, setup);
+        var session = new ChatSession(config.agents(), setup.groups(), setup.limits(), (t, req, ui, c, d) -> {
+            throw new AssertionError("no model is called");
+        }, setup.store, () -> 6, ChatLog.NONE);
+        services.attach(session);
+
+        assertEquals(3, services.sampleTeams().size());
+        assertEquals(List.of("writer", "editor", "researcher"), services.createSampleAgents("writing"));
+        assertEquals(List.of("assistant", "analyst", "planner"), services.createSampleAgents("office"));
+        assertThrows(IllegalArgumentException.class, () -> services.createSampleAgents("pirates"));
+        assertEquals(List.of("writer"), session.group("#writing-desk").admins());
+        for (String name : List.of("writer", "editor", "researcher", "assistant", "analyst", "planner")) {
+            var agent = session.contact(name);
+            assertTrue(agent != null, name);
+            assertTrue(!agent.can("command.execute") && !agent.can("git.commit") && !agent.can("git.read"), name + " has no commands and no git");
+            assertTrue(agent.permissions().commandAllow().isEmpty(), name);
+        }
+        assertEquals(List.of("drafts/**"), session.contact("editor").permissions().writeGlobs());
+        assertEquals(6, ctx.loadConfig().agents().size(), "every file loads without a problem");
+        session.close();
+    }
 }

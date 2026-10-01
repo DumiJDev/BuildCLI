@@ -24,9 +24,12 @@ final class Approvals {
     /** Sets what an agent is doing ("waiting for you"). */
     private final BiConsumer<String, String> setState;
 
-    Approvals(Runnable changed, BiConsumer<String, String> setState) {
+    private final java.util.function.Supplier<ApprovalMode> mode;
+
+    Approvals(Runnable changed, BiConsumer<String, String> setState, java.util.function.Supplier<ApprovalMode> mode) {
         this.changed = changed;
         this.setState = setState;
+        this.mode = mode;
     }
 
     private static String grantId(String thread, ApprovalRequest r) {
@@ -39,6 +42,9 @@ final class Approvals {
             return false;
         }
         if (request.grantKey() != null && grants.containsKey(grantId(thread, request))) {
+            return true;
+        }
+        if (mode.get().approves(request.kind())) {
             return true;
         }
         var answer = new CompletableFuture<Boolean>();
