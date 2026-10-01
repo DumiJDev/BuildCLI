@@ -53,7 +53,4 @@ public final class Events {
         ui.onTaskChanged(task);
     }
 
-    public String runId() {
-        return runId;
-    }
 }

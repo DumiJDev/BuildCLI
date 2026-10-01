@@ -2,7 +2,6 @@ package dev.buildcli.infrastructure;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -58,12 +57,4 @@ public final class StateLocations {
         }
     }
 
-    /** Creates the directory if needed and returns it; a small convenience for callers that write state. */
-    public static Path ensure(Path dir) {
-        try {
-            return Files.createDirectories(dir);
-        } catch (IOException e) {
-            throw new IllegalStateException("cannot create " + dir + ": " + e.getMessage(), e);
-        }
-    }
 }
