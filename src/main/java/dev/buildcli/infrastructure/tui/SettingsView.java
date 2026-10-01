@@ -1,6 +1,7 @@
 package dev.buildcli.infrastructure.tui;
 
 import dev.buildcli.application.Settings;
+import dev.buildcli.domain.Capability;
 import dev.buildcli.infrastructure.ModelCatalog;
 import dev.buildcli.infrastructure.TerminalText;
 import dev.buildcli.ports.SettingsStore.Scope;
@@ -15,7 +16,6 @@ import dev.tamboui.tui.event.KeyEvent;
 import dev.tamboui.tui.event.MouseEvent;
 import dev.tamboui.tui.event.MouseEventKind;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
@@ -43,7 +43,28 @@ final class SettingsView {
     private record Hit(Rect rect, Runnable action) {}
 
     /** A one-line question with an input, answered with Enter. */
-    private record Prompt(String title, String hint, InputEditor editor, Consumer<String> onSubmit) {}
+    private record Prompt(String title, String hint, InputEditor editor, Consumer<String> onSubmit, Runnable back) {}
+
+    /** Several things to tick, for a step of a flow; Esc goes back one step. */
+    private static final class Checklist {
+        final String title;
+        final List<String> options;
+        final List<String> notes;
+        final java.util.Set<String> checked = new java.util.LinkedHashSet<>();
+        final Consumer<List<String>> onDone;
+        final Runnable back;
+        int index;
+
+        Checklist(String title, List<String> options, List<String> notes, java.util.Collection<String> initial, Consumer<List<String>> onDone,
+                  Runnable back) {
+            this.title = title;
+            this.options = options;
+            this.notes = notes;
+            this.checked.addAll(initial);
+            this.onDone = onDone;
+            this.back = back;
+        }
+    }
 
     private record Confirm(String text, Runnable yes) {}
 
@@ -71,6 +92,7 @@ final class SettingsView {
     private int index;
     private int firstVisible;
     private Prompt prompt;
+    private Checklist checklist;
     private Confirm confirm;
     private Picker picker;
     private String status = "";
@@ -222,41 +244,108 @@ final class SettingsView {
     // ---- flows ----
 
     private void ask(String title, String hint, String initial, Consumer<String> onSubmit) {
+        ask(title, hint, initial, onSubmit, null);
+    }
+
+    /** @param back what Esc does: the previous step of a flow; null cancels the whole flow */
+    private void ask(String title, String hint, String initial, Consumer<String> onSubmit, Runnable back) {
         InputEditor e = new InputEditor();
         e.set(initial);
-        prompt = new Prompt(title, hint, e, onSubmit);
+        prompt = new Prompt(title, hint, e, onSubmit, back);
     }
 
     private void confirm(String text, Runnable yes) {
         confirm = new Confirm(text, yes);
     }
 
+    /** What the steps of a flow have collected so far, so that going back shows what was typed. */
+    private static final class Draft {
+        String a = "";
+        String b = "";
+        String c = "";
+        List<String> caps = List.of(Capability.FILESYSTEM_READ, Capability.SEARCH);
+    }
+
     private void addProvider() {
-        ask("New provider: name", "lowercase, used as name:model", "", name -> ask("URL of " + name, "e.g. http://gpu-box:8000/v1", "https://",
-                url -> ask("Environment variable with the key", "leave empty if it needs none; the key itself is never stored", "",
-                        env -> {
-                            try {
-                                services.addProvider(name.strip(), url.strip(), env.isBlank() ? null : env.strip());
-                                ok("Added " + name + (env.isBlank() ? "" : ". Set " + env + " before starting BuildCLI."));
-                            } catch (Exception e) {
-                                fail(e.getMessage());
-                            }
-                        })));
+        providerName(new Draft());
+    }
+
+    private void providerName(Draft d) {
+        ask("New provider: name (1/3)", "lowercase, used as name:model", d.a, name -> {
+            d.a = name.strip();
+            providerUrl(d);
+        });
+    }
+
+    private void providerUrl(Draft d) {
+        ask("URL of " + d.a + " (2/3)", "e.g. http://gpu-box:8000/v1", d.b.isEmpty() ? "https://" : d.b, url -> {
+            d.b = url.strip();
+            providerKey(d);
+        }, () -> providerName(d));
+    }
+
+    private void providerKey(Draft d) {
+        ask("Environment variable with the key (3/3)", "leave empty if it needs none; you can also type the key in /connect", d.c, env -> {
+            try {
+                services.addProvider(d.a, d.b, env.isBlank() ? null : env.strip());
+                ok("Added " + d.a + (env.isBlank() ? "" : ". Set " + env.strip() + " or type the key in /connect."));
+            } catch (Exception e) {
+                fail(e.getMessage());
+            }
+        }, () -> providerUrl(d));
     }
 
     private void newAgent() {
-        ask("New agent: name", "lowercase letters, digits, - and _", "", name -> ask("Role of " + name, "e.g. reviewer, tester, writer", "developer",
-                role -> ask("What " + name + " may do", "comma-separated: " + String.join(", ", dev.buildcli.domain.Capability.KNOWN.stream().sorted().toList()),
-                        "filesystem.read, search", caps -> ask("How " + name + " should work", "one sentence; edit the file later for more", "",
-                                how -> {
-                                    try {
-                                        String file = services.createAgent(name.strip(), role.strip(), how.strip(),
-                                                Arrays.stream(caps.split(",")).map(String::strip).filter(c -> !c.isEmpty()).toList(), scope == Scope.GLOBAL);
-                                        ok("Created " + file + ". You can chat with " + name.strip() + " now.");
-                                    } catch (Exception e) {
-                                        fail(e.getMessage());
-                                    }
-                                }))));
+        agentName(new Draft());
+    }
+
+    private void agentName(Draft d) {
+        ask("New agent: name (1/4)", "lowercase letters, digits, - and _", d.a, name -> {
+            d.a = name.strip();
+            agentRole(d);
+        });
+    }
+
+    private void agentRole(Draft d) {
+        ask("Role of " + d.a + " (2/4)", "e.g. reviewer, tester, writer", d.b.isEmpty() ? "developer" : d.b, role -> {
+            d.b = role.strip();
+            agentCapabilities(d);
+        }, () -> agentName(d));
+    }
+
+    private void agentCapabilities(Draft d) {
+        List<String> names = dev.buildcli.domain.Capability.KNOWN.stream().sorted().toList();
+        List<String> notes = names.stream().map(SettingsView::describe).toList();
+        checklist = new Checklist("What " + d.a + " may do (3/4)", names, notes, d.caps, picked -> {
+            d.caps = picked;
+            agentHow(d);
+        }, () -> agentRole(d));
+    }
+
+    private void agentHow(Draft d) {
+        ask("How " + d.a + " should work (4/4)", "one sentence; edit the file later for more", d.c, how -> {
+            d.c = how.strip();
+            try {
+                String file = services.createAgent(d.a, d.b, d.c, d.caps, scope == Scope.GLOBAL);
+                ok("Created " + file + ". You can chat with " + d.a + " now.");
+            } catch (Exception e) {
+                fail(e.getMessage());
+            }
+        }, () -> agentCapabilities(d));
+    }
+
+    /** What a capability lets an agent do, in the words of someone who has not read the docs. */
+    private static String describe(String capability) {
+        return switch (capability) {
+            case Capability.FILESYSTEM_READ -> "read files in the project";
+            case Capability.FILESYSTEM_WRITE -> "create and change files (you approve each write)";
+            case Capability.SEARCH -> "search the code";
+            case Capability.GIT_READ -> "read git status, log and diffs";
+            case Capability.GIT_COMMIT -> "commit to git (you approve)";
+            case Capability.COMMAND_EXECUTE -> "run commands, such as tests (you approve)";
+            case Capability.AGENT_HANDOFF -> "ask other agents for help";
+            default -> "";
+        };
     }
 
     private void addSamples() {
@@ -402,11 +491,13 @@ final class SettingsView {
         String keys = "↑↓ choose · Enter change · ←→ switch · Del reset · Tab section · S scope · Esc close";
         put(buf, foot.x() + navW + 2, foot.y(), status.isEmpty() ? keys : status, st(status.isEmpty() ? Theme.DIM : statusColor, Theme.PANEL), foot.right());
 
-        if (picker != null || prompt != null || confirm != null) {
+        if (picker != null || prompt != null || confirm != null || checklist != null) {
             hits.clear(); // a dialog is modal: clicks outside it do nothing
         }
         if (picker != null) {
             drawPicker(buf, r);
+        } else if (checklist != null) {
+            drawChecklist(buf, r);
         } else if (prompt != null) {
             drawPrompt(buf, r);
         } else if (confirm != null) {
@@ -442,7 +533,28 @@ final class SettingsView {
         int avail = field.width() - 2;
         String shown = CharWidth.of(t) > avail ? CharWidth.substringByWidthFromEnd(t, avail) : t;
         put(buf, field.x() + 1, field.y(), shown + "▏", st(Theme.TEXT, Theme.FIELD), field.right());
-        put(buf, b.x() + 2, b.bottom() - 2, "Enter save · Esc cancel", st(Theme.DIM, Theme.DIALOG), b.right() - 2);
+        put(buf, b.x() + 2, b.bottom() - 2, prompt.back() == null ? "Enter next · Esc cancel" : "Enter next · Esc back", st(Theme.DIM, Theme.DIALOG), b.right() - 2);
+    }
+
+    private void drawChecklist(Buffer buf, Rect r) {
+        Rect b = box(r, 76, checklist.options.size() + 6);
+        frame(buf, b, checklist.title);
+        for (int i = 0; i < checklist.options.size(); i++) {
+            String opt = checklist.options.get(i);
+            boolean on = i == checklist.index;
+            Style st = on ? st(Theme.TEXT, Theme.FIELD) : st(Theme.TEXT, Theme.DIALOG);
+            int y = b.y() + 2 + i;
+            int row = i;
+            Rect line = new Rect(b.x() + 1, y, b.width() - 2, 1);
+            fill(buf, line, st);
+            put(buf, b.x() + 2, y, (checklist.checked.contains(opt) ? "[x] " : "[ ] ") + opt, st, b.right() - 2);
+            put(buf, b.x() + 26, y, checklist.notes.get(i), on ? st : st(Theme.DIM, Theme.DIALOG), b.right() - 2);
+            hits.add(new Hit(line, () -> {
+                checklist.index = row;
+                toggle(checklist, opt);
+            }));
+        }
+        put(buf, b.x() + 2, b.bottom() - 2, "↑↓ move · Space tick · Enter next · Esc back", st(Theme.DIM, Theme.DIALOG), b.right() - 2);
     }
 
     private void drawConfirm(Buffer buf, Rect r) {
@@ -564,9 +676,37 @@ final class SettingsView {
             }
             return;
         }
+        if (checklist != null) {
+            Checklist c = checklist;
+            switch (code) {
+                case ESCAPE -> {
+                    checklist = null;
+                    c.back.run();
+                }
+                case UP -> c.index = Math.max(0, c.index - 1);
+                case DOWN -> c.index = Math.min(c.options.size() - 1, c.index + 1);
+                case ENTER -> {
+                    checklist = null;
+                    c.onDone.accept(c.options.stream().filter(c.checked::contains).toList());
+                }
+                case CHAR -> {
+                    if (ch == ' ') {
+                        toggle(c, c.options.get(c.index));
+                    }
+                }
+                default -> { }
+            }
+            return;
+        }
         if (prompt != null) {
             switch (code) {
-                case ESCAPE -> prompt = null;
+                case ESCAPE -> {
+                    Runnable back = prompt.back();
+                    prompt = null;
+                    if (back != null) {
+                        back.run();
+                    }
+                }
                 case ENTER -> {
                     Prompt p = prompt;
                     prompt = null;
@@ -607,6 +747,12 @@ final class SettingsView {
                 }
             }
             default -> { }
+        }
+    }
+
+    private static void toggle(Checklist c, String option) {
+        if (!c.checked.remove(option)) {
+            c.checked.add(option);
         }
     }
 
