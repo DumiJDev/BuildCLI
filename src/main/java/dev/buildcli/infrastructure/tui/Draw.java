@@ -34,6 +34,15 @@ final class Draw {
         return CharWidth.of(clipped);
     }
 
+    /** Like {@link #put}, but text that does not fit ends in "…" instead of being cut off mid-word. */
+    static int putFit(Buffer buf, int x, int y, String text, Style style, int limit) {
+        int room = limit - x;
+        if (room <= 1 || text.isEmpty() || CharWidth.of(text) <= room) {
+            return put(buf, x, y, text, style, limit);
+        }
+        return put(buf, x, y, CharWidth.substringByWidth(text, room - 1) + "…", style, limit);
+    }
+
     /** Like {@link #put}, for text that may come from a model or a file: control characters are made harmless first. */
     static int putSafe(Buffer buf, int x, int y, String text, Style style, int limit) {
         return put(buf, x, y, x >= limit || text.isEmpty() ? text : TerminalText.sanitize(text), style, limit);

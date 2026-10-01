@@ -5,6 +5,7 @@ import static dev.buildcli.infrastructure.tui.Draw.TIME;
 import static dev.buildcli.infrastructure.tui.Draw.clean;
 import static dev.buildcli.infrastructure.tui.Draw.fill;
 import static dev.buildcli.infrastructure.tui.Draw.put;
+import static dev.buildcli.infrastructure.tui.Draw.putFit;
 import static dev.buildcli.infrastructure.tui.Draw.st;
 import static dev.buildcli.infrastructure.tui.Draw.tokens;
 
@@ -196,7 +197,7 @@ final class ChatListView {
             }
             String time = last == null ? "" : when(last);
             put(buf, limit - Wrap.width(time), y, time, st(unread(msgs, t) > 0 ? Theme.GREEN : Theme.DIM, bg), limit);
-            put(buf, r.x() + 6, y, title(t), st(Theme.TEXT, bg).bold(), limit - Wrap.width(time) - 1);
+            putFit(buf, r.x() + 6, y, title(t), st(Theme.TEXT, bg).bold(), limit - Wrap.width(time) - 1);
 
             String preview;
             Style ps = st(Theme.DIM, bg);
@@ -221,7 +222,7 @@ final class ChatListView {
             }
             int badge = unread(msgs, t);
             String b = badge > 0 ? " " + badge + " " : "";
-            put(buf, r.x() + 6, y + 1, preview.replace('\n', ' '), ps, limit - Wrap.width(b) - 1);
+            putFit(buf, r.x() + 6, y + 1, preview.replace('\n', ' '), ps, limit - Wrap.width(b) - 1);
             if (badge > 0) {
                 put(buf, limit - Wrap.width(b), y + 1, b, st(Theme.BG, Theme.GREEN).bold(), limit + 1);
             }
