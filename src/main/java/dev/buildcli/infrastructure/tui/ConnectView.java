@@ -1,6 +1,7 @@
 package dev.buildcli.infrastructure.tui;
 
 import dev.buildcli.application.Settings;
+import dev.buildcli.infrastructure.FileCredentialStore;
 import dev.buildcli.infrastructure.ModelCatalog;
 import dev.buildcli.infrastructure.ProviderRegistry;
 import dev.buildcli.infrastructure.TerminalText;
@@ -56,6 +57,20 @@ final class ConnectView {
     private String model;
     private CompletableFuture<String> test;
     private long testStarted;
+    /** Typing a key: for which provider, what is typed, the check in flight and what to tell the user about it. */
+    private boolean enteringKey;
+    private SettingsServices.Provider keyFor;
+    private final InputEditor keyInput = new InputEditor();
+    private CompletableFuture<ModelCatalog.Result> keyCheck;
+    private String keyChecking = "";
+    private String keyMessage = "";
+    private Color keyColor = Theme.DIM;
+    /** The key a second Enter saves without a successful check (the provider could not be reached). */
+    private String saveAnyway;
+    /** After saving a key: the provider to open the model list of once its models have loaded. */
+    private String advanceTo;
+    private String notice = "";
+    private String forgetArmed;
 
     /** @param finished receives what to tell the user in the chat, or null when they closed without choosing */
     ConnectView(SettingsServices services, Consumer<String> finished) {
@@ -72,6 +87,9 @@ final class ConnectView {
         provider = null;
         model = null;
         test = null;
+        enteringKey = false;
+        notice = "";
+        forgetArmed = null;
         providers = ordered(services.providers());
         check();
     }
@@ -100,6 +118,9 @@ final class ConnectView {
 
     /** True while something on screen changes by itself: providers being checked, the test message on its way. */
     boolean animating() {
+        if (keyCheck != null && !keyCheck.isDone()) {
+            return true;
+        }
         if (step == Step.TEST) {
             return test != null && !test.isDone();
         }
@@ -115,7 +136,7 @@ final class ConnectView {
 
     private Status status(SettingsServices.Provider p) {
         if (p.keyEnv() != null && !p.keySet()) {
-            return new Status("needs " + p.keyEnv(), Theme.AMBER, false, keyHelp(p));
+            return new Status("needs a key", Theme.AMBER, false, keyHelp(p));
         }
         ModelCatalog.Result r = result(p);
         if (r == null) {
@@ -125,8 +146,15 @@ final class ConnectView {
             if (p.local()) {
                 return new Status("not running", Theme.DIM, false, localHelp(p));
             }
+            boolean rejected = r.problem().startsWith("HTTP 401") || r.problem().startsWith("HTTP 403");
+            if (rejected && p.keyEnv() != null) {
+                return new Status("key rejected", Theme.RED, false, List.of(r.problem(), "",
+                        p.keyFrom().equals("environment") ? "The key comes from the environment variable " + p.keyEnv() + ". Fix it there, or press K to save "
+                                + "a different key here (a variable that is set wins, so unset it first)."
+                                : "Press K to enter a new key."));
+            }
             return new Status(p.keyEnv() == null ? "not reachable" : "key or endpoint failed", Theme.RED, false,
-                    List.of(r.problem(), "", "Check the key in " + (p.keyEnv() == null ? "the provider" : p.keyEnv()) + " and the URL " + p.url()
+                    List.of(r.problem(), "", "Check the URL " + p.url() + (p.keyEnv() == null ? "" : " and the key (press K to enter a new one)")
                             + ", then press R to check again."));
         }
         if (r.models().isEmpty()) {
@@ -141,7 +169,7 @@ final class ConnectView {
                 + ". Press Enter to choose a model."));
     }
 
-    private static List<String> keyHelp(SettingsServices.Provider p) {
+    private List<String> keyHelp(SettingsServices.Provider p) {
         List<String> help = new ArrayList<>();
         String page = ProviderRegistry.keyPage(p.name());
         if (!p.description().isBlank()) {
@@ -149,17 +177,9 @@ final class ConnectView {
             help.add("");
         }
         help.add("1. " + (page != null ? "Create a key at " + page : "Get a key from the provider"));
-        help.add("2. Set it in the terminal you start BuildCLI from:");
-        if (System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win")) {
-            help.add("       $env:" + p.keyEnv() + " = \"your-key\"        (PowerShell, this terminal)");
-            help.add("       setx " + p.keyEnv() + " your-key              (every new terminal)");
-        } else {
-            help.add("       export " + p.keyEnv() + "=your-key");
-            help.add("   Add that line to ~/.bashrc or ~/.zshrc to keep it.");
-        }
-        help.add("3. Close BuildCLI (Ctrl+C twice) and start it again.");
+        help.add("2. Press Enter here and paste it. It is saved only on this computer, readable by your account only.");
         help.add("");
-        help.add("BuildCLI reads keys only from the environment and never writes them to disk.");
+        help.add("Prefer an environment variable? Set " + p.keyEnv() + " before starting BuildCLI; it always wins over a saved key.");
         return help;
     }
 
@@ -205,8 +225,12 @@ final class ConnectView {
         }
         index = i;
         SettingsServices.Provider p = providers.get(i);
+        if (p.keyEnv() != null && !p.keySet()) {
+            startKey(p);
+            return;
+        }
         ModelCatalog.Result r = result(p);
-        if (r == null || r.problem() != null || (p.keyEnv() != null && !p.keySet())) {
+        if (r == null || r.problem() != null) {
             return; // the help under the list says what is missing
         }
         provider = p;
@@ -214,6 +238,107 @@ final class ConnectView {
         modelIndex = 0;
         modelFirst = 0;
         step = Step.MODEL;
+    }
+
+    // ---- the key ----
+
+    private void startKey(SettingsServices.Provider p) {
+        enteringKey = true;
+        keyFor = p;
+        keyInput.clear();
+        keyCheck = null;
+        keyMessage = "";
+        keyColor = Theme.DIM;
+        saveAnyway = null;
+        notice = "";
+        forgetArmed = null;
+    }
+
+    private void submitKey() {
+        if (keyCheck != null && !keyCheck.isDone()) {
+            return;
+        }
+        String key = FileCredentialStore.clean(keyInput.text());
+        if (!FileCredentialStore.valid(key)) {
+            keyMessage = key.isEmpty() ? "Paste the key first." : "That does not look like a key: it has spaces or line breaks.";
+            keyColor = Theme.RED;
+            return;
+        }
+        if (key.equals(saveAnyway)) {
+            saveKey(key);
+            return;
+        }
+        saveAnyway = null;
+        keyChecking = key;
+        keyMessage = "Checking the key with " + keyFor.name() + "…";
+        keyColor = Theme.DIM;
+        keyCheck = services.checkKey(keyFor.name(), key);
+    }
+
+    /** Called every frame: acts on a finished key check. */
+    private void pollKey() {
+        if (keyCheck != null && keyCheck.isDone() && enteringKey) {
+            ModelCatalog.Result r = keyCheck.getNow(null);
+            keyCheck = null;
+            String problem = r == null ? "no answer" : r.problem();
+            if (problem == null) {
+                saveKey(keyChecking);
+            } else if (problem.startsWith("HTTP 401") || problem.startsWith("HTTP 403")) {
+                keyMessage = keyFor.name() + " did not accept that key (" + problem + "). Check it and paste it again.";
+                keyColor = Theme.RED;
+                keyInput.clear();
+            } else {
+                keyMessage = "Could not check it: " + problem + ". Press Enter again to save it anyway, or paste a different one.";
+                keyColor = Theme.AMBER;
+                saveAnyway = keyChecking;
+            }
+        }
+        if (advanceTo != null) {
+            for (int i = 0; i < providers.size(); i++) {
+                SettingsServices.Provider p = providers.get(i);
+                if (p.name().equals(advanceTo) && probes.get(p.name()) != null && probes.get(p.name()).isDone()) {
+                    advanceTo = null;
+                    index = i;
+                    ModelCatalog.Result r = result(p);
+                    if (r != null && r.problem() == null) {
+                        chooseProvider(i);
+                    }
+                    return;
+                }
+            }
+        }
+    }
+
+    private void saveKey(String key) {
+        try {
+            services.saveKey(keyFor.name(), key);
+        } catch (Exception e) {
+            keyMessage = "Could not save it: " + e.getMessage();
+            keyColor = Theme.RED;
+            return;
+        }
+        String name = keyFor.name();
+        enteringKey = false;
+        keyInput.clear();
+        saveAnyway = null;
+        notice = "Key saved. Looking for " + name + "'s models…";
+        advanceTo = name;
+        recheck();
+        for (int i = 0; i < providers.size(); i++) {
+            if (providers.get(i).name().equals(name)) {
+                index = i; // the list is sorted by readiness, so the provider moved
+            }
+        }
+    }
+
+    private void forgetKey(SettingsServices.Provider p) {
+        try {
+            notice = services.forgetKey(p.name()) ? "Forgot the saved key for " + p.name() + "." : "There was no saved key to forget.";
+        } catch (Exception e) {
+            notice = "Could not forget it: " + e.getMessage();
+        }
+        forgetArmed = null;
+        recheck();
     }
 
     private void chooseModel() {
@@ -301,6 +426,7 @@ final class ConnectView {
 
     void render(Buffer buf, Rect r) {
         hits.clear();
+        pollKey();
         fill(buf, r, st(Theme.TEXT, Theme.BG));
         fill(buf, new Rect(r.x(), r.y(), r.width(), 2), st(Theme.TEXT, Theme.PANEL));
         put(buf, r.x() + 2, r.y(), "Connect a model", st(Theme.TEXT, Theme.PANEL).bold(), r.right());
@@ -326,20 +452,61 @@ final class ConnectView {
             }
             body = new Rect(body.x(), body.y() + 1, body.width(), body.height() - 1);
         }
-        String keys = switch (step) {
-            case PROVIDER -> "↑↓ choose · Enter next · R check again · Esc close";
+        String keys = enteringKey ? "Enter save · Ctrl+U clear · Esc back" : switch (step) {
+            case PROVIDER -> "↑↓ choose · Enter next · K key · D forget key · R check again · Esc close";
             case MODEL -> "type to search · ↑↓ choose · Enter test it · Esc back";
             case TEST -> testPassed() ? "P this project · G all projects · B another model · Esc back"
                     : test != null && test.isDone() ? "R try again · B another model · Esc back" : "Esc back";
         };
-        switch (step) {
-            case PROVIDER -> drawProviders(buf, body);
-            case MODEL -> drawModels(buf, body);
-            default -> drawTest(buf, body);
+        if (enteringKey) {
+            drawKey(buf, body);
+        } else {
+            switch (step) {
+                case PROVIDER -> drawProviders(buf, body);
+                case MODEL -> drawModels(buf, body);
+                default -> drawTest(buf, body);
+            }
         }
         Rect foot = new Rect(r.x(), r.bottom() - 1, r.width(), 1);
         fill(buf, foot, st(Theme.DIM, Theme.PANEL));
         put(buf, foot.x() + 2, foot.y(), keys, st(Theme.DIM, Theme.PANEL), foot.right());
+    }
+
+    /** What is typed, hidden: dots, except the last four characters so a wrong paste can be told from a right one. */
+    static String masked(String key) {
+        if (key.length() <= 8) {
+            return "•".repeat(key.length());
+        }
+        return "•".repeat(key.length() - 4) + key.substring(key.length() - 4);
+    }
+
+    private void drawKey(Buffer buf, Rect b) {
+        put(buf, b.x(), b.y(), "Your " + keyFor.name() + " key", st(Theme.TEXT, Theme.BG).bold(), b.right());
+        String page = ProviderRegistry.keyPage(keyFor.name());
+        int y = b.y() + 1;
+        put(buf, b.x(), y, page != null ? "Create one at " + page : "Get one from " + keyFor.url(), st(Theme.DIM, Theme.BG), b.right());
+        Rect field = new Rect(b.x(), b.y() + 3, b.width(), 1);
+        fill(buf, field, st(Theme.TEXT, Theme.FIELD));
+        String shown = masked(keyInput.text());
+        int avail = field.width() - 3;
+        String clipped = CharWidth.of(shown) > avail ? CharWidth.substringByWidthFromEnd(shown, avail) : shown;
+        put(buf, field.x() + 1, field.y(), shown.isEmpty() ? "Paste the key here▏" : clipped + "▏",
+                st(shown.isEmpty() ? Theme.DIM : Theme.TEXT, Theme.FIELD), field.right());
+        int row = b.y() + 5;
+        if (!keyMessage.isEmpty()) {
+            for (String line : Wrap.lines(keyMessage, b.width())) {
+                put(buf, b.x(), row++, line, st(keyColor, Theme.BG), b.right());
+            }
+            row++;
+        }
+        String where = services.keyFile().isEmpty() ? "on this computer" : "in " + services.keyFile();
+        for (String line : Wrap.lines("It is saved only on this computer, " + where + ", readable by your account only. It is never put in a project, "
+                + "and it is sent nowhere except to " + keyFor.name() + " (" + keyFor.url() + ").", b.width())) {
+            put(buf, b.x(), row++, line, st(Theme.FAINT, Theme.BG), b.right());
+        }
+        row++;
+        put(buf, b.x(), row, "You can also set " + keyFor.keyEnv() + " in your environment instead; that always wins over a saved key.",
+                st(Theme.FAINT, Theme.BG), b.right());
     }
 
     private void drawProviders(Buffer buf, Rect b) {
@@ -384,6 +551,14 @@ final class ConnectView {
         SettingsServices.Provider p = providers.get(index);
         Status s = status(p);
         put(buf, b.x(), y - 1, p.name(), st(Theme.TEXT, Theme.BG).bold(), b.right());
+        if (!notice.isEmpty()) {
+            put(buf, b.x(), y++, notice, st(Theme.GREEN, Theme.BG), b.right());
+        }
+        if (p.keyEnv() != null && p.keySet() && !p.keyFrom().isBlank()) {
+            String source = p.keyFrom().equals("saved") ? "Key: saved by you (K replace · D forget)"
+                    : "Key: from the environment variable " + p.keyEnv() + " (K saves a different one)";
+            put(buf, b.x(), y++, source, st(Theme.DIM, Theme.BG), b.right());
+        }
         for (String line : s.help()) {
             for (String part : line.isEmpty() ? List.of("") : Wrap.lines(line, b.width())) {
                 if (y >= b.bottom()) {
@@ -393,7 +568,9 @@ final class ConnectView {
                 put(buf, b.x(), y++, part, st(command ? Theme.ACCENT : Theme.DIM, Theme.BG), b.right());
             }
         }
-        if (s.ready() && y + 1 < b.bottom()) {
+        if (p.keyEnv() != null && !p.keySet() && y + 1 < b.bottom()) {
+            button(buf, b.x(), y + 1, " Add your key  Enter ", st(Theme.ON_ACCENT, Theme.ACCENT).bold(), b.right(), () -> chooseProvider(index));
+        } else if (s.ready() && y + 1 < b.bottom()) {
             button(buf, b.x(), y + 1, " Choose a model  Enter ", st(Theme.ON_ACCENT, Theme.ACCENT).bold(), b.right(), () -> chooseProvider(index));
         } else if (!s.ready() && !s.text().startsWith("needs") && result(p) != null && y + 1 < b.bottom()) {
             button(buf, b.x(), y + 1, " Check again  R ", st(Theme.TEXT, Theme.FIELD), b.right(), this::recheck);
@@ -461,6 +638,10 @@ final class ConnectView {
         for (String line : Wrap.lines("✗ " + r, b.width())) {
             put(buf, b.x(), y++, line, st(Theme.RED, Theme.BG), b.right());
         }
+        if (r.contains("401") || r.contains("403") || r.toLowerCase(Locale.ROOT).contains("api key") || r.toLowerCase(Locale.ROOT).contains("unauthorized")) {
+            put(buf, b.x(), y++, "This looks like a key problem: press Esc until the provider list, select it and press K for a new key.",
+                    st(Theme.AMBER, Theme.BG), b.right());
+        }
         int x = b.x();
         x += button(buf, x, y + 1, " Try again  R ", st(Theme.TEXT, Theme.FIELD), b.right(), () -> startTest(model)) + 2;
         button(buf, x, y + 1, " Another model  B ", st(Theme.TEXT, Theme.FIELD), b.right(), () -> step = Step.MODEL);
@@ -483,6 +664,13 @@ final class ConnectView {
     void key(KeyEvent key) {
         KeyCode code = key.code();
         char ch = code == KeyCode.CHAR && !key.hasCtrl() && !key.hasAlt() ? Character.toLowerCase(key.character()) : 0;
+        if (enteringKey) {
+            keyKey(key);
+            return;
+        }
+        if (code != KeyCode.CHAR || ch != 'd') {
+            forgetArmed = null;
+        }
         if (code == KeyCode.ESCAPE) {
             back();
             return;
@@ -498,6 +686,10 @@ final class ConnectView {
                             recheck();
                         } else if (ch == 'q') {
                             finished.accept(null);
+                        } else if (ch == 'k' && !providers.isEmpty() && providers.get(index).keyEnv() != null) {
+                            startKey(providers.get(index));
+                        } else if (ch == 'd' && !providers.isEmpty()) {
+                            askToForget(providers.get(index));
                         }
                     }
                 }
@@ -539,7 +731,52 @@ final class ConnectView {
         }
     }
 
+    private void askToForget(SettingsServices.Provider p) {
+        if (!p.keyFrom().equals("saved")) {
+            notice = p.keyEnv() == null ? p.name() + " needs no key." : p.keyFrom().equals("environment")
+                    ? "That key comes from the environment variable " + p.keyEnv() + "; BuildCLI cannot remove it." : "No saved key for " + p.name() + ".";
+        } else if (p.name().equals(forgetArmed)) {
+            forgetKey(p);
+        } else {
+            forgetArmed = p.name();
+            notice = "Press D again to forget the saved key for " + p.name() + ".";
+        }
+    }
+
+    private void keyKey(KeyEvent key) {
+        KeyCode code = key.code();
+        switch (code) {
+            case ESCAPE -> {
+                enteringKey = false;
+                keyCheck = null;
+            }
+            case ENTER -> submitKey();
+            case BACKSPACE -> {
+                keyInput.backspace();
+                saveAnyway = null;
+            }
+            case LEFT -> keyInput.left();
+            case RIGHT -> keyInput.right();
+            case HOME -> keyInput.home();
+            case END -> keyInput.end();
+            case CHAR -> {
+                if (key.hasCtrl() && Character.toLowerCase(key.character()) == 'u') {
+                    keyInput.clear();
+                } else if (!key.hasCtrl() && !key.hasAlt() && key.character() > ' ') {
+                    keyInput.insert(key.string());
+                }
+                saveAnyway = null;
+            }
+            default -> { }
+        }
+    }
+
     void paste(String text) {
+        if (enteringKey) {
+            keyInput.insert(text.replaceAll("\\s+", "")); // a key never has spaces: drop the line break that came with the paste
+            saveAnyway = null;
+            return;
+        }
         if (step == Step.MODEL) {
             filter.insert(text.strip());
             modelIndex = 0;

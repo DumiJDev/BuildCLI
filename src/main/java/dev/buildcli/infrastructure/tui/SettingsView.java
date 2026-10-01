@@ -64,6 +64,7 @@ final class SettingsView {
     private final SettingsServices services;
     private final Runnable close;
     private final Consumer<String> open;
+    private final Runnable connect;
     private final List<Hit> hits = new ArrayList<>();
     private Section section = Section.GENERAL;
     private Scope scope = Scope.PROJECT;
@@ -75,10 +76,11 @@ final class SettingsView {
     private String status = "";
     private Color statusColor = Theme.DIM;
 
-    SettingsView(SettingsServices services, Runnable close, Consumer<String> open) {
+    SettingsView(SettingsServices services, Runnable close, Consumer<String> open, Runnable connect) {
         this.services = services;
         this.close = close;
         this.open = open;
+        this.connect = connect;
     }
 
     // ---- items of each section ----
@@ -113,10 +115,12 @@ final class SettingsView {
             }
             case PROVIDERS -> {
                 for (SettingsServices.Provider p : services.providers()) {
-                    String key = p.keyEnv() == null ? "no key needed" : p.keySet() ? p.keyEnv() + " set" : p.keyEnv() + " not set";
+                    boolean needsKey = p.keyEnv() != null && !p.keySet();
+                    String key = p.keyEnv() == null ? "no key needed" : !p.keySet() ? "no key yet"
+                            : p.keyFrom().equals("saved") ? "key saved" : "key from " + p.keyEnv();
                     out.add(new Item(p.name(), key, p.keyEnv() == null || p.keySet() ? Theme.GREEN : Theme.AMBER,
-                            p.url() + "   ·  Enter to test" + (p.removable() ? " · Del to remove" : ""),
-                            () -> testProvider(p.name()), null, null, p.removable() ? () -> confirm("Remove provider " + p.name() + "?", () -> {
+                            p.url() + (needsKey ? "   ·  Enter to add your key" : "   ·  Enter to test") + (p.removable() ? " · Del to remove" : ""),
+                            needsKey ? connect : () -> testProvider(p.name()), null, null, p.removable() ? () -> confirm("Remove provider " + p.name() + "?", () -> {
                                 try {
                                     services.removeProvider(p.name());
                                     ok("Removed " + p.name());

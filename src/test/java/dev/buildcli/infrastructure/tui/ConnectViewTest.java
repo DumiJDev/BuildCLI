@@ -105,18 +105,20 @@ class ConnectViewTest {
         assertTrue(out.contains("Connect a model"), out);
         assertTrue(out.contains("None of your agents has a model yet"), out);
         assertTrue(out.contains("ready · 1 model"), "ollama is listed first, running with one model:\n" + out);
-        assertTrue(out.contains("key or endpoint failed"), out);
-        assertTrue(out.contains("needs OPENROUTER_API_KEY"), out);
+        assertTrue(out.contains("key rejected"), "a 401 says the key was rejected:\n" + out);
+        assertTrue(out.contains("needs a key"), out);
 
         ChatScreenTest.key(screen, KeyCode.DOWN);
         ChatScreenTest.key(screen, KeyCode.DOWN);
         out = ChatScreenTest.render(screen, 130, 40);
         assertTrue(out.contains("https://openrouter.ai/keys"), "where to get the key:\n" + out);
-        assertTrue(out.contains("OPENROUTER_API_KEY"), out);
-        assertTrue(out.contains("never writes them to disk"), out);
+        assertTrue(out.contains("Press Enter here and paste it"), "the key is typed inside the app now:\n" + out);
+        assertTrue(out.contains("OPENROUTER_API_KEY"), "the environment variable is still offered:\n" + out);
+        assertTrue(out.contains("account only"), out);
 
         ChatScreenTest.key(screen, KeyCode.ENTER);
-        assertTrue(ChatScreenTest.render(screen, 130, 40).contains("1 Provider"), "a provider without its key cannot be chosen");
+        String asking = ChatScreenTest.render(screen, 130, 40);
+        assertTrue(asking.contains("Your openrouter key") && asking.contains("Paste the key here"), "Enter on a provider without a key asks for it:\n" + asking);
     }
 
     @Test
