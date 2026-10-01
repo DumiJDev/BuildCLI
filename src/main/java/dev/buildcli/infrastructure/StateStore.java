@@ -126,6 +126,14 @@ public final class StateStore implements RunStore, dev.buildcli.ports.ChatLog, A
         write("DELETE FROM chat_messages WHERE thread = ?", ps -> ps.setString(1, thread));
     }
 
+    @Override
+    public void delete(java.util.Collection<Long> ids) {
+        for (long id : ids) {
+            write("DELETE FROM file_changes WHERE message_id = ?", ps -> ps.setLong(1, id));
+            write("DELETE FROM chat_messages WHERE id = ?", ps -> ps.setLong(1, id));
+        }
+    }
+
     /** Newest change sets kept; older ones are dropped so the database does not grow with every edit. */
     private static final int KEEP_CHANGE_SETS = 50;
 

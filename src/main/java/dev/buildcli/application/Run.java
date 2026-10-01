@@ -20,6 +20,8 @@ final class Run {
 
     final long messageId;
     final String thread;
+    /** The chat the person wrote in; {@code thread} differs when a teammate was handed part of the work. */
+    final String origin;
     final String me;
     final int hops;
     final AtomicBoolean stop;
@@ -30,13 +32,14 @@ final class Run {
     final List<FileChange> changes;
 
     Run(long messageId, String thread, String me, int hops) {
-        this(messageId, thread, me, hops, new AtomicBoolean(), new LinkedHashMap<>(), ConcurrentHashMap.newKeySet(), new CopyOnWriteArrayList<>());
+        this(messageId, thread, thread, me, hops, new AtomicBoolean(), new LinkedHashMap<>(), ConcurrentHashMap.newKeySet(), new CopyOnWriteArrayList<>());
     }
 
-    private Run(long messageId, String thread, String me, int hops, AtomicBoolean stop, Map<Integer, Task> tasks, Set<String> handedOffTo,
-            List<FileChange> changes) {
+    private Run(long messageId, String thread, String origin, String me, int hops, AtomicBoolean stop, Map<Integer, Task> tasks,
+            Set<String> handedOffTo, List<FileChange> changes) {
         this.messageId = messageId;
         this.thread = thread;
+        this.origin = origin;
         this.me = me;
         this.hops = hops;
         this.stop = stop;
@@ -47,6 +50,6 @@ final class Run {
 
     /** The same run seen from a teammate who was handed part of it: what they say goes to {@code otherThread}, the rest is shared. */
     Run handedTo(String agent, String otherThread) {
-        return new Run(messageId, otherThread, agent, hops, stop, tasks, handedOffTo, changes);
+        return new Run(messageId, otherThread, origin, agent, hops, stop, tasks, handedOffTo, changes);
     }
 }

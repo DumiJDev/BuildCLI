@@ -105,6 +105,22 @@ class ReachAndPostTest {
     }
 
     @Test
+    void anAgentAskedByAnotherToTalkToYouWritesInItsOwnPrivateChatWithYouEvenWithoutChatPost() throws Exception {
+        var session = new ChatSession(ROSTER, (team, request, ui, cancelled, dispatcher) -> {
+            // ana was asked by the user to get bruno to talk to them; bruno answers the handoff by writing to the person
+            dispatcher.run("ana", "bruno", "talk to the user about the budget", () -> dispatcher.post("bruno", "you", "Hi, it is Bruno. About the budget..."));
+            return done("ana", "I asked bruno to write to you.");
+        });
+        session.submit("ask bruno to talk to me", List.of(), "ana");
+        awaitIdle(session);
+        assertEquals(List.of("Hi, it is Bruno. About the budget..."), in(session, "bruno").stream().map(ChatSession.Message::text).toList(),
+                "the message is in bruno's own chat with you");
+        assertTrue(session.directChats().contains("bruno"), "and that chat is in your list");
+        assertTrue(session.messages().stream().anyMatch(m -> m.thread().equals("ana") && m.text().contains("bruno wrote to you in your private chat")),
+                "where you asked, you are told where to look");
+    }
+
+    @Test
     void anAgentTheUserBlockedCannotBeContactedAndTheAgentIsToldSo() throws Exception {
         AtomicReference<String> result = new AtomicReference<>();
         AtomicReference<Boolean> sees = new AtomicReference<>();

@@ -301,13 +301,20 @@ public final class Orchestrator {
         return result;
     }
 
+    /** Whether a message is for the person at the keyboard (their private chat with the agent), whatever way the model names them. */
+    static boolean isPerson(String to) {
+        String t = to.strip().toLowerCase(java.util.Locale.ROOT);
+        return t.equals("user") || t.equals("you") || t.equals("me") || t.equals("human") || t.equals("utilizador") || t.equals("usuario")
+                || t.equals("usuário") || t.equals("eu");
+    }
+
     private String sendMessage(Agent from, Task t, ToolCall call) {
         events.emit("ToolCalled", t.id, from.name(), "send_message " + call.args());
         Object to = call.args().get("to");
         Object text = call.args().get("text");
         String result;
-        if (!from.can(Capability.CHAT_POST)) {
-            result = "DENIED: " + from.name() + " does not have capability " + Capability.CHAT_POST;
+        if (to != null && !isPerson(to.toString()) && !from.can(Capability.CHAT_POST)) {
+            result = "DENIED: " + from.name() + " does not have capability " + Capability.CHAT_POST + " (it may only write to the person it works for)";
         } else if (to == null || to.toString().isBlank() || text == null || text.toString().isBlank()) {
             result = "ERROR: send_message needs 'to' and a non-empty 'text'";
         } else {

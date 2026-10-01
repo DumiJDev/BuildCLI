@@ -156,7 +156,8 @@ final class ChatListView {
         Style dim = st(Theme.DIM, Theme.SIDEBAR);
         fill(buf, r, base);
         fill(buf, new Rect(r.x(), r.y(), r.width(), 2), st(Theme.TEXT, Theme.PANEL));
-        put(buf, r.x() + 2, r.y(), "BuildCLI", st(Theme.TEXT, Theme.PANEL).bold(), r.right());
+        put(buf, r.x() + 2, r.y(), "(/)", st(Theme.ACCENT, Theme.PANEL).bold(), r.right());
+        put(buf, r.x() + 6, r.y(), "BuildCLI", st(Theme.TEXT, Theme.PANEL).bold(), r.right());
         put(buf, r.x() + 2, r.y() + 1, "local AI engineering team", st(Theme.DIM, Theme.PANEL), r.right() - 4);
         put(buf, r.right() - 4, r.y(), " ⚙ ", st(Theme.DIM, Theme.PANEL), r.right());
         host.hit(new Rect(r.right() - 4, r.y(), 3, 2), () -> host.openSettings());
@@ -199,7 +200,7 @@ final class ChatListView {
                 }
             }
             String time = last == null ? "" : when(last);
-            put(buf, limit - Wrap.width(time), y, time, st(unread(msgs, t) > 0 ? Theme.GREEN : Theme.DIM, bg), limit);
+            put(buf, limit - Wrap.width(time), y, time, st(unread(msgs, t) > 0 ? Theme.ACCENT : Theme.DIM, bg), limit);
             putFit(buf, r.x() + 6, y, title(t), st(Theme.TEXT, bg).bold(), limit - Wrap.width(time) - 1);
 
             String preview;
@@ -209,12 +210,12 @@ final class ChatListView {
             String busyIn = isGroup ? null : session.agentThread(t);
             if (live != null) {
                 preview = (isGroup ? clean(live.agent()) + " is " : "") + "typing…";
-                ps = st(Theme.GREEN, bg);
+                ps = st(Theme.ACCENT, bg);
             } else if (session.isActive(t)) {
                 String who = busyAgentIn(t);
                 preview = isGroup && !who.isEmpty() ? clean(who) + " is " + session.agentState(who) + "…"
                         : session.agentState(t) + "…";
-                ps = st(Theme.GREEN, bg);
+                ps = st(Theme.ACCENT, bg);
             } else if (busyIn != null) {
                 preview = "busy in the " + title(busyIn) + " chat";
                 ps = st(Theme.AMBER, bg);
@@ -228,13 +229,13 @@ final class ChatListView {
             String draft = host.draft(t).strip().replaceAll("\\s+", " ");
             if (!draft.isEmpty() && live == null && !session.isActive(t)) {
                 // like a messenger: "Draft:" in colour, then what you wrote
-                int label = putFit(buf, r.x() + 6, y + 1, "Draft: ", st(Theme.GREEN, bg), limit - Wrap.width(b) - 1);
+                int label = putFit(buf, r.x() + 6, y + 1, "Draft: ", st(Theme.ACCENT, bg).bold(), limit - Wrap.width(b) - 1);
                 putFit(buf, r.x() + 6 + label, y + 1, clean(draft), st(Theme.DIM, bg), limit - Wrap.width(b) - 1);
             } else {
                 putFit(buf, r.x() + 6, y + 1, preview.replace('\n', ' '), ps, limit - Wrap.width(b) - 1);
             }
             if (badge > 0) {
-                put(buf, limit - Wrap.width(b), y + 1, b, st(Theme.BG, Theme.GREEN).bold(), limit + 1);
+                put(buf, limit - Wrap.width(b), y + 1, b, st(Theme.ON_ACCENT, Theme.ACCENT).bold(), limit + 1);
             }
             y += 2;
             put(buf, r.x() + 6, y, "─".repeat(Math.max(0, r.width() - 7)), st(Theme.LINE, Theme.SIDEBAR), limit + 1);
@@ -359,7 +360,7 @@ final class ChatListView {
             if (line.isEmpty() && session.group(f.thread()) != null) {
                 line = session.group(f.thread()).members().size() + " agents and you";
             }
-            put(buf, r.x() + 6, y + 1, line, st(f.newChat() ? Theme.GREEN : Theme.DIM, bg), limit);
+            put(buf, r.x() + 6, y + 1, line, st(f.newChat() ? Theme.ACCENT : Theme.DIM, bg), limit);
             y += 2;
             put(buf, r.x() + 6, y, "─".repeat(Math.max(0, r.width() - 7)), st(Theme.LINE, Theme.SIDEBAR), limit + 1);
             y++;

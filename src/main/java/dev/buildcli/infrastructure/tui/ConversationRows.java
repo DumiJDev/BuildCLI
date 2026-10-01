@@ -26,7 +26,12 @@ import java.util.Locale;
 final class ConversationRows {
 
     /** One line of the conversation: where it starts and what it is made of. */
-    record Row(int x, List<Span> spans) {}
+    /** One screen line of the conversation; {@code message} is the id of the message it belongs to, or -1 (date pills, welcome texts...). */
+    record Row(int x, List<Span> spans, long message) {
+        Row(int x, List<Span> spans) {
+            this(x, spans, -1);
+        }
+    }
 
     /** What a click on a button in the conversation does; the screen owns all of it. */
     interface Host {
@@ -107,9 +112,11 @@ final class ConversationRows {
                 continue;
             }
             boolean bothQuiet = prev != null && isQuiet(prev) && isQuiet(m);
-            if (prev != null && !sameAuthor && !bothQuiet && !services.settings().flag(dev.buildcli.application.Settings.COMPACT)) {
+            boolean bothBubbles = prev != null && isBubble(prev) && isBubble(m); // their rounded edges already leave a gap
+            if (prev != null && !sameAuthor && !bothQuiet && !bothBubbles && !services.settings().flag(dev.buildcli.application.Settings.COMPACT)) {
                 rows.add(new Row(0, List.of()));
             }
+            int firstRow = rows.size();
             switch (m.kind()) {
                 case USER -> userBubble(rows, width, m, m.id() == failed);
                 case AGENT -> agentBubble(rows, width, group && !sameAuthor ? clean(m.author()) : null, m.text(), TIME.format(m.at()), false);
@@ -118,6 +125,9 @@ final class ConversationRows {
                 case SYSTEM -> centred(rows, width, " " + clean(m.text()).replace('\n', ' ') + " ", st(Theme.DIM, Theme.PILL));
                 case ERROR -> problem(rows, width, m.text(), failed);
                 default -> { }
+            }
+            for (int i = firstRow; i < rows.size(); i++) {
+                rows.set(i, new Row(rows.get(i).x(), rows.get(i).spans(), m.id()));
             }
             prev = m;
         }
@@ -133,6 +143,10 @@ final class ConversationRows {
         }
         rows.add(new Row(0, List.of()));
         return rows;
+    }
+
+    private static boolean isBubble(Message m) {
+        return m.kind() == ChatSession.Kind.USER || m.kind() == ChatSession.Kind.AGENT;
     }
 
     private static boolean isQuiet(Message m) {
@@ -283,7 +297,7 @@ final class ConversationRows {
     }
 
     private void userBubble(List<Row> rows, int width, Message m, boolean retryable) {
-        Style base = st(Theme.TEXT, Theme.ME);
+        Style base = st(Theme.ON_ME, Theme.ME);
         Style code = st(Theme.CODE_TEXT, Theme.CODE);
         int max = maxBody(width);
         List<List<Span>> body = new ArrayList<>();
@@ -298,10 +312,10 @@ final class ConversationRows {
         footer.add(new Span(TIME.format(m.at()) + " ", meta));
         switch (m.state()) {
             case QUEUED -> footer.add(new Span("✓", meta));
-            case RUNNING -> footer.add(new Span("✓✓", st(Theme.BLUE, Theme.ME)));
-            case DONE -> footer.add(new Span("✓✓", st(Theme.BLUE, Theme.ME)));
+            case RUNNING -> footer.add(new Span("✓✓", st(Theme.TICK, Theme.ME)));
+            case DONE -> footer.add(new Span("✓✓", st(Theme.TICK, Theme.ME)));
             case FAILED -> {
-                footer.add(new Span("! not sent ", st(Theme.RED, Theme.ME).bold()));
+                footer.add(new Span("! not sent ", st(Theme.DANGER, Theme.ME).bold()));
                 if (retryable) {
                     footer.add(new Span(" Retry ", st(Theme.BG, Theme.AMBER).bold(), () -> session.retry(m.id())));
                     if (services.canConnect()) {
@@ -372,6 +386,7 @@ final class ConversationRows {
         inner = Math.max(inner, inline ? Styled.width(lastLine) + 2 + footW : footW);
         inner = Math.max(inner, 6);
         int x = mine ? Math.max(0, width - inner - 4) : 2;
+        int firstRow = rows.size();
         if (author != null) {
             rows.add(line(x, List.of(new Span(author, st(authorColor, base.bg().orElse(Theme.THEM)).bold())), inner, base));
         }
@@ -392,7 +407,12 @@ final class ConversationRows {
             f.addAll(footer);
             rows.add(line(x, f, inner, base));
         }
+        // a half-height edge above and below, one cell shorter on each side: the corners come out rounded, as in a messenger
+        Style edge = Style.create().fg(base.bg().orElse(Theme.THEM)).bg(Theme.BG);
+        rows.add(firstRow, new Row(x, List.of(new Span(" ", edge), new Span("▄".repeat(inner), edge), new Span(" ", edge))));
+        rows.add(new Row(x, List.of(new Span(" ", edge), new Span("▀".repeat(inner), edge), new Span(" ", edge))));
     }
+
 
     private static boolean isCode(List<Span> line, Style code) {
         if (line.isEmpty()) {
@@ -443,7 +463,7 @@ final class ConversationRows {
             Previews.Audio audio = Previews.audio(a);
             String d = audio == null ? "" : Previews.duration(audio.seconds());
             List<Span> l = new ArrayList<>();
-            l.add(new Span("▶ ", st(Theme.TEXT, Theme.ME).bold()));
+            l.add(new Span("▶ ", st(Theme.ON_ME, Theme.ME).bold()));
             l.add(new Span(audio != null && !audio.waveform().isEmpty() ? audio.waveform() : "━━━━━━━━━━━━━━━━━━", st(Theme.BLUE, Theme.ME)));
             l.add(new Span("  " + (d.isEmpty() ? size : d), st(Theme.ON_ME_DIM, Theme.ME)));
             body.add(l);
