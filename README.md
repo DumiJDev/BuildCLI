@@ -10,7 +10,7 @@ Read [Known limitations](#known-limitations) before relying on it.
 
 ![The BuildCLI chat: a group where ana delegates to bruno, who writes a file after you approve it, a command the policy denied, and a Review button](docs/images/chat.png)
 
-*The scripted demo (`buildcli demo --fake`, no model needed): the group on the left, ana delegating to bruno, a command
+*A scripted conversation (no model needed): the group on the left, ana delegating to bruno, a command
 the policy denied, and the changes with a Review button. Your own agents look the same.*
 
 ## The idea
@@ -102,7 +102,7 @@ ready-to-copy agents in [`examples/`](examples). New to the ideas? Read [concept
 are ticked from a list), theme, and **State database**: `sqlite` (default, a file readable from several terminals), `h2`
 (a file, one BuildCLI at a time) or `memory` (fastest, forgotten when BuildCLI closes). Writes go to the database in the
 background in batches; in a synthetic load test that took the event log from about 7 000 to about 90 000 events/s with
-SQLite (see [`docs/m0-spike-findings.md`](docs/m0-spike-findings.md)). `BUILDCLI_STORAGE` overrides the setting.
+SQLite (see [`docs/storage.md`](docs/storage.md)). `BUILDCLI_STORAGE` overrides the setting.
 
 There is also an experimental **native executable** (GraalVM): about half the memory and 5 to 10 times faster to start, built
 on Linux only so far. See [`docs/native-image.md`](docs/native-image.md).
@@ -126,7 +126,7 @@ Be aware of these, they are stated plainly on purpose:
 - **Parallel agents share one workspace:** reads are shared, but writes and commands take an exclusive lock, so two agents
   never change files at the same time. There are no sessions or long-term memory yet (see the RFC).
 - **Scale:** many agents are cheap to hold (one virtual thread each), but the model calls, not BuildCLI, are the real limit;
-  measured overhead and the details are in the [M0 findings](docs/m0-spike-findings.md) and `LoadProbe`.
+  the measurements are in [`docs/storage.md`](docs/storage.md) and `LoadProbe`.
 
 ## Architecture
 

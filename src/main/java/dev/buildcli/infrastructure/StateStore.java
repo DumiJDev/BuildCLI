@@ -17,8 +17,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The state database: runs, tasks, the append-only event log and the chat history. SQLite by default (decision from the M0
- * spike; WAL and synchronous=NORMAL, because its default sync mode was ~40x slower per append), or H2 (a file, or in memory
+ * The state database: runs, tasks, the append-only event log and the chat history. SQLite by default (see docs/storage.md;
+ * WAL and synchronous=NORMAL, because its default sync mode was ~40x slower per append), or H2 (a file, or in memory
  * for something fast that is gone when BuildCLI closes); the engine is read from the URL. The schema version lives in
  * {@code PRAGMA user_version} (SQLite) or a one-row table (H2); each entry of {@link #MIGRATIONS} upgrades it by one.
  *

@@ -6,11 +6,11 @@ development machine (`qwen2.5:3b`, CPU, Ollama 0.21.2), so the team can pick it 
 
 ## What happened
 
-The M0 spike completed the scenario 5/5 with this model. After the M1/M2 changes the same scenario fails: after the
+The first prototype completed the scenario 5/5 with this model. After the M1/M2 changes the same scenario fails: after the
 `write_file` result, **Bruno replies with an empty message** (no text, no tool call), before and after the runtime's
 nudge, and the task is retried and escalated.
 
-The HTTP bodies sent to Ollama were captured with a logging proxy and compared with the M0 jar's. The requests are
+The HTTP bodies sent to Ollama were captured with a logging proxy and compared with the first prototype's jar's. The requests are
 identical (same model, options, task prompt, conversation, tool-call and tool-result messages) except for two things
 the new code adds: a paragraph in the system prompt about `<tool-output>` data, and a fourth tool (`list_files`).
 
@@ -18,24 +18,24 @@ the new code adds: a paragraph in the system prompt about `<tool-output>` data, 
 
 | Variant | Result |
 |---|---|
-| M0 jar (3 tools, short prompt), run twice, once through the proxy | **OK**, 5,618 tokens, identical each time |
+| First-prototype jar (3 tools, short prompt), run twice, once through the proxy | **OK**, 5,618 tokens, identical each time |
 | Full M2 code (streaming) | fails: empty reply after the write |
 | Full M2 code, `--no-stream` | fails the same way, so streaming is not the cause |
 | Without the `<tool-output>` paragraph (keeps `list_files`) | fails |
 | Without `list_files` (keeps the paragraph) | fails |
-| Lead scripted to hand off M0's exact objective text (removes the lead's wording as a variable) | fails |
+| Lead scripted to hand off the first prototype's exact objective text (removes the lead's wording as a variable) | fails |
 | Stronger nudge that restates the objective | fails |
 | Extra system instruction "never reply with an empty message" | fails |
 | Tool result sent as a user message instead of a `tool` message | no longer empty, but the model **narrates** ("Now I will run cat...") and stops without calling the tool: a different failure |
 
-(A direct probe of the Ollama API with hand-built messages returned empty for every variant, including the M0
+(A direct probe of the Ollama API with hand-built messages returned empty for every variant, including the first prototype's
 configuration, so it did not reproduce the framework's request format and proved nothing.)
 
 ## Interpretation
 
-Each of the two differences removed alone still fails; removed together the request equals M0's and passes. The most
-economical reading is that **a 3B model is not robust to small changes in its prompt or tool list**: the M0 result was a
-fragile configuration, not evidence of reliability (which `docs/m0-spike-findings.md` already flagged as "n=1"). This
+Each of the two differences removed alone still fails; removed together the request equals the first prototype's and passes. The most
+economical reading is that **a 3B model is not robust to small changes in its prompt or tool list**: the first prototype's result was a
+fragile configuration, not evidence of reliability (which was already flagged as "n=1" then). This
 was not proven to be the only cause.
 
 ## Consequences

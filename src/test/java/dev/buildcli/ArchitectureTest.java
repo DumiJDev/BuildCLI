@@ -18,22 +18,22 @@ class ArchitectureTest {
     static final ArchRule DOMAIN_DEPENDS_ON_NOTHING_INTERNAL = noClasses().that().resideInAPackage("dev.buildcli.domain..")
             .should().dependOnClassesThat().resideInAnyPackage(
                     "dev.buildcli.ports..", "dev.buildcli.application..", "dev.buildcli.infrastructure..",
-                    "dev.buildcli.cli..", "dev.buildcli.eval..");
+                    "dev.buildcli.cli..");
 
     @ArchTest
     static final ArchRule PORTS_ONLY_KNOW_THE_DOMAIN = noClasses().that().resideInAPackage("dev.buildcli.ports..")
             .should().dependOnClassesThat().resideInAnyPackage(
-                    "dev.buildcli.application..", "dev.buildcli.infrastructure..", "dev.buildcli.cli..", "dev.buildcli.eval..");
+                    "dev.buildcli.application..", "dev.buildcli.infrastructure..", "dev.buildcli.cli..");
 
     @ArchTest
     static final ArchRule APPLICATION_ONLY_KNOWS_DOMAIN_AND_PORTS = noClasses().that().resideInAPackage("dev.buildcli.application..")
             .should().dependOnClassesThat().resideInAnyPackage(
-                    "dev.buildcli.infrastructure..", "dev.buildcli.cli..", "dev.buildcli.eval..");
+                    "dev.buildcli.infrastructure..", "dev.buildcli.cli..");
 
     @ArchTest
     static final ArchRule NOTHING_DEPENDS_ON_THE_ENTRY_POINTS = noClasses()
-            .that().resideOutsideOfPackages("dev.buildcli.cli..", "dev.buildcli.eval..")
-            .should().dependOnClassesThat().resideInAnyPackage("dev.buildcli.cli..", "dev.buildcli.eval..");
+            .that().resideOutsideOfPackages("dev.buildcli.cli..")
+            .should().dependOnClassesThat().resideInAnyPackage("dev.buildcli.cli..");
 
     @ArchTest
     static final ArchRule FRAMEWORKS_STAY_IN_INFRASTRUCTURE = noClasses()
