@@ -71,6 +71,7 @@ final class ChatScreen implements Element {
             new Command("retry", "", "Send the last failed message again", ""),
             new Command("copy", "[message]", "Copy the last code block (or the whole last answer)", ""),
             new Command("find", "[text]", "Search this chat", "Ctrl+F"),
+            new Command("chats", "[text]", "Search your chats and agents by name, role or what was said", "Ctrl+K"),
             new Command("review", "", "See the files agents changed in this chat", ""),
             new Command("undo", "", "Put back the files an agent changed last (shows them first)", ""),
             new Command("revoke", "", "Stop approving automatically in this chat (shows what was allowed)", ""),
@@ -147,6 +148,10 @@ final class ChatScreen implements Element {
     /** Find in this chat: the query, which match is current and whether to scroll to it on the next frame. */
     private boolean searching;
     private final InputEditor findInput = new InputEditor();
+    /** The search box above the chat list (Ctrl+K): finds chats by name, role or something said in them. */
+    private boolean listSearching;
+    private final InputEditor listQuery = new InputEditor();
+    private int listIndex;
     private List<Integer> findRows = List.of();
     private int findIndex = -1;
     private boolean findJump;
@@ -457,6 +462,8 @@ final class ChatScreen implements Element {
     private void select(String thread) {
         selected = thread;
         searching = false;
+        listSearching = false;
+        listQuery.clear();
         scrollOff = 0;
         lastTotal = 0;
         menuDismissedFor = null;
@@ -473,8 +480,13 @@ final class ChatScreen implements Element {
         hits.add(new Hit(new Rect(r.right() - 4, r.y(), 3, 2), () -> settingsOpen = true));
         put(buf, r.right() - 8, r.y(), " ＋ ", st(Theme.DIM, Theme.PANEL), r.right() - 4);
         hits.add(new Hit(new Rect(r.right() - 8, r.y(), 4, 2), () -> openInfo(ChatInfoView.Mode.NEW_CHAT)));
-        int y = r.y() + 3;
+        drawListSearch(buf, new Rect(r.x() + 1, r.y() + 2, r.width() - 2, 1));
+        int y = r.y() + 4;
         int limit = r.right() - 1;
+        if (listSearching && !listQuery.text().isBlank()) {
+            drawSearchResults(buf, r, y, limit, all);
+            return;
+        }
         List<String> threads = threads();
         for (int i = 0; i < threads.size() && y + 2 < r.bottom() - 1; i++) {
             String t = threads.get(i);
@@ -538,6 +550,143 @@ final class ChatScreen implements Element {
             put(buf, r.x() + 2, r.bottom() - 2, "loaded and idle · click to add", st(Theme.FAINT, Theme.SIDEBAR), limit);
             hits.add(new Hit(new Rect(r.x(), r.bottom() - 3, r.width(), 2), () -> openInfo(ChatInfoView.Mode.NEW_CHAT)));
         }
+    }
+
+    // ---- searching the chat list ----
+
+    /** One thing the chat search found: a chat (or an agent with no chat yet) and, for a match in a message, a piece of it. */
+    private record Found(String thread, String snippet, boolean newChat) {}
+
+    private void openListSearch() {
+        sidebar = true;
+        listSearching = true;
+        listIndex = 0;
+    }
+
+    private void closeListSearch() {
+        listSearching = false;
+        listQuery.clear();
+        listIndex = 0;
+    }
+
+    /**
+     * Chats whose name or role contains the text, then chats with a message that does, then agents you have no chat with
+     * yet (opening one starts it): like the search box of a messaging app. Case does not matter.
+     */
+    private List<Found> searchChats(String text, List<Message> all) {
+        String q = text.strip().toLowerCase(Locale.ROOT);
+        List<Found> byName = new ArrayList<>();
+        List<Found> byMessage = new ArrayList<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (String t : threads()) {
+            seen.add(t);
+            String hay = title(t).toLowerCase(Locale.ROOT) + " " + roleOf(t).toLowerCase(Locale.ROOT);
+            if (hay.contains(q)) {
+                byName.add(new Found(t, "", false));
+                continue;
+            }
+            List<Message> msgs = inThread(all, t);
+            for (int k = msgs.size() - 1; k >= 0; k--) {
+                Message m = msgs.get(k);
+                if (m.thread().equals(ChatSession.EVERYWHERE) || m.kind() == ChatSession.Kind.ACTIVITY) {
+                    continue;
+                }
+                String plain = clean(Styled.plain(m.text()));
+                int at = plain.toLowerCase(Locale.ROOT).indexOf(q);
+                if (at >= 0) {
+                    int from = Math.max(0, at - 18);
+                    byMessage.add(new Found(t, (from > 0 ? "…" : "") + plain.substring(from), false));
+                    break;
+                }
+            }
+        }
+        List<Found> out = new ArrayList<>(byName);
+        out.addAll(byMessage);
+        for (Agent a : session.contacts()) {
+            if (!seen.contains(a.name()) && (a.name() + " " + a.role()).toLowerCase(Locale.ROOT).contains(q)) {
+                out.add(new Found(a.name(), "Start a chat with " + clean(a.name()), true));
+            }
+        }
+        return out;
+    }
+
+    private void openFound(Found f) {
+        if (f.newChat()) {
+            session.openDirect(f.thread());
+        }
+        select(f.thread());
+    }
+
+    private void drawListSearch(Buffer buf, Rect r) {
+        Style field = st(listSearching ? Theme.TEXT : Theme.DIM, Theme.FIELD);
+        fill(buf, r, field);
+        String text = listQuery.text();
+        String shown = listSearching ? "⌕ " + text + "▏" : "⌕ Search chats  Ctrl+K";
+        put(buf, r.x() + 1, r.y(), shown, field, r.right() - 1);
+        hits.add(new Hit(r, this::openListSearch));
+    }
+
+    private void drawSearchResults(Buffer buf, Rect r, int top, int limit, List<Message> all) {
+        List<Found> found = searchChats(listQuery.text(), all);
+        listIndex = found.isEmpty() ? 0 : Math.max(0, Math.min(listIndex, found.size() - 1));
+        if (found.isEmpty()) {
+            put(buf, r.x() + 2, top, "No chat or agent matches '" + clean(listQuery.text().strip()) + "'", st(Theme.DIM, Theme.SIDEBAR), limit);
+            return;
+        }
+        int y = top;
+        int first = Math.max(0, listIndex - Math.max(0, (r.bottom() - 1 - top) / 3 - 1));
+        for (int i = first; i < found.size() && y + 2 < r.bottom() - 1; i++) {
+            Found f = found.get(i);
+            Color bg = i == listIndex ? Theme.SELECTED : Theme.SIDEBAR;
+            Rect row = new Rect(r.x(), y, r.width(), 2);
+            fill(buf, row, st(Theme.TEXT, bg));
+            hits.add(new Hit(row, () -> openFound(f)));
+            avatar(buf, r.x() + 1, y, f.thread());
+            put(buf, r.x() + 6, y, title(f.thread()), st(Theme.TEXT, bg).bold(), limit);
+            String line = f.snippet().isEmpty() ? clean(roleOf(f.thread())) : f.snippet();
+            if (line.isEmpty() && session.group(f.thread()) != null) {
+                line = session.group(f.thread()).members().size() + " agents and you";
+            }
+            put(buf, r.x() + 6, y + 1, line, st(f.newChat() ? Theme.GREEN : Theme.DIM, bg), limit);
+            y += 2;
+            put(buf, r.x() + 6, y, "─".repeat(Math.max(0, r.width() - 7)), st(Theme.LINE, Theme.SIDEBAR), limit + 1);
+            y++;
+        }
+        put(buf, r.x() + 2, r.bottom() - 2, "↑↓ choose · Enter open · Esc close", st(Theme.FAINT, Theme.SIDEBAR), limit);
+    }
+
+    private EventResult listSearchKey(KeyEvent key) {
+        KeyCode code = key.code();
+        List<Found> found = listQuery.text().isBlank() ? List.of() : searchChats(listQuery.text(), session.messages());
+        switch (code) {
+            case ESCAPE -> closeListSearch();
+            case ENTER -> {
+                if (!found.isEmpty()) {
+                    openFound(found.get(Math.max(0, Math.min(listIndex, found.size() - 1))));
+                } else if (listQuery.text().isBlank()) {
+                    closeListSearch();
+                }
+            }
+            case UP -> listIndex = Math.max(0, listIndex - 1);
+            case DOWN -> listIndex = Math.min(Math.max(0, found.size() - 1), listIndex + 1);
+            case BACKSPACE -> {
+                listQuery.backspace();
+                listIndex = 0;
+            }
+            case LEFT -> listQuery.left();
+            case RIGHT -> listQuery.right();
+            case CHAR -> {
+                if (key.hasCtrl() && Character.toLowerCase(key.character()) == 'u') {
+                    listQuery.clear();
+                    listIndex = 0;
+                } else if (!key.hasCtrl() && !key.hasAlt() && key.character() >= ' ') {
+                    listQuery.insert(key.string());
+                    listIndex = 0;
+                }
+            }
+            default -> { }
+        }
+        return EventResult.HANDLED;
     }
 
     private void openInfo(ChatInfoView.Mode mode) {
@@ -1732,7 +1881,9 @@ final class ChatScreen implements Element {
             return EventResult.HANDLED;
         }
         if (ctrl && ch == 'c') {
-            if (searching) {
+            if (listSearching) {
+                closeListSearch();
+            } else if (searching) {
                 searching = false;
             } else if (view != null) {
                 view = null;
@@ -1746,6 +1897,13 @@ final class ChatScreen implements Element {
         if (ctrl && ch == 'x') {
             session.stop(selected);
             return EventResult.HANDLED;
+        }
+        if (ctrl && ch == 'k' && view == null) {
+            openListSearch();
+            return EventResult.HANDLED;
+        }
+        if (listSearching && view == null && session.pending() == null) {
+            return listSearchKey(key);
         }
         if (ctrl && ch == 'f' && view == null) {
             openSearch(searching ? findInput.text() : "");
@@ -2066,6 +2224,10 @@ final class ChatScreen implements Element {
                 case "team" -> toggleSidebar();
                 case "settings" -> settingsOpen = true;
                 case "connect" -> openConnect(null);
+                case "chats" -> {
+                    openListSearch();
+                    listQuery.set(arg);
+                }
                 case "model" -> changeModel(arg);
                 case "reach" -> changeReach(arg);
                 case "info" -> openInfo(ChatInfoView.Mode.INFO);
@@ -2167,7 +2329,7 @@ final class ChatScreen implements Element {
         out.add("Keys");
         out.add("  Enter send · Shift+Enter, Alt+Enter, Ctrl+J or a trailing \\ new line · ↑ previous message");
         out.add("  PgUp/PgDn or the mouse wheel scroll · Esc jump to the latest · Ctrl+W delete word · Ctrl+U clear");
-        out.add("  Ctrl+F find in this chat (↑ older, ↓ newer, Esc close) · /copy copies the last code block");
+        out.add("  Ctrl+F find in this chat (↑ older, ↓ newer, Esc close) · Ctrl+K search your chats and agents · /copy copies the last code block");
         out.add("");
         out.add("Mouse");
         out.add("  Click teammates to mention them, menu items, buttons, ⧉ copy on a code block and the ✕ on attachments.");
@@ -2332,6 +2494,10 @@ final class ChatScreen implements Element {
         List<String> pairs = session.blockedPairs();
         session.system((pairs.isEmpty() ? "Every agent can contact every other." : "Cannot contact: " + String.join(", ", pairs) + ".")
                 + " Change it with /reach @bruno @ana off (or on).");
+    }
+
+    boolean listSearchOpenForTest() {
+        return listSearching;
     }
 
     void openNewAgentForTest() {
