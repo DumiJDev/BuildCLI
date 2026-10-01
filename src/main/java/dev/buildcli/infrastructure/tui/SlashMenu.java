@@ -1,5 +1,6 @@
 package dev.buildcli.infrastructure.tui;
 
+import static dev.buildcli.application.I18n.t;
 import static dev.buildcli.infrastructure.tui.Draw.clean;
 import static dev.buildcli.infrastructure.tui.Draw.fill;
 import static dev.buildcli.infrastructure.tui.Draw.put;
@@ -128,7 +129,7 @@ final class SlashMenu {
             }
             for (Agent a : ordered) {
                 if (a.name().toLowerCase(Locale.ROOT).startsWith(prefix.toLowerCase(Locale.ROOT))) {
-                    String tag = g == null ? "" : !g.has(a.name()) ? "not in this group" : g.isAdmin(a.name()) ? "admin" : "";
+                    String tag = g == null ? "" : !g.has(a.name()) ? t("not in this group") : g.isAdmin(a.name()) ? t("admin") : "";
                     items.add(new MenuItem("@" + a.name(), a.role(), tag, () -> completeMention(a.name())));
                 }
             }
@@ -170,9 +171,9 @@ final class SlashMenu {
         int y0 = box.y() - h - 1;
         Style bg = st(Theme.TEXT, Theme.DIALOG);
         fill(buf, new Rect(box.x(), y0, w, h + 1), bg);
-        put(buf, box.x() + 2, y0, items.get(0).label().startsWith("/") ? "Commands" : "Mention an agent", st(Theme.DIM, Theme.DIALOG), box.right());
+        put(buf, box.x() + 2, y0, items.get(0).label().startsWith("/") ? t("Commands") : t("Mention an agent"), st(Theme.DIM, Theme.DIALOG), box.right());
         boolean commands = items.get(0).label().startsWith("/");
-        String hint = (commands ? "↑↓ choose · Tab fills · Enter runs" : "↑↓ choose · Tab or Enter completes") + (items.size() > h ? " · " + items.size() + " matches" : "");
+        String hint = (commands ? t("↑↓ choose · Tab fills · Enter runs") : t("↑↓ choose · Tab or Enter completes")) + (items.size() > h ? " · " + t("{0} matches", items.size()) : "");
         put(buf, box.right() - 2 - Wrap.width(hint), y0, hint, st(Theme.FAINT, Theme.DIALOG), box.right() - 1);
         int labelW = 0;
         for (MenuItem it : items) {
@@ -185,7 +186,7 @@ final class SlashMenu {
             Rect row = new Rect(box.x(), y0 + 1 + i, w, 1);
             fill(buf, row, st(Theme.TEXT, rowBg));
             put(buf, row.x() + 2, row.y(), it.label(), st(Theme.TEXT, rowBg).bold(), row.right() - 1);
-            putFit(buf, row.x() + 4 + labelW, row.y(), clean(it.detail()), st(Theme.DIM, rowBg), row.right() - 10);
+            putFit(buf, row.x() + 4 + labelW, row.y(), clean(t(it.detail())), st(Theme.DIM, rowBg), row.right() - 10);
             put(buf, row.right() - 2 - Wrap.width(it.right()), row.y(), it.right(), st(Theme.DIM, rowBg), row.right() - 1);
             int idx = first + i;
             hit.accept(row, () -> {

@@ -1,11 +1,13 @@
 package dev.buildcli.infrastructure.tui;
 
+import static dev.buildcli.application.I18n.t;
 import static dev.buildcli.infrastructure.tui.Draw.clean;
 import static dev.buildcli.infrastructure.tui.Draw.fill;
 import static dev.buildcli.infrastructure.tui.Draw.put;
 import static dev.buildcli.infrastructure.tui.Draw.st;
 import dev.buildcli.application.ChatSession;
 import dev.buildcli.application.ChatSession.Message;
+import dev.buildcli.application.I18n;
 import dev.buildcli.domain.Attachment;
 import dev.buildcli.infrastructure.tui.Styled.Span;
 import dev.tamboui.buffer.Buffer;
@@ -329,11 +331,12 @@ final class ChatScreen implements Element {
                 session.system(message);
             }
         });
+        I18n.use(settings().get(dev.buildcli.application.Settings.LANGUAGE));
         session.profile(() -> dev.buildcli.application.UserProfile.describe(settings()));
         session.approvalMode(dev.buildcli.application.ApprovalMode.parse(settings().get(dev.buildcli.application.Settings.APPROVAL_MODE)));
         ensureSelection();
         if (services.canConnect() && !session.contacts().isEmpty() && noModelAnywhere()) {
-            openConnect("None of your agents has a model yet. Connect one to start chatting; it takes a minute.");
+            openConnect(t("None of your agents has a model yet. Connect one to start chatting; it takes a minute."));
         }
     }
 
@@ -430,8 +433,8 @@ final class ChatScreen implements Element {
         java.util.concurrent.CompletableFuture.runAsync(() -> {
             String how = copier.apply(text);
             long lines = text.lines().count();
-            say(how == null ? "Could not copy: no clipboard tool found (install xclip, xsel or wl-copy)"
-                    : "Copied " + lines + (lines == 1 ? " line" : " lines"));
+            say(how == null ? t("Could not copy: no clipboard tool found (install xclip, xsel or wl-copy)")
+                    : lines == 1 ? t("Copied 1 line") : t("Copied {0} lines", lines));
         });
     }
 
@@ -441,7 +444,7 @@ final class ChatScreen implements Element {
             return own;
         }
         String def = services.settings().defaultModel();
-        return def != null ? def : models.getOrDefault(agent, "no model: type /connect");
+        return def != null ? def : models.getOrDefault(agent, t("no model: type /connect"));
     }
 
     private dev.buildcli.application.Settings settings() {
@@ -452,6 +455,7 @@ final class ChatScreen implements Element {
 
     @Override
     public void render(Frame frame, Rect rect, RenderContext ctx) {
+        I18n.use(settings().get(dev.buildcli.application.Settings.LANGUAGE));
         area = rect;
         hits.clear();
         ensureSelection();
@@ -620,42 +624,42 @@ final class ChatScreen implements Element {
         }
         var group = session.group(selected);
         boolean isGroup = group != null;
-        String name = isGroup ? group.name() : chatList.exists(selected) ? chatList.title(selected) : "Welcome";
+        String name = isGroup ? group.name() : chatList.exists(selected) ? chatList.title(selected) : t("Welcome");
         Color c = isGroup ? Theme.ACCENT : Theme.agentColor(selected);
         put(buf, x, r.y(), " " + (name.isEmpty() ? "?" : name.substring(0, 1).toUpperCase(Locale.ROOT)) + " ", st(Theme.BG, c).bold(), r.right());
         int nx = x + 4;
-        put(buf, nx, r.y(), chatList.exists(selected) ? chatList.title(selected) : "Welcome", base.bold(), r.right() - 30);
+        put(buf, nx, r.y(), chatList.exists(selected) ? chatList.title(selected) : t("Welcome"), base.bold(), r.right() - 30);
         String sub;
         Style subStyle = st(Theme.DIM, Theme.PANEL);
         ChatSession.Live live = session.live(selected);
         String elsewhere = isGroup ? null : session.agentThread(selected);
         if (session.isActive(selected)) {
             String who = live != null ? live.agent() : chatList.busyAgentIn(selected);
-            String state = live != null ? "typing…" : who.isEmpty() ? "working…" : session.agentState(who) + "…";
-            sub = (isGroup && !who.isEmpty() ? clean(who) + " is " : "") + state;
+            String state = live != null ? t("typing…") : who.isEmpty() ? t("working…") : I18n.state(session.agentState(who)) + "…";
+            sub = isGroup && !who.isEmpty() ? t("{0} is {1}", clean(who), state) : state;
             subStyle = st(Theme.ACCENT, Theme.PANEL);
         } else if (elsewhere != null) {
-            sub = "busy in the " + chatList.title(elsewhere) + " chat · will read your messages after";
+            sub = t("busy in the {0} chat · will read your messages after", chatList.title(elsewhere));
             subStyle = st(Theme.AMBER, Theme.PANEL);
         } else if (isGroup) {
             StringBuilder sb = new StringBuilder();
             for (String m : group.members()) {
                 sb.append(sb.isEmpty() ? "" : ", ").append(clean(m));
             }
-            sb.append(sb.isEmpty() ? "you" : ", you");
-            sub = sb.toString() + "   · click for group info";
+            sb.append(sb.isEmpty() ? t("you") : ", " + t("you"));
+            sub = sb + "   · " + t("click for group info");
         } else if (chatList.hasDescription(selected)) {
             sub = chatList.describe(selected);
         } else if (session.contact(selected) == null) {
-            sub = "create an agent to start";
+            sub = t("create an agent to start");
         } else {
-            sub = "online · " + clean(chatList.roleOf(selected)) + " · " + clean(modelLabel(selected));
+            sub = t("online") + " · " + clean(chatList.roleOf(selected)) + " · " + clean(modelLabel(selected));
         }
         put(buf, nx, r.y() + 1, sub, subStyle, r.right() - 30);
         hits.add(new Hit(new Rect(x, r.y(), Math.max(1, r.right() - 32 - x), 2), () -> openInfo(ChatInfoView.Mode.INFO)));
         int bx = r.right() - 1;
-        String[][] buttons = gitFolder ? new String[][] {{" Help ", "help"}, {" Tasks ", "tasks"}, {" Changes ", "diff"}}
-                : new String[][] {{" Help ", "help"}, {" Tasks ", "tasks"}};
+        String[][] buttons = gitFolder ? new String[][] {{" " + t("Help") + " ", "help"}, {" " + t("Tasks") + " ", "tasks"}, {" " + t("Changes") + " ", "diff"}}
+                : new String[][] {{" " + t("Help") + " ", "help"}, {" " + t("Tasks") + " ", "tasks"}};
         for (String[] b : buttons) {
             bx -= Wrap.width(b[0]) + 1;
             put(buf, bx, r.y(), b[0], st(Theme.TEXT, Theme.FIELD), r.right());
@@ -664,14 +668,14 @@ final class ChatScreen implements Element {
         }
         int px = r.right() - 1;
         if (session.isActive(selected)) {
-            String stop = " ■ Stop ";
+            String stop = " ■ " + t("Stop") + " ";
             px -= Wrap.width(stop);
             put(buf, px, r.y() + 1, stop, st(Theme.TEXT, Theme.DANGER), r.right());
             hits.add(new Hit(new Rect(px, r.y() + 1, Wrap.width(stop), 1), () -> session.stop(selected)));
             px -= 1;
         }
         var mode = session.approvalMode();
-        String pill = " " + mode.label() + " ⇄ ";
+        String pill = " " + t(mode.label()) + " ⇄ ";
         px -= Wrap.width(pill);
         Style pillStyle = switch (mode) {
             case MANUAL -> st(Theme.DIM, Theme.FIELD);
@@ -822,11 +826,11 @@ final class ChatScreen implements Element {
         Style bar = st(Theme.TEXT, Theme.PANEL);
         fill(buf, r, bar);
         int x = r.x() + 2;
-        x += put(buf, x, r.y(), "Find in this chat: ", st(Theme.DIM, Theme.PANEL), r.right());
+        x += put(buf, x, r.y(), t("Find in this chat:") + " ", st(Theme.DIM, Theme.PANEL), r.right());
         String text = findInput.text();
-        x += put(buf, x, r.y(), text.isEmpty() ? "type to search▏" : text + "▏", st(text.isEmpty() ? Theme.DIM : Theme.TEXT, Theme.FIELD), r.right() - 40);
-        String count = text.isBlank() ? "" : findRows.isEmpty() ? "no matches" : (findIndex + 1) + " of " + findRows.size();
-        String right = count + "   ↑ older  ↓ newer  Esc close ✕ ";
+        x += put(buf, x, r.y(), text.isEmpty() ? t("type to search") + "▏" : text + "▏", st(text.isEmpty() ? Theme.DIM : Theme.TEXT, Theme.FIELD), r.right() - 40);
+        String count = text.isBlank() ? "" : findRows.isEmpty() ? t("no matches") : t("{0} of {1}", findIndex + 1, findRows.size());
+        String right = count + "   " + t("↑ older  ↓ newer  Esc close ✕") + " ";
         int rx = Math.max(x + 2, r.right() - Wrap.width(right));
         put(buf, rx, r.y(), right, st(findRows.isEmpty() && !text.isBlank() ? Theme.RED : Theme.DIM, Theme.PANEL), r.right());
         hits.add(new Hit(new Rect(r.right() - 3, r.y(), 3, 1), () -> searching = false));
@@ -881,7 +885,7 @@ final class ChatScreen implements Element {
             copyText(wholeMessage || blocks.isEmpty() ? m.text() : blocks.get(blocks.size() - 1));
             return;
         }
-        say("Nothing to copy yet");
+        say(t("Nothing to copy yet"));
     }
 
     // ---- conversation rows ----
@@ -890,7 +894,7 @@ final class ChatScreen implements Element {
     private void reviewChanges(long id, boolean undo) {
         var files = session.changes(id);
         if (files.isEmpty()) {
-            session.system("These changes were not kept, so they cannot be shown.");
+            session.system(t("These changes were not kept, so they cannot be shown."));
             return;
         }
         List<String> lines = new ArrayList<>();
@@ -900,15 +904,15 @@ final class ChatScreen implements Element {
                     n.agents().get(0), n.path(), n.existed(), n.before(), n.after()))).lines().toList());
         }
         String who = files.get(0).agent();
-        viewer.open(new ViewerPane.View(undo ? "Undo " + who + "'s changes?" : who + "'s changes", lines, true, false, id, undo));
+        viewer.open(new ViewerPane.View(undo ? t("Undo {0}'s changes?", who) : t("{0}'s changes", who), lines, true, false, id, undo));
     }
 
     private void undoLast() {
         long id = session.lastChanges(selected);
         if (id < 0) {
-            session.system("No changes to undo in this chat.");
+            session.system(t("No changes to undo in this chat."));
         } else if (!session.canUndo()) {
-            session.system("Undo is not available here.");
+            session.system(t("Undo is not available here."));
         } else {
             reviewChanges(id, true);
         }
@@ -921,9 +925,9 @@ final class ChatScreen implements Element {
             if (session.group("#maintainers") != null) {
                 select("#maintainers");
             }
-            say("Added " + String.join(", ", added) + ". Say something in the group to start.");
+            say(t("Added {0}. Say something in the group to start.", String.join(", ", added)));
         } catch (Exception e) {
-            say("Could not add them: " + e.getMessage());
+            say(t("Could not add them: {0}", e.getMessage()));
         }
     }
 
@@ -959,10 +963,10 @@ final class ChatScreen implements Element {
             int y = r.y() + 1 + i;
             Wrap.Segment s = segs.get(inputFirstRow + i);
             if (src.isEmpty()) {
-                String hint = ChatSession.FATHER.equals(selected) ? "Ask AgentFather: /newagent, /agents, /editagent, /help"
-                        : ChatSession.isAgentChat(selected) ? "Read only: ask one of them, in their own chat, to write to the other"
-                        : selected.equals(ChatSession.NOTES) ? "A note to yourself: no agent reads it"
-                        : session.busy() ? "Type a message (it waits its turn)" : "Type a message";
+                String hint = ChatSession.FATHER.equals(selected) ? t("Ask AgentFather: /newagent, /agents, /editagent, /help")
+                        : ChatSession.isAgentChat(selected) ? t("Read only: ask one of them, in their own chat, to write to the other")
+                        : selected.equals(ChatSession.NOTES) ? t("A note to yourself: no agent reads it")
+                        : session.busy() ? t("Type a message (it waits its turn)") : t("Type a message");
                 put(buf, tx, y, hint, st(Theme.DIM, Theme.FIELD), tx + inputWidth);
             } else {
                 String line = src.substring(s.start(), s.end()).stripTrailing();

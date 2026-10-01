@@ -1,5 +1,6 @@
 package dev.buildcli.infrastructure.tui;
 
+import static dev.buildcli.application.I18n.t;
 import static dev.buildcli.infrastructure.tui.Draw.fill;
 import static dev.buildcli.infrastructure.tui.Draw.put;
 import static dev.buildcli.infrastructure.tui.Draw.st;
@@ -121,7 +122,7 @@ final class MessageMarks {
     }
 
     private static String who(Message m) {
-        return m.kind() == Kind.USER ? "You" : m.author().isEmpty() ? "BuildCLI" : m.author();
+        return m.kind() == Kind.USER ? t("You") : m.author().isEmpty() ? "BuildCLI" : m.author();
     }
 
     private String text() {
@@ -146,7 +147,7 @@ final class MessageMarks {
         int gone = session.deleteMessages(new ArrayList<>(marked));
         clear();
         if (gone < asked) {
-            session.system((asked - gone) + " could not be deleted: a message still being answered, or a card of changed files.");
+            session.system(t("{0} could not be deleted: a message still being answered, or a card of changed files.", asked - gone));
         }
     }
 
@@ -154,7 +155,7 @@ final class MessageMarks {
     void forwardTo(String thread) {
         List<Message> picked = selection();
         String from = chatTitle.apply(chat.get());
-        StringBuilder sb = new StringBuilder("Forwarded from " + from + ":");
+        StringBuilder sb = new StringBuilder(t("Forwarded from {0}:", from));
         for (Message m : picked) {
             sb.append("\n\n").append(who(m)).append(": ").append(m.text());
         }
@@ -171,21 +172,21 @@ final class MessageMarks {
         put(buf, x, r.y(), close, st(Theme.DIM, Theme.PANEL), r.right());
         hit.accept(new Rect(x, r.y(), 3, 1), this::clear);
         x += 4;
-        String label = forwarding ? "Forward to… click a chat in the list · Esc cancels"
-                : confirmDelete ? "Delete " + marked.size() + (marked.size() == 1 ? " message" : " messages") + "? The agents forget " + (marked.size() == 1 ? "it" : "them") + " too."
-                : marked.size() + " selected";
+        String label = forwarding ? t("Forward to… click a chat in the list · Esc cancels")
+                : confirmDelete ? (marked.size() == 1 ? t("Delete 1 message? The agents forget it too.") : t("Delete {0} messages? The agents forget them too.", marked.size()))
+                : t("{0} selected", marked.size());
         x += put(buf, x, r.y(), label, base.bold(), r.right()) + 2;
         if (forwarding) {
             return;
         }
         if (confirmDelete) {
-            x += button(buf, x, r, " Delete  Y ", st(Theme.TEXT, Theme.DANGER).bold(), this::delete);
-            button(buf, x + 1, r, " Cancel  N ", st(Theme.TEXT, Theme.FIELD), () -> confirmDelete = false);
+            x += button(buf, x, r, " " + t("Delete") + "  Y ", st(Theme.TEXT, Theme.DANGER).bold(), this::delete);
+            button(buf, x + 1, r, " " + t("Cancel") + "  N ", st(Theme.TEXT, Theme.FIELD), () -> confirmDelete = false);
             return;
         }
-        x += button(buf, x, r, " Copy  C ", st(Theme.TEXT, Theme.FIELD), this::copySelected) + 1;
-        x += button(buf, x, r, " Forward  F ", st(Theme.TEXT, Theme.FIELD), () -> forwarding = true) + 1;
-        button(buf, x, r, " Delete  D ", st(Theme.TEXT, Theme.FIELD), () -> confirmDelete = true);
+        x += button(buf, x, r, " " + t("Copy") + "  C ", st(Theme.TEXT, Theme.FIELD), this::copySelected) + 1;
+        x += button(buf, x, r, " " + t("Forward") + "  F ", st(Theme.TEXT, Theme.FIELD), () -> forwarding = true) + 1;
+        button(buf, x, r, " " + t("Delete") + "  D ", st(Theme.TEXT, Theme.FIELD), () -> confirmDelete = true);
     }
 
     private int button(Buffer buf, int x, Rect r, String label, Style style, Runnable action) {
