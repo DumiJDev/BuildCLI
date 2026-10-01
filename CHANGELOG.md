@@ -30,6 +30,9 @@ BuildCLI is rebuilt from scratch as a local runtime for teams of AI agents. The 
 - The M0 spike: the hidden `bench` and `demo` commands, the `eval` package and its findings document (replaced by `docs/storage.md`).
 
 ### Added
+- **Mark messages** (right click, or Alt+M): copy, forward to another chat, delete (the agents forget them too).
+- **Rounded bubbles** and the **BuildCLI logo's colours** (navy and cream) instead of WhatsApp's greens.
+- An agent can write to **you** in its own private chat (`send_message` to `user`), also when a teammate asked it to.
 - **Modes** `manual` / `edits` / `auto` (Shift+Tab, `/mode`, the pill in the chat header; starting mode in Settings): which questions are answered for you. `trust` is never skipped.
 - **Drafts** like a messenger: unsent text waits in its chat and shows as "Draft: ..." in the chat list.
 - **Context for groups** (optional): a text and files the group's agents read (`/context`, group info screen).
