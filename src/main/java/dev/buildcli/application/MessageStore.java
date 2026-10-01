@@ -303,6 +303,7 @@ final class MessageStore {
             try {
                 m = writes.take();
             } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
                 return;
             }
             write(m);

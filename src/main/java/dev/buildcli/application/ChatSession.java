@@ -127,6 +127,7 @@ public final class ChatSession implements UserInterface {
                 try {
                     job = inbox.take();
                 } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
                     return;
                 }
                 current = job;

@@ -14,7 +14,7 @@ import java.util.TreeMap;
 /** {@code settings.yaml} in the global directory and in the project's state directory (never the project tree). */
 public final class FileSettingsStore implements SettingsStore {
     public static final String FILE_NAME = "settings.yaml";
-    private static final long MAX_BYTES = 256 * 1024;
+    private static final long MAX_BYTES = 256L * 1024;
     private static final ObjectMapper YAML = new ObjectMapper(new YAMLFactory());
 
     private final Path global;

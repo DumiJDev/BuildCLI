@@ -46,8 +46,8 @@ public final class TerminalText {
         if (c >= 0x80 && c <= 0x9F) {
             return '?'; // C1 controls, including the 8-bit CSI
         }
-        if ((c >= '‪' && c <= '‮') || (c >= '⁦' && c <= '⁩') || c == '‎' || c == '‏'
-                || c == '؜') {
+        if ((c >= '\u202A' && c <= '\u202E') || (c >= '\u2066' && c <= '\u2069') || c == '\u200E' || c == '\u200F'
+                || c == '\u061C') {
             return '?'; // bidirectional overrides, embeddings, isolates and marks
         }
         return c;

@@ -198,7 +198,7 @@ final class ChatDirectory {
     /** @return the new group's id */
     String createGroup(String name, List<String> members) {
         String clean = name == null || name.isBlank() ? "group" : name.strip();
-        String base = "#" + clean.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("^-|-$", "");
+        String base = "#" + clean.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("(?:^-)|(?:-$)", "");
         List<String> known = members.stream().filter(contacts::containsKey).distinct().toList();
         String id;
         synchronized (this) {

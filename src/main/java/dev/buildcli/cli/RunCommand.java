@@ -253,9 +253,11 @@ final class RunCommand implements Callable<Integer> {
         ctx.out.println("Tokens: " + in + " in / " + out + " out.   See: buildcli task list, buildcli usage");
     }
 
+    private static final SecureRandom RANDOM = new SecureRandom();
+
     private static byte[] randomBytes() {
         byte[] b = new byte[2];
-        new SecureRandom().nextBytes(b);
+        RANDOM.nextBytes(b);
         return b;
     }
 }

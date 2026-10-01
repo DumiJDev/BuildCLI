@@ -47,8 +47,8 @@ public final class Events {
         Task stored = new Task(task.id, task.parentId, task.from, task.to, Redactor.redact(task.objective), Redactor.redact(task.brief));
         stored.status = task.status;
         stored.result = Redactor.redact(task.result);
-        stored.attempts = task.attempts;
-        stored.tokens = task.tokens;
+        stored.attempts(task.attempts());
+        stored.tokens(task.tokens());
         store.saveTask(runId, stored);
         ui.onTaskChanged(task);
     }

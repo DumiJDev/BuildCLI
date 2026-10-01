@@ -222,6 +222,9 @@ final class ConnectView {
     }
 
     private void chooseModel() {
+        if (provider == null) {
+            return;
+        }
         List<ModelCatalog.Model> items = models();
         String typed = filter.text().strip();
         String choice;

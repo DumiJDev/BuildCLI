@@ -171,7 +171,7 @@ public final class Orchestrator {
         transcript.add(t.parentId == null ? new LlmMessage.User(taskPrompt(t), request.attachments()) : new LlmMessage.User(taskPrompt(t)));
         int failures = 0;
         while (true) {
-            t.attempts++;
+            t.nextAttempt();
             setStatus(t, TaskStatus.RUNNING);
             String reason;
             try {
@@ -201,7 +201,7 @@ public final class Orchestrator {
             switch (choice) {
                 case RETRY -> {
                     failures = 0;
-                    t.tokens = 0;
+                    t.tokens(0);
                     transcript.add(new LlmMessage.User("The user asked you to try again. Previous problem: " + reason));
                 }
                 case SKIP -> {
@@ -235,12 +235,12 @@ public final class Orchestrator {
             } catch (RuntimeException e) {
                 throw new TaskFailure("LLM error: " + describe(e), false);
             }
-            t.tokens += reply.inputTokens() + reply.outputTokens();
+            int used = t.addTokens(reply.inputTokens() + reply.outputTokens());
             events.emit("AgentInvoked", t.id, agent.name(), "step=" + step, reply.inputTokens(), reply.outputTokens());
             events.emit("AgentReplied", t.id, agent.name(), ToolRuntime.abbreviate(
                     "text=" + reply.text() + " calls=" + reply.toolCalls().stream().map(c -> c.name() + c.args()).toList(), 400));
-            if (t.tokens > limits.maxTokensPerTask()) {
-                throw new TokenBudgetExceeded("token budget exceeded (" + t.tokens + " > " + limits.maxTokensPerTask() + ")");
+            if (used > limits.maxTokensPerTask()) {
+                throw new TokenBudgetExceeded("token budget exceeded (" + used + " > " + limits.maxTokensPerTask() + ")");
             }
             if (reply.toolCalls().isEmpty() && (reply.text() == null || reply.text().isBlank())) {
                 // Small models sometimes go silent right after a tool result. Nudge once per attempt

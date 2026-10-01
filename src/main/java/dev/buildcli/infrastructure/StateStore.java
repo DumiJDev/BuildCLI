@@ -281,8 +281,8 @@ public final class StateStore implements RunStore, dev.buildcli.ports.ChatLog, A
                     ps.setString(7, cut(t.brief));
                     ps.setString(8, t.status.name());
                     ps.setString(9, cut(t.result));
-                    ps.setInt(10, t.attempts);
-                    ps.setInt(11, t.tokens);
+                    ps.setInt(10, t.attempts());
+                    ps.setInt(11, t.tokens());
                     ps.setString(12, Instant.now().toString());
                 });
     }
@@ -305,8 +305,8 @@ public final class StateStore implements RunStore, dev.buildcli.ports.ChatLog, A
                             rs.getString(5), rs.getString(6));
                     t.status = TaskStatus.valueOf(rs.getString(7));
                     t.result = rs.getString(8);
-                    t.attempts = rs.getInt(9);
-                    t.tokens = rs.getInt(10);
+                    t.attempts(rs.getInt(9));
+                    t.tokens(rs.getInt(10));
                     return t;
                 });
     }
