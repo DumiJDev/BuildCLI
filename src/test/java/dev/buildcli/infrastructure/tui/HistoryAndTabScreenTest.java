@@ -243,4 +243,66 @@ class HistoryAndTabScreenTest {
         String out = ChatScreenTest.render(screen, 130, 40);
         assertTrue(out.contains("name: Dumi"), out);
     }
+
+    private static void alt(ChatScreen screen, char c) {
+        screen.handleKeyEvent(dev.tamboui.tui.event.KeyEvent.ofChar(c, dev.tamboui.tui.event.KeyModifiers.ALT), true);
+    }
+
+    private ChatScreen withTwoMessages() throws Exception {
+        var screen = screen();
+        ChatScreenTest.type(screen, "hello team");
+        ChatScreenTest.key(screen, KeyCode.ENTER);
+        ChatScreenTest.idle(screen.sessionForTest());
+        ChatScreenTest.render(screen, 130, 40);
+        return screen;
+    }
+
+    @Test
+    void markedMessagesCanBeCopiedAndExtendedWithUp() throws Exception {
+        var screen = withTwoMessages();
+        var copied = new java.util.ArrayList<String>();
+        screen.copier(text -> {
+            copied.add(text);
+            return "test";
+        });
+        alt(screen, 'm');
+        assertTrue(ChatScreenTest.render(screen, 130, 40).contains("1 selected"));
+        ChatScreenTest.key(screen, KeyCode.UP);
+        assertTrue(ChatScreenTest.render(screen, 130, 40).contains("2 selected"), "Up adds the message before");
+        ChatScreenTest.type(screen, "c");
+        long end = System.nanoTime() + 3_000_000_000L;
+        while (copied.isEmpty() && System.nanoTime() < end) {
+            Thread.onSpinWait();
+        }
+        assertEquals("hello team\n\nok", copied.get(0).strip(), "[" + copied.get(0).replace("\n", "\\n") + "]");
+        assertFalse(ChatScreenTest.render(screen, 130, 40).contains("selected"), "copying ends the marking");
+    }
+
+    @Test
+    void deletingAsksFirstAndTheMessageIsGoneFromTheChat() throws Exception {
+        var screen = withTwoMessages();
+        var session = screen.sessionForTest();
+        alt(screen, 'm');
+        ChatScreenTest.type(screen, "d");
+        assertTrue(ChatScreenTest.render(screen, 130, 40).contains("Delete 1 message?"));
+        ChatScreenTest.type(screen, "n");
+        assertTrue(session.messages().stream().anyMatch(m -> m.text().equals("ok")), "No keeps it");
+        ChatScreenTest.type(screen, "d");
+        ChatScreenTest.type(screen, "y");
+        assertFalse(session.messages().stream().anyMatch(m -> m.text().equals("ok")), "gone");
+        assertTrue(session.messages().stream().anyMatch(m -> m.text().equals("hello team")), "the other stays");
+    }
+
+    @Test
+    void forwardingSendsTheMarkedMessagesToTheChatYouPickNext() throws Exception {
+        var screen = withTwoMessages();
+        var session = screen.sessionForTest();
+        alt(screen, 'm');
+        ChatScreenTest.type(screen, "f");
+        assertTrue(ChatScreenTest.render(screen, 130, 40).contains("Forward to"));
+        screen.handleKeyEvent(dev.tamboui.tui.event.KeyEvent.ofKey(KeyCode.DOWN, dev.tamboui.tui.event.KeyModifiers.ALT), true);
+        assertTrue(session.messages().stream().anyMatch(m -> m.kind() == ChatSession.Kind.USER && m.text().startsWith("Forwarded from")
+                && m.text().contains("ok")), "the forwarded text went to the chosen chat");
+        assertFalse(ChatScreenTest.render(screen, 130, 40).contains("selected"));
+    }
 }

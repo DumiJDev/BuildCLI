@@ -87,8 +87,8 @@ final class ViewerPane {
             Style s = base;
             if (view.diff()) {
                 if (l.startsWith("diff --git")) {
-                    fill(buf, new Rect(r.x(), y, r.width(), 1), st(Theme.TEXT, Theme.ME));
-                    s = st(Theme.TEXT, Theme.ME).bold();
+                    fill(buf, new Rect(r.x(), y, r.width(), 1), st(Theme.TEXT, Theme.SELECTED));
+                    s = st(Theme.TEXT, Theme.SELECTED).bold();
                 } else if (l.startsWith("+++") || l.startsWith("---") || l.startsWith("index ")) {
                     s = st(Theme.DIM, Theme.BG);
                 } else if (l.startsWith("@@")) {

@@ -70,6 +70,12 @@ final class ChatScreen implements Element {
     private int scrollMax;
     private final ViewerPane viewer;
     private final SlashMenu menu;
+    private final MessageMarks marks;
+    /** Where the last frame drew the conversation, to tell which message a click landed on. */
+    private Rect convRect = Rect.ZERO;
+    private int convFirst;
+    private int convYOff;
+    private List<ConversationRows.Row> convRows = List.of();
     private Rect area = Rect.ZERO;
     private Rect inputTextArea = Rect.ZERO;
     private Rect scrollTrack = Rect.ZERO;
@@ -109,6 +115,7 @@ final class ChatScreen implements Element {
     ChatScreen(ChatSession session, Map<String, String> models, Path cwd, Runnable quit, SettingsServices services) {
         this.session = session;
         this.gitFolder = java.nio.file.Files.exists(cwd.resolve(".git"));
+        this.marks = new MessageMarks(session, (rect, action) -> hits.add(new Hit(rect, action)), this::copyText, () -> selected, this::pendingChatTitle);
         this.menu = new SlashMenu(input, session, () -> selected, this::runCommand, (rect, action) -> hits.add(new Hit(rect, action)));
         this.pending = new PendingDialog(session, input, (rect, action) -> hits.add(new Hit(rect, action)), this::pendingChatTitle);
         this.viewer = new ViewerPane(session, (rect, action) -> hits.add(new Hit(rect, action)), this::reviewChanges);
@@ -531,6 +538,11 @@ final class ChatScreen implements Element {
     }
 
     private void select(String thread) {
+        if (marks.forwarding()) {
+            marks.forwardTo(thread);
+        } else if (!thread.equals(selected)) {
+            marks.clear();
+        }
         if (!thread.equals(selected)) {
             // what you typed and did not send waits in its chat, like in any messenger
             if (input.text().isEmpty()) {
@@ -571,7 +583,7 @@ final class ChatScreen implements Element {
         int barH = visibleRows + 2;
         int barY = pane.bottom() - barH;
         int chipsY = attachments.isEmpty() ? barY : barY - 1;
-        int findH = searching ? 1 : 0;
+        int findH = (searching ? 1 : 0) + marks.height();
         Rect content = new Rect(pane.x(), pane.y() + 2 + findH, pane.width(), Math.max(1, chipsY - pane.y() - 2 - findH));
         List<Message> msgs = chatList.inThread(all, selected);
         if (!msgs.isEmpty()) {
@@ -580,6 +592,9 @@ final class ChatScreen implements Element {
         drawConversation(buf, content, msgs);
         if (searching) {
             drawFindBar(buf, new Rect(pane.x(), pane.y() + 2, pane.width(), 1));
+        }
+        if (marks.active()) {
+            marks.draw(buf, new Rect(pane.x(), pane.y() + 2 + (searching ? 1 : 0), pane.width(), 1));
         }
         if (!attachments.isEmpty()) {
             drawChips(buf, new Rect(pane.x(), chipsY, pane.width(), 1));
@@ -618,7 +633,7 @@ final class ChatScreen implements Element {
             String who = live != null ? live.agent() : chatList.busyAgentIn(selected);
             String state = live != null ? "typing…" : who.isEmpty() ? "working…" : session.agentState(who) + "…";
             sub = (isGroup && !who.isEmpty() ? clean(who) + " is " : "") + state;
-            subStyle = st(Theme.GREEN, Theme.PANEL);
+            subStyle = st(Theme.ACCENT, Theme.PANEL);
         } else if (elsewhere != null) {
             sub = "busy in the " + chatList.title(elsewhere) + " chat · will read your messages after";
             subStyle = st(Theme.AMBER, Theme.PANEL);
@@ -660,7 +675,7 @@ final class ChatScreen implements Element {
         px -= Wrap.width(pill);
         Style pillStyle = switch (mode) {
             case MANUAL -> st(Theme.DIM, Theme.FIELD);
-            case EDITS -> st(Theme.BG, Theme.ACCENT).bold();
+            case EDITS -> st(Theme.ON_ACCENT, Theme.ACCENT).bold();
             case AUTO -> st(Theme.TEXT, Theme.DANGER).bold();
         };
         put(buf, px, r.y() + 1, pill, pillStyle, r.right());
@@ -711,8 +726,25 @@ final class ChatScreen implements Element {
         int first = Math.max(0, total - viewH - scrollOff);
         boolean empty = msgs.isEmpty() && !session.isActive(selected);
         int yOff = total < viewH ? (empty ? Math.max(0, (viewH - total) / 3) : viewH - total) : 0;
+        convRect = r;
+        convFirst = first;
+        convYOff = yOff;
+        convRows = rows;
         for (int i = 0; i < viewH && first + i < total; i++) {
             ConversationRows.Row row = rows.get(first + i);
+            if (row.message() >= 0) {
+                Rect line = new Rect(r.x(), r.y() + yOff + i, width, 1);
+                if (marks.isMarked(row.message())) {
+                    fill(buf, line, st(Theme.TEXT, Theme.SELECTED));
+                    put(buf, r.x(), line.y(), "✓", st(Theme.ACCENT, Theme.SELECTED).bold(), r.x() + 1);
+                }
+                long id = row.message();
+                hits.add(new Hit(line, () -> {
+                    if (marks.active()) {
+                        marks.toggle(id);
+                    }
+                }));
+            }
             drawSpans(buf, r.x() + row.x(), r.y() + yOff + i, row.spans(), r.x() + width);
             if (!query.isEmpty()) {
                 boolean current = findIndex >= 0 && findRows.get(findIndex) == first + i;
@@ -1026,6 +1058,14 @@ final class ChatScreen implements Element {
         if (pendingKey != null) {
             return pendingKey;
         }
+        EventResult markKey = marks.key(key);
+        if (markKey != null) {
+            return markKey;
+        }
+        if (alt && ch == 'm' && !viewer.isOpen()) {
+            marks.start();
+            return EventResult.HANDLED;
+        }
         if (ctrl && code == KeyCode.CHAR) {
             switch (ch) {
                 case 'g' -> {
@@ -1295,6 +1335,14 @@ final class ChatScreen implements Element {
             int rel = Math.max(0, Math.min(scrollTrack.height() - 1, m.y() - scrollTrack.y()));
             scrollOff = scrollMax - (int) Math.round((double) rel / Math.max(1, scrollTrack.height() - 1) * scrollMax);
             scrollOff = Math.max(0, Math.min(scrollMax, scrollOff));
+            return EventResult.HANDLED;
+        }
+        if (kind == MouseEventKind.PRESS && m.isRightButton() && !viewer.isOpen() && session.pending() == null) {
+            // a right click marks a message, like a long press in a messenger
+            int idx = m.y() - convRect.y() - convYOff + convFirst;
+            if (convRect.contains(m.x(), m.y()) && idx >= 0 && idx < convRows.size() && convRows.get(idx).message() >= 0) {
+                marks.toggle(convRows.get(idx).message());
+            }
             return EventResult.HANDLED;
         }
         if (kind == MouseEventKind.PRESS && m.isLeftButton()) {

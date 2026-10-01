@@ -15,6 +15,9 @@ public interface ChatLog {
     /** Deletes every message of one chat, and the file changes attached to them. */
     void clear(String thread);
 
+    /** Deletes some messages (and the file changes attached to them). */
+    default void delete(java.util.Collection<Long> ids) {}
+
     /** Keeps the files one message's run changed, so they can be reviewed and undone after a restart. */
     default void saveChanges(long messageId, List<FileChange> changes) {}
 

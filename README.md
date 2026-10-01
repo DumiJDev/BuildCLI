@@ -111,6 +111,14 @@ deletes anything until you reply *yes*.
 - **Work with the output**: `/copy` copies a code block, `Ctrl+F` searches the chat, `/diff`, `/status`, `/log`, `/open`,
   image and audio attachments, a title and bell when an agent needs you, mouse support (Windows included).
 - **Models**: `/model` shows or changes the default model, or one agent's.
+- **Modes**: `manual` asks before every write, command and commit; `edits` writes files without asking (you can undo) and still
+  asks for commands; `auto` asks for nothing. Shift+Tab or `/mode` changes it; the pill in the chat header shows it. Starting mode
+  in Settings. What an agent may touch is still set by its own permissions, and trusting a project is always asked.
+- **Messages**: right-click a message (or Alt+M for the newest) to mark it, click more, then copy, forward to another chat or
+  delete (the agents forget deleted messages too). Unsent text waits in its chat as a "Draft:" in the list.
+- **About you and your groups**: `/me name|about|style` tells every agent who you are and how to deal with you (kept on this
+  computer). `/context` gives a group background to read: a text and text files.
+- **Not only for code**: `/samples writing` and `/samples office` add teams for writing and office work (no commands, no git).
 
 ## Settings
 

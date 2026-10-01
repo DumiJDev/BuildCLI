@@ -89,9 +89,15 @@ public final class ToolRuntime {
         if (agent.can(Capability.CHAT_POST)) {
             specs.add(new ToolSpec("send_message",
                     "Write a message as yourself, only because the user asked you to. 'to' is a group's name (it appears in that group "
-                            + "for everyone) or a teammate's name (a private chat between you two, which the user can read).",
-                    List.of(new Param("to", "A group name or a teammate's name", false, true),
+                            + "for everyone), a teammate's name (a private chat between you two, which the user can read), or 'user' (your private "
+                            + "chat with the person you work for: use it when someone asks you to talk to them, or to reach them).",
+                    List.of(new Param("to", "A group name, a teammate's name, or 'user'", false, true),
                             new Param("text", "The message", false, true))));
+        } else {
+            specs.add(new ToolSpec("send_message",
+                    "Write to the person you work for in your private chat with them, for example when a teammate asks you to talk to them. "
+                            + "It appears there as a new message from you.",
+                    List.of(new Param("to", "Always 'user'", false, true), new Param("text", "The message", false, true))));
         }
         specs.add(new ToolSpec("ask_user",
                 "Ask the user a question and wait for the answer, when you need a decision you cannot reasonably make yourself. Offer 2 to 4 "
