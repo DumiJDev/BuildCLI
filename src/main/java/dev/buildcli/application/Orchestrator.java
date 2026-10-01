@@ -66,8 +66,18 @@ public final class Orchestrator {
             return "ERROR: there is no chat to write in here";
         }
 
+        /** Asks the user and waits. @return the answer, or a sentence saying why there is none */
+        default String ask(String from, String question, List<String> options) {
+            return "ERROR: the user cannot be asked in this mode. Decide yourself, and say what you assumed in your report";
+        }
+
         /** Runs {@code work} as {@code to} and waits for it. */
         String run(String from, String to, java.util.function.Supplier<String> work);
+
+        /** Same, told what {@code from} asked {@code to} to do, so the chat between them can show it. */
+        default String run(String from, String to, String objective, java.util.function.Supplier<String> work) {
+            return run(from, to, work);
+        }
     }
 
     public void dispatchWith(Dispatcher dispatcher) {
@@ -250,7 +260,8 @@ public final class Orchestrator {
             }
             for (ToolCall call : reply.toolCalls()) {
                 String out = call.name().equals("handoff") ? handoff(agent, t, call, depth, handoffs)
-                        : call.name().equals("send_message") ? sendMessage(agent, t, call) : tools.execute(agent, t, call);
+                        : call.name().equals("send_message") ? sendMessage(agent, t, call)
+                        : call.name().equals("ask_user") ? askUser(agent, t, call) : tools.execute(agent, t, call);
                 messages.add(new LlmMessage.ToolResult(call.id(), call.name(), out));
             }
         }
@@ -265,6 +276,29 @@ public final class Orchestrator {
             }
         }
         return t.getClass().getSimpleName() + " (no details; is the model provider running and reachable? try 'buildcli doctor')";
+    }
+
+    private String askUser(Agent from, Task t, ToolCall call) {
+        events.emit("ToolCalled", t.id, from.name(), "ask_user " + call.args());
+        Object question = call.args().get("question");
+        String result;
+        if (question == null || question.toString().isBlank()) {
+            result = "ERROR: ask_user needs a 'question'";
+        } else {
+            List<String> options = new java.util.ArrayList<>();
+            Object raw = call.args().get("options");
+            if (raw instanceof java.util.Collection<?> c) {
+                c.forEach(o -> options.add(String.valueOf(o).strip()));
+            } else if (raw != null && !raw.toString().isBlank()) {
+                for (String o : raw.toString().split("\\s*\\|\\s*|\\s*,\\s*")) {
+                    options.add(o.strip());
+                }
+            }
+            options.removeIf(String::isBlank);
+            result = dispatcher.ask(from.name(), question.toString().strip(), options.size() > 6 ? options.subList(0, 6) : options);
+        }
+        events.emit("ToolCompleted", t.id, from.name(), (result.startsWith("ERROR") ? "error: " : "ok: ") + ToolRuntime.abbreviate(result, 200));
+        return result;
     }
 
     private String sendMessage(Agent from, Task t, ToolCall call) {
@@ -304,7 +338,7 @@ public final class Orchestrator {
         Task child = newTask(parent.id, from.name(), target.name(), String.valueOf(call.args().get("objective")),
                 brief == null ? "" : brief.toString());
         events.emit("HandoffCreated", child.id, from.name(), "-> " + target.name() + " (task #" + child.id + ")");
-        String result = dispatcher.run(from.name(), target.name(), () -> runTask(child, depth + 1));
+        String result = dispatcher.run(from.name(), target.name(), child.objective, () -> runTask(child, depth + 1));
         events.emit("ToolCompleted", parent.id, from.name(), "ok: handoff #" + child.id + " " + child.status);
         return "Task #" + child.id + " " + child.status + ": " + result
                 + "\n[If the original request is now satisfied, reply with your final report and make no further tool calls;"
