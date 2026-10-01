@@ -154,6 +154,19 @@ public final class ChatSession implements UserInterface {
     }
     private static final int MAX_RUNS = 50;
 
+    private volatile ApprovalMode approvalMode = ApprovalMode.MANUAL;
+
+    /** How much the agents may do before asking you; manual until the front end says otherwise. */
+    public ApprovalMode approvalMode() {
+        return approvalMode;
+    }
+
+    public void approvalMode(ApprovalMode mode) {
+        approvalMode = mode;
+        touch();
+    }
+
+
     private final Limits limits;
     private final Executor executor;
     private final ChatStore store;
@@ -207,7 +220,7 @@ public final class ChatSession implements UserInterface {
         this.executor = executor;
         this.store = store;
         this.agentHops = agentHops;
-        this.approvals = new Approvals(this::touch, state::put);
+        this.approvals = new Approvals(this::touch, state::put, () -> approvalMode);
         this.changeCards = new ChangeCards(transcript, this::note);
         this.feed = new AgentFeed(transcript, state, this::touch, this::threadOf, this::threadNow, this::system);
         this.directory = new ChatDirectory(contacts, groups, store, this::touch, this::error, this::note);

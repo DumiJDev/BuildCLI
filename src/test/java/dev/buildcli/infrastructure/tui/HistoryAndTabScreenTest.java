@@ -203,4 +203,18 @@ class HistoryAndTabScreenTest {
         screen.handleKeyEvent(dev.tamboui.tui.event.KeyEvent.ofKey(KeyCode.UP, dev.tamboui.tui.event.KeyModifiers.ALT), true);
         ChatScreenTest.key(screen, KeyCode.ENTER);
     }
+
+    @Test
+    void shiftTabAndSlashModeChangeHowMuchAgentsMayDo() {
+        var screen = screen();
+        var session = screen.sessionForTest();
+        assertEquals(dev.buildcli.application.ApprovalMode.MANUAL, session.approvalMode());
+        assertTrue(ChatScreenTest.render(screen, 130, 40).contains("manual ⇄"));
+        screen.handleKeyEvent(dev.tamboui.tui.event.KeyEvent.ofKey(KeyCode.TAB, dev.tamboui.tui.event.KeyModifiers.SHIFT), true);
+        assertEquals(dev.buildcli.application.ApprovalMode.EDITS, session.approvalMode());
+        ChatScreenTest.type(screen, "/mode auto");
+        ChatScreenTest.key(screen, KeyCode.ENTER);
+        assertEquals(dev.buildcli.application.ApprovalMode.AUTO, session.approvalMode());
+        assertTrue(ChatScreenTest.render(screen, 130, 40).contains("auto ⇄"));
+    }
 }
