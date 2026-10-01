@@ -315,7 +315,15 @@ class ChatScreenTest {
                 dev.buildcli.ports.ChatStore.NONE, () -> 6, dev.buildcli.ports.ChatLog.NONE);
         var screen = screen(s);
         String out = render(screen, 120, 36);
-        assertTrue(out.contains("No agents yet") && out.contains("Create your first agent"), out);
+        assertTrue(out.contains("No agents yet") && out.contains("Add the sample team: ana, bruno and carla") && out.contains("Create your own agent")
+                && out.contains("Connect a model and provider"), out);
+        int[] button = CopyAndFindScreenTest.find(out, "Add the sample team", 0);
+        screen.handleMouseEvent(MouseEvent.press(MouseButton.LEFT, button[0] + 2, button[1]));
+        String toast = "";
+        for (int i = 0; i < 50 && !toast.contains("Could not add them"); i++) {
+            toast = render(screen, 120, 36);
+        }
+        assertTrue(toast.contains("Could not add them: not available"), "the demo has no files to write, and says so:\n" + toast);
         s.addContact(new Agent("lia", "helper", "", Set.of(), Permissions.none()));
         out = render(screen, 120, 36);
         assertEquals("lia", screen.selectedForTest());
