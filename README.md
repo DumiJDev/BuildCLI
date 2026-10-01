@@ -91,8 +91,11 @@ deletes anything until you reply *yes*.
   work, shows a summary, and creates it. `back` goes one question back, `cancel` stops.
 - `/agents` lists your agents with their model and capabilities; `/deleteagent <name>` deletes one (after a yes);
   `/samples` adds the sample agents.
-- What it creates can read the whole project and has no folder to write in and no command allowed; to give it more, edit its
-  file (AgentFather says so). Every write and command still asks you first.
+- `/editagent <name>` changes an agent you already have, one setting at a time (each after a yes): its role, what it may do, how
+  it works, the folders it may write in and the commands it may run **without asking**. Folders must be inside the project (never
+  `.buildcli/` or `.git/`). It rewrites the agent's file, so comments in the file's header are lost.
+- A new agent can read the whole project and has no folder to write in and no command allowed; give it more with `/editagent`.
+  Every write still shows you a diff and asks first.
 
 ## In the chat
 

@@ -4,9 +4,7 @@ import static dev.buildcli.infrastructure.tui.Draw.fill;
 import static dev.buildcli.infrastructure.tui.Draw.putSafe;
 import static dev.buildcli.infrastructure.tui.Draw.st;
 import dev.buildcli.application.Settings;
-import dev.buildcli.infrastructure.FileCredentialStore;
 import dev.buildcli.infrastructure.ModelCatalog;
-import dev.buildcli.infrastructure.ProviderRegistry;
 import dev.buildcli.ports.SettingsStore.Scope;
 import dev.tamboui.buffer.Buffer;
 import dev.tamboui.layout.Rect;
@@ -37,9 +35,6 @@ final class ConnectView {
 
     private record Hit(Rect rect, Runnable action) {}
 
-    /** What a provider still needs, in one short line and a few lines of help. */
-    private record Status(String text, Color color, boolean ready, List<String> help) {}
-
     private static final String SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
 
     private final SettingsServices services;
@@ -58,18 +53,9 @@ final class ConnectView {
     private String model;
     private CompletableFuture<String> test;
     private long testStarted;
-    /** Typing a key: for which provider, what is typed, the check in flight and what to tell the user about it. */
-    private boolean enteringKey;
-    private SettingsServices.Provider keyFor;
-    private final InputEditor keyInput = new InputEditor();
-    private CompletableFuture<ModelCatalog.Result> keyCheck;
-    private String keyChecking = "";
-    private String keyMessage = "";
-    private Color keyColor = Theme.DIM;
-    /** The key a second Enter saves without a successful check (the provider could not be reached). */
-    private String saveAnyway;
     /** After saving a key: the provider to open the model list of once its models have loaded. */
     private String advanceTo;
+    private final KeyEntry keyEntry;
     private String notice = "";
     private String forgetArmed;
 
@@ -77,6 +63,7 @@ final class ConnectView {
     ConnectView(SettingsServices services, Consumer<String> finished) {
         this.services = services;
         this.finished = finished;
+        this.keyEntry = new KeyEntry(services, this::keySaved);
     }
 
     /** Starts over on the provider list. @param why shown on top, e.g. why the last message failed; may be null */
@@ -88,7 +75,7 @@ final class ConnectView {
         provider = null;
         model = null;
         test = null;
-        enteringKey = false;
+        keyEntry.stop();
         notice = "";
         forgetArmed = null;
         providers = ordered(services.providers());
@@ -119,7 +106,7 @@ final class ConnectView {
 
     /** True while something on screen changes by itself: providers being checked, the test message on its way. */
     boolean animating() {
-        if (keyCheck != null && !keyCheck.isDone()) {
+        if (keyEntry.busy()) {
             return true;
         }
         if (step == Step.TEST) {
@@ -135,65 +122,8 @@ final class ConnectView {
         return f == null ? null : f.getNow(null);
     }
 
-    private Status status(SettingsServices.Provider p) {
-        if (p.keyEnv() != null && !p.keySet()) {
-            return new Status("needs a key", Theme.AMBER, false, keyHelp(p));
-        }
-        ModelCatalog.Result r = result(p);
-        if (r == null) {
-            return new Status("checking…", Theme.DIM, false, List.of("Checking " + p.url() + " …"));
-        }
-        if (r.problem() != null) {
-            if (p.local()) {
-                return new Status("not running", Theme.DIM, false, localHelp(p));
-            }
-            boolean rejected = r.problem().startsWith("HTTP 401") || r.problem().startsWith("HTTP 403");
-            if (rejected && p.keyEnv() != null) {
-                return new Status("key rejected", Theme.RED, false, List.of(r.problem(), "",
-                        p.keyFrom().equals("environment") ? "The key comes from the environment variable " + p.keyEnv() + ". Fix it there, or press K to save "
-                                + "a different key here (a variable that is set wins, so unset it first)."
-                                : "Press K to enter a new key."));
-            }
-            return new Status(p.keyEnv() == null ? "not reachable" : "key or endpoint failed", Theme.RED, false,
-                    List.of(r.problem(), "", "Check the URL " + p.url() + (p.keyEnv() == null ? "" : " and the key (press K to enter a new one)")
-                            + ", then press R to check again."));
-        }
-        if (r.models().isEmpty()) {
-            return new Status("no models yet", Theme.AMBER, false, p.name().equals("ollama")
-                    ? List.of("Ollama is running but has no models. Download one in a terminal:", "",
-                            "    ollama pull qwen2.5-coder:7b", "", "then press R. Models of 7B or more work much better with tools.")
-                    : List.of(p.name() + " answered but lists no models. Press Enter to type a model name yourself."));
-        }
-        long free = r.models().stream().filter(ModelCatalog.Model::free).count();
-        String count = r.models().size() + (r.models().size() == 1 ? " model" : " models") + (p.local() || free == 0 ? "" : ", " + free + " free");
-        return new Status("ready · " + count, Theme.GREEN, true, List.of((p.description().isBlank() ? p.name() : p.description())
-                + ". Press Enter to choose a model."));
-    }
-
-    private List<String> keyHelp(SettingsServices.Provider p) {
-        List<String> help = new ArrayList<>();
-        String page = ProviderRegistry.keyPage(p.name());
-        if (!p.description().isBlank()) {
-            help.add(p.description() + ".");
-            help.add("");
-        }
-        help.add("1. " + (page != null ? "Create a key at " + page : "Get a key from the provider"));
-        help.add("2. Press Enter here and paste it. It is saved only on this computer, readable by your account only.");
-        help.add("");
-        help.add("Prefer an environment variable? Set " + p.keyEnv() + " before starting BuildCLI; it always wins over a saved key.");
-        return help;
-    }
-
-    private static List<String> localHelp(SettingsServices.Provider p) {
-        return switch (p.name()) {
-            case "ollama" -> List.of("Ollama runs models on this machine, free and private.", "",
-                    "1. Install it from https://ollama.com", "2. Start it:  ollama serve", "3. Download a model:  ollama pull qwen2.5-coder:7b",
-                    "4. Press R to check again.");
-            case "lmstudio" -> List.of("LM Studio runs models on this machine, free and private.", "",
-                    "1. Install it from https://lmstudio.ai and download a model", "2. Start its server: Developer tab › Start server",
-                    "3. Press R to check again.");
-            default -> List.of("Nothing answers at " + p.url() + ". Start the server, then press R to check again.");
-        };
+    private ProviderStatus status(SettingsServices.Provider p) {
+        return ProviderStatus.of(p, result(p));
     }
 
     // ---- models ----
@@ -244,56 +174,26 @@ final class ConnectView {
     // ---- the key ----
 
     private void startKey(SettingsServices.Provider p) {
-        enteringKey = true;
-        keyFor = p;
-        keyInput.clear();
-        keyCheck = null;
-        keyMessage = "";
-        keyColor = Theme.DIM;
-        saveAnyway = null;
+        keyEntry.start(p);
         notice = "";
         forgetArmed = null;
     }
 
-    private void submitKey() {
-        if (keyCheck != null && !keyCheck.isDone()) {
-            return;
-        }
-        String key = FileCredentialStore.clean(keyInput.text());
-        if (!FileCredentialStore.valid(key)) {
-            keyMessage = key.isEmpty() ? "Paste the key first." : "That does not look like a key: it has spaces or line breaks.";
-            keyColor = Theme.RED;
-            return;
-        }
-        if (key.equals(saveAnyway)) {
-            saveKey(key);
-            return;
-        }
-        saveAnyway = null;
-        keyChecking = key;
-        keyMessage = "Checking the key with " + keyFor.name() + "…";
-        keyColor = Theme.DIM;
-        keyCheck = services.checkKey(keyFor.name(), key);
-    }
-
-    /** Called every frame: acts on a finished key check. */
-    private void pollKey() {
-        if (keyCheck != null && keyCheck.isDone() && enteringKey) {
-            ModelCatalog.Result r = keyCheck.getNow(null);
-            keyCheck = null;
-            String problem = r == null ? "no answer" : r.problem();
-            if (problem == null) {
-                saveKey(keyChecking);
-            } else if (problem.startsWith("HTTP 401") || problem.startsWith("HTTP 403")) {
-                keyMessage = keyFor.name() + " did not accept that key (" + problem + "). Check it and paste it again.";
-                keyColor = Theme.RED;
-                keyInput.clear();
-            } else {
-                keyMessage = "Could not check it: " + problem + ". Press Enter again to save it anyway, or paste a different one.";
-                keyColor = Theme.AMBER;
-                saveAnyway = keyChecking;
+    /** The key was saved: look for the provider's models and move on to them. */
+    private void keySaved(String name) {
+        notice = "Key saved. Looking for " + name + "'s models…";
+        advanceTo = name;
+        recheck();
+        for (int i = 0; i < providers.size(); i++) {
+            if (providers.get(i).name().equals(name)) {
+                index = i; // the list is sorted by readiness, so the provider moved
             }
         }
+    }
+
+    /** Called every frame: acts on a finished key check, and opens the models of a provider whose key was just saved. */
+    private void pollKey() {
+        keyEntry.poll();
         if (advanceTo != null) {
             for (int i = 0; i < providers.size(); i++) {
                 SettingsServices.Provider p = providers.get(i);
@@ -306,28 +206,6 @@ final class ConnectView {
                     }
                     return;
                 }
-            }
-        }
-    }
-
-    private void saveKey(String key) {
-        try {
-            services.saveKey(keyFor.name(), key);
-        } catch (Exception e) {
-            keyMessage = "Could not save it: " + e.getMessage();
-            keyColor = Theme.RED;
-            return;
-        }
-        String name = keyFor.name();
-        enteringKey = false;
-        keyInput.clear();
-        saveAnyway = null;
-        notice = "Key saved. Looking for " + name + "'s models…";
-        advanceTo = name;
-        recheck();
-        for (int i = 0; i < providers.size(); i++) {
-            if (providers.get(i).name().equals(name)) {
-                index = i; // the list is sorted by readiness, so the provider moved
             }
         }
     }
@@ -437,14 +315,14 @@ final class ConnectView {
             }
             body = new Rect(body.x(), body.y() + 1, body.width(), body.height() - 1);
         }
-        String keys = enteringKey ? "Enter save · Ctrl+U clear · Esc back" : switch (step) {
+        String keys = keyEntry.active() ? "Enter save · Ctrl+U clear · Esc back" : switch (step) {
             case PROVIDER -> "↑↓ choose · Enter next · K key · D forget key · R check again · Esc close";
             case MODEL -> "type to search · ↑↓ choose · Enter test it · Esc back";
             case TEST -> testPassed() ? "P this project · G all projects · B another model · Esc back"
                     : test != null && test.isDone() ? "R try again · B another model · Esc back" : "Esc back";
         };
-        if (enteringKey) {
-            drawKey(buf, body);
+        if (keyEntry.active()) {
+            keyEntry.draw(buf, body);
         } else {
             switch (step) {
                 case PROVIDER -> drawProviders(buf, body);
@@ -458,42 +336,6 @@ final class ConnectView {
     }
 
     /** What is typed, hidden: dots, except the last four characters so a wrong paste can be told from a right one. */
-    static String masked(String key) {
-        if (key.length() <= 8) {
-            return "•".repeat(key.length());
-        }
-        return "•".repeat(key.length() - 4) + key.substring(key.length() - 4);
-    }
-
-    private void drawKey(Buffer buf, Rect b) {
-        putSafe(buf, b.x(), b.y(), "Your " + keyFor.name() + " key", st(Theme.TEXT, Theme.BG).bold(), b.right());
-        String page = ProviderRegistry.keyPage(keyFor.name());
-        int y = b.y() + 1;
-        putSafe(buf, b.x(), y, page != null ? "Create one at " + page : "Get one from " + keyFor.url(), st(Theme.DIM, Theme.BG), b.right());
-        Rect field = new Rect(b.x(), b.y() + 3, b.width(), 1);
-        fill(buf, field, st(Theme.TEXT, Theme.FIELD));
-        String shown = masked(keyInput.text());
-        int avail = field.width() - 3;
-        String clipped = CharWidth.of(shown) > avail ? CharWidth.substringByWidthFromEnd(shown, avail) : shown;
-        putSafe(buf, field.x() + 1, field.y(), shown.isEmpty() ? "Paste the key here▏" : clipped + "▏",
-                st(shown.isEmpty() ? Theme.DIM : Theme.TEXT, Theme.FIELD), field.right());
-        int row = b.y() + 5;
-        if (!keyMessage.isEmpty()) {
-            for (String line : Wrap.lines(keyMessage, b.width())) {
-                putSafe(buf, b.x(), row++, line, st(keyColor, Theme.BG), b.right());
-            }
-            row++;
-        }
-        String where = services.keyFile().isEmpty() ? "on this computer" : "in " + services.keyFile();
-        for (String line : Wrap.lines("It is saved only on this computer, " + where + ", readable by your account only. It is never put in a project, "
-                + "and it is sent nowhere except to " + keyFor.name() + " (" + keyFor.url() + ").", b.width())) {
-            putSafe(buf, b.x(), row++, line, st(Theme.FAINT, Theme.BG), b.right());
-        }
-        row++;
-        putSafe(buf, b.x(), row, "You can also set " + keyFor.keyEnv() + " in your environment instead; that always wins over a saved key.",
-                st(Theme.FAINT, Theme.BG), b.right());
-    }
-
     private void drawProviders(Buffer buf, Rect b) {
         putSafe(buf, b.x(), b.y(), "Where should your agents' model come from?", st(Theme.TEXT, Theme.BG).bold(), b.right());
         int top = b.y() + 2;
@@ -506,7 +348,7 @@ final class ConnectView {
         }
         for (int i = first; i < providers.size() && i < first + rows; i++) {
             SettingsServices.Provider p = providers.get(i);
-            Status s = status(p);
+            ProviderStatus s = status(p);
             boolean sel = i == index;
             Color bg = sel ? Theme.SELECTED : Theme.BG;
             Rect row = new Rect(b.x(), top + i - first, b.width(), 1);
@@ -534,7 +376,7 @@ final class ConnectView {
         putSafe(buf, b.x(), y, "─".repeat(b.width()), st(Theme.LINE, Theme.BG), b.right());
         y += 2;
         SettingsServices.Provider p = providers.get(index);
-        Status s = status(p);
+        ProviderStatus s = status(p);
         putSafe(buf, b.x(), y - 1, p.name(), st(Theme.TEXT, Theme.BG).bold(), b.right());
         if (!notice.isEmpty()) {
             putSafe(buf, b.x(), y++, notice, st(Theme.GREEN, Theme.BG), b.right());
@@ -649,8 +491,8 @@ final class ConnectView {
     void key(KeyEvent key) {
         KeyCode code = key.code();
         char ch = code == KeyCode.CHAR && !key.hasCtrl() && !key.hasAlt() ? Character.toLowerCase(key.character()) : 0;
-        if (enteringKey) {
-            keyKey(key);
+        if (keyEntry.active()) {
+            keyEntry.key(key);
             return;
         }
         if (code != KeyCode.CHAR || ch != 'd') {
@@ -728,38 +570,9 @@ final class ConnectView {
         }
     }
 
-    private void keyKey(KeyEvent key) {
-        KeyCode code = key.code();
-        switch (code) {
-            case ESCAPE -> {
-                enteringKey = false;
-                keyCheck = null;
-            }
-            case ENTER -> submitKey();
-            case BACKSPACE -> {
-                keyInput.backspace();
-                saveAnyway = null;
-            }
-            case LEFT -> keyInput.left();
-            case RIGHT -> keyInput.right();
-            case HOME -> keyInput.home();
-            case END -> keyInput.end();
-            case CHAR -> {
-                if (key.hasCtrl() && Character.toLowerCase(key.character()) == 'u') {
-                    keyInput.clear();
-                } else if (!key.hasCtrl() && !key.hasAlt() && key.character() > ' ') {
-                    keyInput.insert(key.string());
-                }
-                saveAnyway = null;
-            }
-            default -> { }
-        }
-    }
-
     void paste(String text) {
-        if (enteringKey) {
-            keyInput.insert(text.replaceAll("\\s+", "")); // a key never has spaces: drop the line break that came with the paste
-            saveAnyway = null;
+        if (keyEntry.active()) {
+            keyEntry.paste(text);
             return;
         }
         if (step == Step.MODEL) {

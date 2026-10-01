@@ -76,6 +76,11 @@ public interface SettingsServices {
 
     void deleteAgent(String name) throws Exception;
 
+    /** Changes an existing agent's file (and the agent in the open chat). Only what {@code edit} sets is changed. */
+    default void updateAgent(String name, dev.buildcli.infrastructure.AgentFileEditor.Edit edit) throws Exception {
+        throw new IllegalStateException("not available here");
+    }
+
     /**
      * Writes the four sample agents (the maintainers) and AGENTS.md into the project, puts the agents in the open
      * chat and makes a group of them. Files that exist are kept. @return the names of the agents that were added
