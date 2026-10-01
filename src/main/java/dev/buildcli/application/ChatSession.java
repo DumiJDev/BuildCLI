@@ -173,29 +173,17 @@ public final class ChatSession implements UserInterface {
 
     private static final ThreadLocal<Run> RUN = new ThreadLocal<>();
     private static final Pattern MENTION = Pattern.compile("(?<![\\w@])@([A-Za-z][A-Za-z0-9_-]*)");
-    private static final int MAX_MESSAGES = 2000;
     private static final int MAX_EVENTS = 300;
     private static final int MAX_RUNS = 50;
-    private static final int HISTORY_MESSAGES = 10;
-    private static final int HISTORY_CHARS = 6000;
 
     private final Limits limits;
     private final Executor executor;
     private final ChatStore store;
-    private final dev.buildcli.ports.ChatLog log;
-    /** The files behind each changes card, loaded from the log the first time a restored card asks. */
-    private final Map<Long, List<dev.buildcli.domain.FileChange>> changeSets = new ConcurrentHashMap<>();
+    private final MessageStore transcript;
     /** "Always allow" answers: thread, agent and what, to what it means. In memory only: a grant never outlives the session. */
     private final Map<String, String> grants = new ConcurrentHashMap<>();
-    private final java.util.Set<Long> savedChanges = ConcurrentHashMap.newKeySet();
     private volatile java.nio.file.Path workspace;
     private volatile dev.buildcli.application.tools.WorkspaceLock workspaceLock;
-    /** Messages waiting to be written: the UI never waits for the disk. */
-    private final LinkedBlockingDeque<Message> writes = new LinkedBlockingDeque<>();
-    private final Thread writer;
-    /** Where each message sits in the conversation, for the history: it changes when a message moves down on being read. */
-    private final Map<Long, Long> positions = new ConcurrentHashMap<>();
-    private final AtomicLong nextPosition = new AtomicLong();
     private final java.util.function.IntSupplier agentHops;
     private final Map<String, Agent> contacts = new java.util.concurrent.ConcurrentSkipListMap<>();
     /** Groups by id; the group made from a roster (tests) has the id {@link #MAIN}. Guarded by {@code lock}. */
@@ -207,7 +195,6 @@ public final class ChatSession implements UserInterface {
     private final Map<Long, AtomicInteger> openRuns = new ConcurrentHashMap<>();
     private final java.util.Set<Long> failedMessages = ConcurrentHashMap.newKeySet();
     private final Object lock = new Object();
-    private final List<Message> messages = new ArrayList<>();
     private final List<Event> events = new ArrayList<>();
     private final Map<String, Actor> actors = new java.util.concurrent.ConcurrentSkipListMap<>();
     private final Map<String, String> state = new ConcurrentHashMap<>();
@@ -217,7 +204,6 @@ public final class ChatSession implements UserInterface {
     private final Map<String, String> waitsFor = new HashMap<>();
     private final List<Run> runs = new CopyOnWriteArrayList<>();
     private final List<Pending> pending = new CopyOnWriteArrayList<>();
-    private final AtomicLong ids = new AtomicLong();
     /** Goes up on every change a screen could show, so a front end redraws only when something changed. */
     private final AtomicLong version = new AtomicLong();
     private final AtomicInteger inputTokens = new AtomicInteger();
@@ -251,7 +237,7 @@ public final class ChatSession implements UserInterface {
     public ChatSession(List<Agent> contacts, List<Chat> groups, Limits limits, Executor executor, ChatStore store,
             java.util.function.IntSupplier agentHops, dev.buildcli.ports.ChatLog log) {
         this.limits = limits;
-        this.log = log;
+        this.transcript = new MessageStore(log, this::touch);
         this.executor = executor;
         this.store = store;
         this.agentHops = agentHops;
@@ -266,8 +252,6 @@ public final class ChatSession implements UserInterface {
             this.groups.put(g.id(), new Chat(g.id(), g.name(), true, members, admins.isEmpty() && !members.isEmpty() ? List.of(members.get(0)) : admins));
         }
         store.loadBlocked().forEach((from, tos) -> blocked.put(from, new java.util.LinkedHashSet<>(tos)));
-        restore();
-        this.writer = log == dev.buildcli.ports.ChatLog.NONE ? null : Thread.ofVirtual().name("chat-history").start(this::writeLoop);
     }
 
     private static List<Agent> merge(List<Agent> first, List<Agent> more) {
@@ -310,71 +294,6 @@ public final class ChatSession implements UserInterface {
         }
     }
 
-    /**
-     * Loads the conversation kept from earlier. Work that was in progress when BuildCLI closed did not finish: those
-     * messages come back as not sent, so they can be retried, and unfinished activity as failed.
-     */
-    private void restore() {
-        List<dev.buildcli.domain.ChatEntry> saved;
-        try {
-            saved = log.recent(MAX_MESSAGES);
-        } catch (RuntimeException e) {
-            messages.add(new Message(ids.incrementAndGet(), Kind.ERROR, "", "Could not load the earlier messages: " + e.getMessage(),
-                    Instant.now(), State.NONE, List.of(), EVERYWHERE));
-            return;
-        }
-        long max = 0;
-        for (dev.buildcli.domain.ChatEntry e : saved) {
-            Kind kind;
-            State st;
-            try {
-                kind = Kind.valueOf(e.kind());
-                st = State.valueOf(e.state());
-            } catch (IllegalArgumentException ignored) {
-                continue;
-            }
-            boolean interrupted = st == State.QUEUED || st == State.RUNNING;
-            Message m = new Message(e.id(), kind, e.author(), e.text(), e.at(), interrupted ? State.FAILED : st, e.attachments(), e.thread());
-            messages.add(m);
-            positions.put(m.id(), e.position());
-            if (interrupted) {
-                writes.add(m);
-            }
-            max = Math.max(max, e.id());
-            nextPosition.set(Math.max(nextPosition.get(), e.position()));
-        }
-        ids.set(max);
-    }
-
-    private void writeLoop() {
-        while (true) {
-            Message m;
-            try {
-                m = writes.take();
-            } catch (InterruptedException e) {
-                return;
-            }
-            write(m);
-            if (closed && writes.isEmpty()) {
-                return;
-            }
-        }
-    }
-
-    private void write(Message m) {
-        try {
-            // what is kept on disk is scrubbed of secrets, like the event log; the screen shows the original
-            log.save(new dev.buildcli.domain.ChatEntry(m.id(), m.thread(), m.kind().name(), m.author(), Redactor.redact(m.text()), m.at(),
-                    m.state().name(), m.attachments(), positions.getOrDefault(m.id(), 0L)));
-            List<dev.buildcli.domain.FileChange> files = changeSets.get(m.id());
-            if (m.kind() == Kind.CHANGES && files != null && savedChanges.add(m.id())) {
-                log.saveChanges(m.id(), files);
-            }
-        } catch (RuntimeException e) {
-            // a full disk or a locked database must not break the chat; the message stays on screen
-        }
-    }
-
     /** A number that changes whenever anything visible changes: messages, typing, presence, questions, groups. */
     public long version() {
         return version.get();
@@ -382,14 +301,6 @@ public final class ChatSession implements UserInterface {
 
     private void touch() {
         version.incrementAndGet();
-    }
-
-    /** Keeps a new or changed message, except local notes (help, command errors) that belong to no chat. */
-    private void persist(Message m) {
-        touch();
-        if (writer != null && !m.thread().equals(EVERYWHERE)) {
-            writes.add(m);
-        }
     }
 
     // ---- what the user does ----
@@ -415,7 +326,7 @@ public final class ChatSession implements UserInterface {
             return -1;
         }
         if (NOTES.equals(chat)) {
-            long id = ids.incrementAndGet();
+            long id = transcript.nextId();
             add(new Message(id, Kind.USER, "you", clean, Instant.now(), State.DONE, List.copyOf(attachments), NOTES));
             return id;
         }
@@ -429,7 +340,7 @@ public final class ChatSession implements UserInterface {
             error("There is nobody to talk to yet. Create an agent in Settings (F2) > Agents, or run 'buildcli init'.");
             return -1;
         }
-        long id = ids.incrementAndGet();
+        long id = transcript.nextId();
         add(new Message(id, Kind.USER, "you", clean, Instant.now(), State.QUEUED, List.copyOf(attachments), thread));
         route(id, clean, List.copyOf(attachments), thread);
         return id;
@@ -540,7 +451,7 @@ public final class ChatSession implements UserInterface {
         java.util.Set<String> out = new java.util.LinkedHashSet<>();
         synchronized (lock) {
             out.addAll(directs);
-            for (Message m : messages) {
+            for (Message m : transcript.snapshot()) {
                 if (contacts.containsKey(m.thread())) {
                     out.add(m.thread());
                 }
@@ -568,7 +479,7 @@ public final class ChatSession implements UserInterface {
     public List<String> agentChats() {
         java.util.Set<String> out = new java.util.LinkedHashSet<>();
         synchronized (lock) {
-            for (Message m : messages) {
+            for (Message m : transcript.snapshot()) {
                 if (isAgentChat(m.thread())) {
                     out.add(m.thread());
                 }
@@ -756,7 +667,7 @@ public final class ChatSession implements UserInterface {
 
     /** A note in one chat (who joined, who is not in the group). */
     private void note(String thread, String text) {
-        add(new Message(ids.incrementAndGet(), Kind.SYSTEM, "", text, Instant.now(), State.NONE, List.of(), thread));
+        add(new Message(transcript.nextId(), Kind.SYSTEM, "", text, Instant.now(), State.NONE, List.of(), thread));
     }
 
     /** Stops every run in {@code thread} (all runs if null) at its next step and answers their questions with "no". */
@@ -814,61 +725,37 @@ public final class ChatSession implements UserInterface {
         if (m == null || m.kind() != Kind.USER || m.state() != State.FAILED) {
             return false;
         }
-        synchronized (lock) {
-            messages.removeIf(x -> x.id() == messageId);
-            Message again = new Message(m.id(), m.kind(), m.author(), m.text(), Instant.now(), State.QUEUED, m.attachments(), m.thread());
-            messages.add(again);
-            positions.put(again.id(), nextPosition.incrementAndGet());
-            persist(again);
-        }
+        transcript.requeue(m);
         route(messageId, m.text(), m.attachments(), m.thread());
         return true;
     }
 
     /** The newest user message that failed, or -1. */
     public long lastFailedMessage() {
-        synchronized (lock) {
-            for (int i = messages.size() - 1; i >= 0; i--) {
-                Message m = messages.get(i);
-                if (m.kind() == Kind.USER && m.state() == State.FAILED) {
-                    return m.id();
-                }
-            }
-        }
-        return -1;
+        return transcript.lastFailed();
     }
 
     /** Local notes (help, errors about a command) that are not part of the conversation with the agents. */
     public void system(String text) {
-        add(new Message(ids.incrementAndGet(), Kind.SYSTEM, "", text, Instant.now(), State.NONE, List.of(), threadNow()));
+        add(new Message(transcript.nextId(), Kind.SYSTEM, "", text, Instant.now(), State.NONE, List.of(), threadNow()));
     }
 
     public void error(String text) {
-        add(new Message(ids.incrementAndGet(), Kind.ERROR, "", text, Instant.now(), State.NONE, List.of(), threadNow()));
+        add(new Message(transcript.nextId(), Kind.ERROR, "", text, Instant.now(), State.NONE, List.of(), threadNow()));
     }
 
     /** Deletes one chat's messages, on screen and on disk, like "clear chat" in a messaging app. */
     public void clearChat(String thread) {
-        synchronized (lock) {
-            messages.removeIf(m -> m.thread().equals(thread) || m.thread().equals(EVERYWHERE));
-        }
-        try {
-            log.clear(thread);
-        } catch (RuntimeException e) {
-            error("Could not delete the saved messages: " + e.getMessage());
+        String why = transcript.clearThread(thread);
+        if (why != null) {
+            error("Could not delete the saved messages: " + why);
         }
     }
 
     public void close() {
         closed = true;
         stop();
-        if (writer != null) {
-            // write what is still queued, so the last messages are there next time
-            List<Message> rest = new ArrayList<>();
-            writes.drainTo(rest);
-            writer.interrupt();
-            rest.forEach(this::write);
-        }
+        transcript.close();
         for (Actor a : actors.values()) {
             Thread t = a.thread;
             if (t != null) {
@@ -880,9 +767,7 @@ public final class ChatSession implements UserInterface {
     // ---- what the front end reads ----
 
     public List<Message> messages() {
-        synchronized (lock) {
-            return List.copyOf(messages);
-        }
+        return transcript.snapshot();
     }
 
     /** What an agent is writing in {@code thread} right now, or null. */
@@ -1014,22 +899,9 @@ public final class ChatSession implements UserInterface {
         String me = run.me;
         state.put(me, "reading");
         if (run.messageId > 0) {
-            synchronized (lock) {
-                // read now: the message moves to where the conversation is, as in a chat app
-                for (int i = 0; i < messages.size(); i++) {
-                    Message m = messages.get(i);
-                    if (m.id() == run.messageId && m.state() == State.QUEUED) {
-                        messages.remove(i);
-                        Message read = m.withState(State.RUNNING);
-                        messages.add(read);
-                        positions.put(read.id(), nextPosition.incrementAndGet());
-                        persist(read);
-                        break;
-                    }
-                }
-            }
+            transcript.markRead(run.messageId);
         }
-        String history = history(run.messageId, run.thread);
+        String history = transcript.history(run.messageId, run.thread);
         int before = messages().size();
         state.put(me, "thinking");
         String request = from == null ? text : "Message from " + from + " in this chat:\n" + text;
@@ -1064,8 +936,8 @@ public final class ChatSession implements UserInterface {
         }
         List<dev.buildcli.domain.FileChange> files = List.copyOf(run.changes);
         List<String> paths = dev.buildcli.application.tools.FileChanges.net(files).stream().map(dev.buildcli.application.tools.FileChanges.Net::path).toList();
-        long id = ids.incrementAndGet();
-        changeSets.put(id, files);
+        long id = transcript.nextId();
+        transcript.keepChanges(id, files);
         add(new Message(id, Kind.CHANGES, run.me, "Changed " + paths.size() + (paths.size() == 1 ? " file: " : " files: ") + String.join(", ", paths),
                 Instant.now(), State.DONE, List.of(), run.thread));
     }
@@ -1082,13 +954,7 @@ public final class ChatSession implements UserInterface {
 
     /** The files behind a changes card, oldest write first; empty if they were not kept. */
     public List<dev.buildcli.domain.FileChange> changes(long id) {
-        return changeSets.computeIfAbsent(id, k -> {
-            try {
-                return log.changes(k);
-            } catch (RuntimeException e) {
-                return List.of();
-            }
-        });
+        return transcript.changes(id);
     }
 
     /**
@@ -1232,37 +1098,8 @@ public final class ChatSession implements UserInterface {
                 return result;
             }
         }
-        add(new Message(ids.incrementAndGet(), Kind.AGENT, author, result.strip(), Instant.now(), State.NONE, List.of(), threadNow()));
+        add(new Message(transcript.nextId(), Kind.AGENT, author, result.strip(), Instant.now(), State.NONE, List.of(), threadNow()));
         return result;
-    }
-
-    private String history(long exceptMessageId, String thread) {
-        List<Message> all = messages();
-        List<String> lines = new ArrayList<>();
-        for (int i = all.size() - 1; i >= 0 && lines.size() < HISTORY_MESSAGES; i--) {
-            Message m = all.get(i);
-            if (m.id() == exceptMessageId || (m.kind() != Kind.USER && m.kind() != Kind.AGENT && m.kind() != Kind.CHANGES)
-                    || !m.thread().equals(thread)) {
-                continue;
-            }
-            if (m.kind() == Kind.CHANGES) {
-                // so an agent knows what was written, and does not assume its files are still there after an undo
-                lines.add(0, "(" + m.author() + " " + m.text().substring(0, 1).toLowerCase(java.util.Locale.ROOT) + m.text().substring(1)
-                        + (m.state() == State.UNDONE ? "; the user undid these changes" : "") + ")");
-                continue;
-            }
-            if (m.kind() == Kind.USER && m.state() != State.DONE) {
-                continue;
-            }
-            lines.add(0, (m.kind() == Kind.USER ? "user" : m.author()) + ": " + ToolRuntime.abbreviate(m.text(), 1200));
-        }
-        int skip = 0;
-        while (skip < lines.size() && lines.stream().skip(skip).mapToInt(String::length).sum() > HISTORY_CHARS) {
-            skip++;
-        }
-        StringBuilder sb = new StringBuilder();
-        lines.stream().skip(skip).forEach(l -> sb.append(l).append('\n'));
-        return sb.toString().strip();
     }
 
     // ---- handoffs: a message to a teammate's inbox ----
@@ -1347,7 +1184,7 @@ public final class ChatSession implements UserInterface {
             if (!g.has(from)) {
                 return "ERROR: you are not a member of the group '" + g.name() + "', so you cannot write there";
             }
-            add(new Message(ids.incrementAndGet(), Kind.AGENT, from, text, Instant.now(), State.NONE, List.of(), g.id()));
+            add(new Message(transcript.nextId(), Kind.AGENT, from, text, Instant.now(), State.NONE, List.of(), g.id()));
             if (run != null) {
                 deliverMentions(run, g.id(), text);
             }
@@ -1364,7 +1201,7 @@ public final class ChatSession implements UserInterface {
             return "ERROR: you cannot contact " + other + ": the user has not given you contact with them. Tell the user you cannot";
         }
         String thread = agentChatId(from, other);
-        add(new Message(ids.incrementAndGet(), Kind.AGENT, from, text, Instant.now(), State.NONE, List.of(), thread));
+        add(new Message(transcript.nextId(), Kind.AGENT, from, text, Instant.now(), State.NONE, List.of(), thread));
         int limit = Math.max(0, agentHops.getAsInt());
         int hops = run == null ? 0 : run.hops;
         if (hops + 1 > limit) {
@@ -1539,7 +1376,7 @@ public final class ChatSession implements UserInterface {
                 }
                 if (t != null && !t.from.equals("user")) {
                     // a handoff reads like one teammate writing to another in the chat
-                    add(new Message(ids.incrementAndGet(), Kind.AGENT, t.from, "@" + t.to + " " + t.objective
+                    add(new Message(transcript.nextId(), Kind.AGENT, t.from, "@" + t.to + " " + t.objective
                             + (t.brief == null || t.brief.isBlank() ? "" : "\n" + t.brief), Instant.now(), State.NONE, List.of(), threadNow()));
                 }
             }
@@ -1577,7 +1414,7 @@ public final class ChatSession implements UserInterface {
             sb.setLength(0);
         }
         if (!text.isEmpty()) {
-            add(new Message(ids.incrementAndGet(), Kind.AGENT, agent, text, Instant.now(), State.NONE, List.of(), thread));
+            add(new Message(transcript.nextId(), Kind.AGENT, agent, text, Instant.now(), State.NONE, List.of(), thread));
         }
     }
 
@@ -1619,53 +1456,22 @@ public final class ChatSession implements UserInterface {
     }
 
     private void activity(String agent, String text) {
-        add(new Message(ids.incrementAndGet(), Kind.ACTIVITY, agent, text, Instant.now(), State.RUNNING, List.of(), threadOf(agent)));
+        add(new Message(transcript.nextId(), Kind.ACTIVITY, agent, text, Instant.now(), State.RUNNING, List.of(), threadOf(agent)));
     }
 
     private void completeActivity(String agent, String payload) {
-        boolean ok = payload.startsWith("ok");
-        synchronized (lock) {
-            for (int i = messages.size() - 1; i >= 0; i--) {
-                Message m = messages.get(i);
-                if (m.kind() == Kind.ACTIVITY && m.author().equals(agent) && m.state() == State.RUNNING) {
-                    Message done = new Message(m.id(), m.kind(), m.author(),
-                            ok ? m.text() : m.text() + " (" + ToolRuntime.abbreviate(payload, 140) + ")", m.at(), ok ? State.DONE : State.FAILED,
-                            m.attachments(), m.thread());
-                    messages.set(i, done);
-                    persist(done);
-                    return;
-                }
-            }
-        }
+        transcript.completeActivity(agent, payload);
     }
 
     private void add(Message m) {
-        synchronized (lock) {
-            messages.add(m);
-            positions.put(m.id(), nextPosition.incrementAndGet());
-            if (messages.size() > MAX_MESSAGES) {
-                messages.remove(0); // only from the screen: the history on disk keeps it
-            }
-            persist(m);
-        }
+        transcript.add(m);
     }
 
     private Message find(long id) {
-        synchronized (lock) {
-            return messages.stream().filter(m -> m.id() == id).findFirst().orElse(null);
-        }
+        return transcript.find(id);
     }
 
-    private void replace(long id, State s) {
-        synchronized (lock) {
-            for (int i = messages.size() - 1; i >= 0; i--) {
-                if (messages.get(i).id() == id) {
-                    Message changed = messages.get(i).withState(s);
-                    messages.set(i, changed);
-                    persist(changed);
-                    return;
-                }
-            }
-        }
+    private void replace(long id, State state) {
+        transcript.replace(id, state);
     }
 }
