@@ -152,7 +152,7 @@ final class ChatServices implements SettingsServices {
     public List<AgentInfo> agents() {
         List<AgentInfo> out = new ArrayList<>();
         for (Agent a : config.agents()) {
-            if (!deleted.contains(a.name())) {
+            if (!deleted.contains(a.name()) && !created.containsKey(a.name())) {
                 out.add(new AgentInfo(a.name(), a.role(), switch (a.origin()) {
                     case PROJECT -> "this project";
                     case GLOBAL -> "all projects";
@@ -223,15 +223,15 @@ final class ChatServices implements SettingsServices {
         return file.toString();
     }
 
-    @Override
-    public void deleteAgent(String name) throws Exception {
+    /** The file of an agent the user may change: inside the agents folders of this project or of the user, never anywhere else. */
+    private Path agentFile(String name, String doing) {
         String source;
         if (created.containsKey(name)) {
             source = created.get(name).file();
         } else {
             Agent a = config.agent(name).orElseThrow(() -> new IllegalArgumentException("no agent named " + name));
             if (a.origin() == Origin.BUILTIN || a.source() == null || a.source().isBlank()) {
-                throw new IllegalArgumentException(name + " is built in and cannot be deleted");
+                throw new IllegalArgumentException(name + " is built in and cannot be " + doing);
             }
             source = a.source();
         }
@@ -239,8 +239,30 @@ final class ChatServices implements SettingsServices {
         Path projectAgents = ctx.cwd.resolve(".buildcli").resolve("agents").toAbsolutePath().normalize();
         Path globalAgents = ctx.globalDir().resolve("agents").toAbsolutePath().normalize();
         if (!file.startsWith(projectAgents) && !file.startsWith(globalAgents)) {
-            throw new IllegalArgumentException("refusing to delete a file outside the agents folders: " + file);
+            throw new IllegalArgumentException("refusing to touch a file outside the agents folders: " + file);
         }
+        return file;
+    }
+
+    @Override
+    public void updateAgent(String name, dev.buildcli.infrastructure.AgentFileEditor.Edit edit) throws Exception {
+        Path file = agentFile(name, "edited");
+        String updated = dev.buildcli.infrastructure.AgentFileEditor.apply(Files.readString(file, StandardCharsets.UTF_8), edit);
+        Files.writeString(file, updated, StandardCharsets.UTF_8);
+        retrust();
+        var fresh = new dev.buildcli.infrastructure.FileConfigRepository(ctx.cwd, ctx.globalDir()); // reads exactly what was written
+        Agent agent = fresh.agent(name).orElseThrow(() -> new IllegalStateException("the edited file no longer loads; see " + file));
+        created.put(name, new AgentInfo(name, agent.role(), agent.origin() == Origin.GLOBAL ? "all projects" : "this project", file.toString(),
+                agent.capabilities().stream().sorted().toList()));
+        var s = session;
+        if (s != null) {
+            s.addContact(agent);
+        }
+    }
+
+    @Override
+    public void deleteAgent(String name) throws Exception {
+        Path file = agentFile(name, "deleted");
         Files.deleteIfExists(file);
         retrust();
         deleted.add(name);

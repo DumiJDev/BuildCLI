@@ -911,7 +911,7 @@ final class ChatScreen implements Element {
             int y = r.y() + 1 + i;
             Wrap.Segment s = segs.get(inputFirstRow + i);
             if (src.isEmpty()) {
-                String hint = ChatSession.FATHER.equals(selected) ? "Ask AgentFather: /newagent, /agents, /samples, /help"
+                String hint = ChatSession.FATHER.equals(selected) ? "Ask AgentFather: /newagent, /agents, /editagent, /help"
                         : ChatSession.isAgentChat(selected) ? "Read only: ask one of them, in their own chat, to write to the other"
                         : selected.equals(ChatSession.NOTES) ? "A note to yourself: no agent reads it"
                         : session.busy() ? "Type a message (it waits its turn)" : "Type a message";
