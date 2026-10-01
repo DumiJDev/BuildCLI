@@ -217,4 +217,19 @@ class HistoryAndTabScreenTest {
         assertEquals(dev.buildcli.application.ApprovalMode.AUTO, session.approvalMode());
         assertTrue(ChatScreenTest.render(screen, 130, 40).contains("auto ⇄"));
     }
+
+    @Test
+    void slashContextSetsShowsAndClearsAGroupsBackground() {
+        var screen = screen();
+        var session = screen.sessionForTest();
+        ChatScreenTest.type(screen, "/context Our readers are not technical.");
+        ChatScreenTest.key(screen, KeyCode.ENTER);
+        assertEquals("Our readers are not technical.", session.group(screen.selectedForTest()).context());
+        ChatScreenTest.type(screen, "/context");
+        ChatScreenTest.key(screen, KeyCode.ENTER);
+        assertTrue(ChatScreenTest.render(screen, 130, 40).contains("Our readers are not technical."));
+        ChatScreenTest.type(screen, "/context clear");
+        ChatScreenTest.key(screen, KeyCode.ENTER);
+        assertFalse(session.group(screen.selectedForTest()).hasContext());
+    }
 }

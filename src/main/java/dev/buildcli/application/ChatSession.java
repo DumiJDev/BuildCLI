@@ -241,7 +241,7 @@ public final class ChatSession implements UserInterface {
         Map<String, Chat> all = new LinkedHashMap<>();
         all.put(base.id(), base);
         for (Chat g : stored) {
-            all.put(g.id(), g.id().equals(base.id()) ? new Chat(g.id(), base.name(), true, g.members(), g.admins()) : g);
+            all.put(g.id(), g.id().equals(base.id()) ? new Chat(g.id(), base.name(), true, g.members(), g.admins(), g.context(), g.files()) : g);
         }
         return List.copyOf(all.values());
     }
@@ -475,6 +475,11 @@ public final class ChatSession implements UserInterface {
     /** @return the new group's id */
     public String createGroup(String name, List<String> members) {
         return directory.createGroup(name, members);
+    }
+
+    /** The background given to a group: a text and the files to read (absolute paths). Both are optional; empty ones clear it. */
+    public void setGroupContext(String id, String text, List<String> files) {
+        directory.setContext(id, text == null ? "" : text, files == null ? List.of() : files);
     }
 
     public void renameGroup(String id, String name) {
@@ -854,7 +859,7 @@ public final class ChatSession implements UserInterface {
             }
         }
         return "You are " + me + (g.isAdmin(me) ? ", an admin," : "") + " in the group chat '" + g.name() + "' with "
-                + (others.isEmpty() ? "" : String.join(", ", others) + " and ") + "the user.";
+                + (others.isEmpty() ? "" : String.join(", ", others) + " and ") + "the user." + GroupContext.describe(g);
     }
 
     /** If the final report was not already shown as streamed text, show it. */

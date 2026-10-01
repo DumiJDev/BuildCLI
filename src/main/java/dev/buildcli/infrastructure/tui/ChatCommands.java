@@ -4,6 +4,7 @@ import dev.buildcli.domain.Attachment;
 import dev.buildcli.domain.Task;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,6 +17,67 @@ import java.util.Locale;
 final class ChatCommands {
 
     /** What a command may ask of the screen it runs in. */
+    /** /context: what the agents of the open group are told about the work, besides what you say in the chat. */
+    private void groupContext(String arg) {
+        String id = host.selected();
+        var g = session.group(id);
+        if (g == null) {
+            session.error("Open a group first: context belongs to a group.");
+            return;
+        }
+        String[] parts = arg.strip().split("\\s+", 2);
+        String word = parts[0].toLowerCase(Locale.ROOT);
+        String rest = parts.length > 1 ? parts[1].strip() : "";
+        java.util.List<String> files = new java.util.ArrayList<>(g.files());
+        if (arg.isBlank()) {
+            if (!g.hasContext()) {
+                session.system("No context for " + g.name() + " yet. /context <text> sets it; /context attach <file> adds a file. "
+                        + "The agents of the group read it before they answer.");
+            } else {
+                session.system("Context of " + g.name() + ": " + (g.context().isEmpty() ? "(no text)" : g.context())
+                        + (files.isEmpty() ? "" : "\nFiles: " + String.join(", ", files.stream().map(f -> Path.of(f).getFileName().toString()).toList())));
+            }
+            return;
+        }
+        switch (word) {
+            case "clear" -> {
+                session.setGroupContext(id, "", java.util.List.of());
+                session.system("Context of " + g.name() + " cleared.");
+            }
+            case "attach" -> {
+                try {
+                    Path file = resolve(cwd, rest);
+                    if (!Files.isRegularFile(file)) {
+                        session.error("There is no file " + rest + ".");
+                        return;
+                    }
+                    String abs = file.toAbsolutePath().normalize().toString();
+                    if (!files.contains(abs)) {
+                        files.add(abs);
+                    }
+                    session.setGroupContext(id, g.context(), files);
+                    session.system(file.getFileName() + " added to the context of " + g.name() + ". Only text files are read, up to "
+                            + dev.buildcli.domain.Chat.MAX_CONTEXT / 1000 + " KB of text and 20 KB per file.");
+                } catch (IllegalArgumentException e) {
+                    session.error(e.getMessage());
+                }
+            }
+            case "detach" -> {
+                boolean removed = files.removeIf(f -> Path.of(f).getFileName().toString().equalsIgnoreCase(rest));
+                if (removed) {
+                    session.setGroupContext(id, g.context(), files);
+                    session.system(rest + " removed from the context of " + g.name() + ".");
+                } else {
+                    session.error("No attached file called " + rest + ". /context lists them.");
+                }
+            }
+            default -> {
+                session.setGroupContext(id, arg.strip(), files);
+                session.system("Context of " + g.name() + " set. Its agents read it before they answer.");
+            }
+        }
+    }
+
     /** Changes how much the agents may do before asking, and says so in the chat. */
     void setMode(dev.buildcli.application.ApprovalMode mode) {
         session.approvalMode(mode);
@@ -103,6 +165,7 @@ final class ChatCommands {
             new Command("chats", "[text]", "Search your chats and agents by name, role or what was said", "Ctrl+K"),
             new Command("review", "", "See the files agents changed in this chat", ""),
             new Command("undo", "", "Put back the files an agent changed last (shows them first)", ""),
+            new Command("context", "[text | attach <file> | detach <file> | clear]", "Background for this group's agents: a text and files (optional)", ""),
             new Command("mode", "[manual|edits|auto]", "How much agents may do before asking you (Shift+Tab cycles it)", "Shift+Tab"),
             new Command("revoke", "", "Stop approving automatically in this chat (shows what was allowed)", ""),
             new Command("queue", "[clear]", "Show or drop messages waiting their turn", ""),
@@ -225,6 +288,7 @@ final class ChatCommands {
                         host.select(who);
                     }
                 }
+                case "context" -> groupContext(arg);
                 case "newgroup" -> {
                     List<String> members = session.mentioned(arg);
                     String groupName = arg.replaceAll("@[A-Za-z][A-Za-z0-9_-]*", "").strip();
