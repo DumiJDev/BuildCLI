@@ -19,6 +19,10 @@ BuildCLI is rebuilt from scratch as a local runtime for teams of AI agents. The 
 - Notes and the private chats between agents could not be opened: the screen went back to the default chat on the next frame.
 
 ### Changed
+- **The screen is drawn when something changes, not on a timer.** The chat session tells the screen about every change
+  (message, typing, presence, question) and requests that arrive together become one frame, at most one every 16 ms. The only
+  clock left runs while something moves (a spinner, a toast) and stops by itself. Idle CPU is about the same as before
+  (0.5% in a 20 s measurement on the JVM); the difference is that nothing wakes up to look for changes.
 - `StateStore`, `SettingsView` and `ConnectView` were split (`StateDb`, `StateSchema`, `SettingsDialogs`, `KeyEntry`,
   `ProviderStatus`) and `ChatScreen` lost its viewer, its answer dialog and its `/` and `@` menu (`ViewerPane`, `PendingDialog`,
   `SlashMenu`; 1800 -> 1300 lines); behaviour is the same.
@@ -30,6 +34,10 @@ BuildCLI is rebuilt from scratch as a local runtime for teams of AI agents. The 
 - The M0 spike: the hidden `bench` and `demo` commands, the `eval` package and its findings document (replaced by `docs/storage.md`).
 
 ### Added
+- **Code blocks are coloured by language** (TamboUI's highlighter: Java, JSON, YAML, shell, Python, JS/TS, SQL, Go, Rust, XML/HTML),
+  with a palette per theme, in answers while they stream and in files opened with `/open`. Unknown languages stay plain.
+- **Your own colours in `~/.buildcli/theme.css`** (`$bg: #101820;`, `$light-bg: …`, `$agent-1: …`), read with TamboUI's CSS
+  parser. A mistake in the file is shown on the first screen and skipped.
 - **English and Portuguese** (`ui.language`: auto, en, pt). `I18n.t("English text")` looks the Portuguese up in `i18n/pt.tsv` and falls back to English, so a missing text still shows; `I18nTest` checks that settings and commands are translated and that placeholders match. Tests run with `-Duser.language=en`.
 - **Mark messages** (right click, or Alt+M): copy, forward to another chat, delete (the agents forget them too).
 - **Rounded bubbles** and the **BuildCLI logo's colours** (navy and cream) instead of WhatsApp's greens.

@@ -42,6 +42,7 @@ final class Theme {
     static Color DEL_FG;
     static Color DANGER;
     private static String current = "";
+    private static java.util.Map<String, Color> custom = java.util.Map.of();
 
     private static Color[] agentColors;
 
@@ -158,6 +159,68 @@ final class Theme {
                 DANGER = Color.rgb(178, 48, 60);
                 agentColors = new Color[] {Color.rgb(83, 189, 235), Color.rgb(255, 202, 40), Color.rgb(224, 120, 255), Color.rgb(102, 187, 106),
                     Color.rgb(255, 138, 101), Color.rgb(240, 98, 146), Color.rgb(77, 208, 225), Color.rgb(174, 213, 129)};
+            }
+        }
+        custom.forEach((key, color) -> {
+            int dash = key.indexOf('-');
+            boolean scoped = dash > 0 && java.util.Set.of("dark", "light", "contrast").contains(key.substring(0, dash));
+            if (!scoped) {
+                set(key, color);
+            }
+        });
+        custom.forEach((key, color) -> {
+            if (key.startsWith(n + "-")) {
+                set(key.substring(n.length() + 1), color); // the palette's own colour wins over the general one
+            }
+        });
+    }
+
+    /** Puts your own colours (see {@link ThemeFile}) over the palette, now and whenever the palette is switched. */
+    static synchronized void customise(java.util.Map<String, Color> colours) {
+        custom = java.util.Map.copyOf(colours);
+        String n = current;
+        current = "";
+        use(n);
+    }
+
+    private static void set(String name, Color c) {
+        switch (name) {
+            case "bg" -> BG = c;
+            case "sidebar" -> SIDEBAR = c;
+            case "panel" -> PANEL = c;
+            case "field" -> FIELD = c;
+            case "selected" -> SELECTED = c;
+            case "me" -> ME = c;
+            case "them" -> THEM = c;
+            case "pill" -> PILL = c;
+            case "code" -> CODE = c;
+            case "error-bg" -> ERROR_BG = c;
+            case "dialog" -> DIALOG = c;
+            case "text" -> TEXT = c;
+            case "dim" -> DIM = c;
+            case "faint" -> FAINT = c;
+            case "accent" -> ACCENT = c;
+            case "green" -> GREEN = c;
+            case "blue" -> BLUE = c;
+            case "red" -> RED = c;
+            case "amber" -> AMBER = c;
+            case "on-me" -> ON_ME = c;
+            case "on-me-dim" -> ON_ME_DIM = c;
+            case "tick" -> TICK = c;
+            case "code-text" -> CODE_TEXT = c;
+            case "line" -> LINE = c;
+            case "on-accent" -> ON_ACCENT = c;
+            case "add-bg" -> ADD_BG = c;
+            case "add-fg" -> ADD_FG = c;
+            case "del-bg" -> DEL_BG = c;
+            case "del-fg" -> DEL_FG = c;
+            case "danger" -> DANGER = c;
+            default -> {
+                if (name.startsWith("agent-")) {
+                    int i = Integer.parseInt(name.substring(6)) - 1;
+                    agentColors = agentColors.clone();
+                    agentColors[i] = c;
+                }
             }
         }
     }
