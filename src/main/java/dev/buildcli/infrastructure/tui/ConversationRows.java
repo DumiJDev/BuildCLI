@@ -114,8 +114,7 @@ final class ConversationRows {
                 continue;
             }
             boolean bothQuiet = prev != null && isQuiet(prev) && isQuiet(m);
-            boolean bothBubbles = prev != null && isBubble(prev) && isBubble(m); // their rounded edges already leave a gap
-            if (prev != null && !sameAuthor && !bothQuiet && !bothBubbles && !services.settings().flag(dev.buildcli.application.Settings.COMPACT)) {
+            if (prev != null && !sameAuthor && !bothQuiet && !services.settings().flag(dev.buildcli.application.Settings.COMPACT)) {
                 rows.add(new Row(0, List.of()));
             }
             int firstRow = rows.size();
@@ -145,10 +144,6 @@ final class ConversationRows {
         }
         rows.add(new Row(0, List.of()));
         return rows;
-    }
-
-    private static boolean isBubble(Message m) {
-        return m.kind() == ChatSession.Kind.USER || m.kind() == ChatSession.Kind.AGENT;
     }
 
     private static boolean isQuiet(Message m) {
@@ -387,7 +382,6 @@ final class ConversationRows {
         inner = Math.max(inner, inline ? Styled.width(lastLine) + 2 + footW : footW);
         inner = Math.max(inner, 6);
         int x = mine ? Math.max(0, width - inner - 4) : 2;
-        int firstRow = rows.size();
         if (author != null) {
             rows.add(line(x, List.of(new Span(author, st(authorColor, base.bg().orElse(Theme.THEM)).bold())), inner, base));
         }
@@ -408,10 +402,6 @@ final class ConversationRows {
             f.addAll(footer);
             rows.add(line(x, f, inner, base));
         }
-        // a half-height edge above and below, one cell shorter on each side: the corners come out rounded, as in a messenger
-        Style edge = Style.create().fg(base.bg().orElse(Theme.THEM)).bg(Theme.BG);
-        rows.add(firstRow, new Row(x, List.of(new Span(" ", edge), new Span("▄".repeat(inner), edge), new Span(" ", edge))));
-        rows.add(new Row(x, List.of(new Span(" ", edge), new Span("▀".repeat(inner), edge), new Span(" ", edge))));
     }
 
 

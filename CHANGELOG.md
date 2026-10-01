@@ -32,7 +32,7 @@ BuildCLI is rebuilt from scratch as a local runtime for teams of AI agents. The 
 ### Added
 - **English and Portuguese** (`ui.language`: auto, en, pt). `I18n.t("English text")` looks the Portuguese up in `i18n/pt.tsv` and falls back to English, so a missing text still shows; `I18nTest` checks that settings and commands are translated and that placeholders match. Tests run with `-Duser.language=en`.
 - **Mark messages** (right click, or Alt+M): copy, forward to another chat, delete (the agents forget them too).
-- **Rounded bubbles** and the **BuildCLI logo's colours** (navy and cream) instead of WhatsApp's greens.
+- The **BuildCLI logo's colours** (navy and cream) instead of WhatsApp's greens. (Rounded bubbles were tried and removed: a terminal cannot draw them well, and TamboUI's CSS only has outlined rounded borders, no filled radius.)
 - An agent can write to **you** in its own private chat (`send_message` to `user`), also when a teammate asked it to.
 - **Modes** `manual` / `edits` / `auto` (Shift+Tab, `/mode`, the pill in the chat header; starting mode in Settings): which questions are answered for you. `trust` is never skipped.
 - **Drafts** like a messenger: unsent text waits in its chat and shows as "Draft: ..." in the chat list.
