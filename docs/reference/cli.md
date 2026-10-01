@@ -56,6 +56,7 @@ agent. `F2` opens the settings, the mouse works, and `Enter` sends (Settings > G
 | `/retry` | Send the last failed message again |  |
 | `/copy [message]` | Copy the last code block (or the whole last answer) |  |
 | `/find [text]` | Search this chat | `Ctrl+F` |
+| `/chats [text]` | Search your chats and agents by name, role or what was said | `Ctrl+K` |
 | `/review` | See the files agents changed in this chat |  |
 | `/undo` | Put back the files an agent changed last (shows them first) |  |
 | `/revoke` | Stop approving automatically in this chat (shows what was allowed) |  |
