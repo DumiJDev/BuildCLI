@@ -5,7 +5,7 @@ Exit codes: **0** success, **1** the work failed or was aborted, **2** usage or 
 
 | Command | What it does |
 |---|---|
-| `buildcli init [--model provider:model]` | Creates `.buildcli/` with a sample team (architect/lead, developer, reviewer) and an `AGENTS.md`. Never overwrites existing files. The files it writes are pre-approved; anything you add later asks again. |
+| `buildcli init [--model provider:model]` | Creates `.buildcli/` with four sample agents (wheslley, breno, matheus, dumildes), a group `maintainers` (kept outside the project) and an `AGENTS.md`. Never overwrites existing files. The files it writes are pre-approved; anything you add later asks again. |
 | `buildcli agent list` / `show <name>` / `create <name> [--role R] [--capabilities a,b] [--global]` | Inspect and scaffold agents. |
 | `buildcli team list` / `show <name>` / `create <name> --agents a,b [--lead x] [--model p:m] [--global]` | Inspect and scaffold teams. |
 | `buildcli run [REQUEST...]` | Runs a request. Options below. |
@@ -19,8 +19,8 @@ Exit codes: **0** success, **1** the work failed or was aborted, **2** usage or 
 ## `run`
 
 ```bash
-buildcli run --team backend "add a health endpoint"        # team: the lead delegates via handoffs
-buildcli run --agent carla "review the last commit"        # direct: one agent, no handoffs
+buildcli run --group maintainers "add a health endpoint"    # a group: its admin receives it and may delegate via handoffs
+buildcli run --agent breno "check the CI workflow"        # direct: one agent, no handoffs
 buildcli run --headless --approve writes "fix the typo"    # plain text, no TUI
 ```
 
@@ -37,20 +37,48 @@ to `.buildcli/`, you are shown what they may do and asked to approve. Without th
 approval: `ask` prompts you, `all` approves it, and `none` and `writes` **deny** it, so an unattended script can never be
 talked into trusting changed definitions.
 
-### The terminal UI
+### The terminal UI (the chat)
 
-Team panel (who is working or waiting for you), the task/handoff tree, the event log, the live output of the agent that is
-generating, and a status bar with token usage. Approvals show the diff; a task that failed three retries asks you to
-**retry**, **skip** or **abort**.
+A chat list on the left (your groups, "You (notes)", a direct chat per agent, and read-only chats between agents), the
+conversation on the right with who is reading, thinking, typing or waiting for you, and approvals as a dialog (writes show
+the diff). A task that failed three retries asks you to retry, skip or abort. Type `/` for the commands, `@` to mention an
+agent. `F2` opens the settings, the mouse works, and `Enter` sends (Settings > General changes that).
 
-| Key | Action |
-|---|---|
-| `y` / `n` | Approve / deny the request on screen |
-| `r` / `s` / `a` | Retry / skip / abort an escalated task |
-| `q` (after the run) or `Ctrl+C` | Quit |
+| Command | What it does | Key |
+|---|---|---|
+| `/diff [--staged] [path]` | Show uncommitted changes (git diff) | `Ctrl+G` |
+| `/status` | Show git status |  |
+| `/log` | Show recent commits |  |
+| `/open <file>` | Open a file in the viewer | `Ctrl+O` |
+| `/attach <file>` | Attach an image or audio file (or paste its path) |  |
+| `/tasks` | Show what the team is doing: tasks and handoffs | `Ctrl+T` |
+| `/stop` | Stop the team's current work | `Ctrl+X` |
+| `/retry` | Send the last failed message again |  |
+| `/copy [message]` | Copy the last code block (or the whole last answer) |  |
+| `/find [text]` | Search this chat | `Ctrl+F` |
+| `/review` | See the files agents changed in this chat |  |
+| `/undo` | Put back the files an agent changed last (shows them first) |  |
+| `/revoke` | Stop approving automatically in this chat (shows what was allowed) |  |
+| `/queue [clear]` | Show or drop messages waiting their turn |  |
+| `/settings` | Providers, models, agents, theme and more | `F2` |
+| `/connect` | Connect a provider and choose the default model |  |
+| `/model [@agent] [provider:model]` | Show the models, or change the default (or one agent's) model |  |
+| `/reach [@agent @other on|off]` | Show or set which agents may contact each other |  |
+| `/dm @agent` | Open a direct chat with an agent |  |
+| `/newgroup <name> [@agents]` | Create a group with some agents |  |
+| `/add @agent` | Add an agent to this group |  |
+| `/remove @agent` | Remove an agent from this group |  |
+| `/admin @agent` | Make an agent admin of this group |  |
+| `/dismiss @agent` | Dismiss an admin of this group |  |
+| `/rename <name>` | Rename this group |  |
+| `/info` | Group or contact info |  |
+| `/team` | Show or hide the chat list | `Ctrl+B` |
+| `/clear` | Delete this chat's messages (asks you to confirm) |  |
+| `/help` | Keys, commands and tips |  |
+| `/quit` | Leave BuildCLI | `Ctrl+C` |
 
 ### Environment
 
 `OLLAMA_HOST` (default `http://localhost:11434`), `OPENAI_BASE_URL`, the API-key variables of the providers
 (`OPENROUTER_API_KEY`, `OPENAI_API_KEY`, ...; never printed, and a set one wins over a key saved with `provider login` or in the app),
-`BUILDCLI_HOME` (default `~/.buildcli`), `BUILDCLI_MOUSE=0` (turn the mouse off).
+`BUILDCLI_HOME` (default `~/.buildcli`), `BUILDCLI_MOUSE=0` (turn the mouse off), `BUILDCLI_STORAGE=sqlite|h2|memory` (the state database; overrides the setting).

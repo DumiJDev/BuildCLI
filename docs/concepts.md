@@ -34,7 +34,9 @@ retries, redaction. The model can be wrong or be tricked by the files it reads; 
    anything needing approval is shown to you (writes as a diff), output is scrubbed of secrets and delimited as data.
 4. When the lead replies with no further tool call, the root task is `DONE` and the run ends.
 
-Execution is **sequential**: exactly one agent runs at a time, so runs are reproducible and there are no write conflicts.
+In the chat, different agents work **in parallel** and each agent handles one conversation at a time. They share the workspace
+through a lock: reads are shared; writes, git commits and commands are exclusive, and a write is refused if the file changed
+since the agent read it. A headless `run` still executes one task at a time.
 
 ## When something goes wrong
 

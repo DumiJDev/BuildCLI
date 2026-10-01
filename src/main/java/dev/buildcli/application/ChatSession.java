@@ -489,12 +489,6 @@ public final class ChatSession implements UserInterface {
         actor.start();
     }
 
-    /** The first @mention that names a contact, or null. */
-    public String mentionedAgent(String text) {
-        List<String> all = mentioned(text);
-        return all.isEmpty() ? null : all.get(0);
-    }
-
     /** Every contact @mentioned in the text, in order, once each. */
     public List<String> mentioned(String text) {
         List<String> out = new ArrayList<>();
@@ -851,13 +845,6 @@ public final class ChatSession implements UserInterface {
 
     public void error(String text) {
         add(new Message(ids.incrementAndGet(), Kind.ERROR, "", text, Instant.now(), State.NONE, List.of(), threadNow()));
-    }
-
-    /** Clears every chat from the screen. The history on disk is kept; use {@link #clearChat} to delete a chat. */
-    public void clearMessages() {
-        synchronized (lock) {
-            messages.clear();
-        }
     }
 
     /** Deletes one chat's messages, on screen and on disk, like "clear chat" in a messaging app. */

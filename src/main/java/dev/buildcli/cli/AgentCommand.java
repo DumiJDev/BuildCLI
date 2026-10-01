@@ -7,7 +7,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.List;
 import java.util.TreeSet;
 import java.util.concurrent.Callable;
@@ -156,7 +155,4 @@ final class AgentCommand implements Callable<Integer> {
         }
     }
 
-    static String joinNames(String[] names) {
-        return String.join(", ", Arrays.asList(names));
-    }
 }

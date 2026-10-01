@@ -1471,14 +1471,6 @@ final class ChatScreen implements Element {
         }
     }
 
-    private void insertMention(String name) {
-        String t = input.text();
-        if (!t.isEmpty() && !Character.isWhitespace(t.charAt(Math.max(0, input.cursor() - 1)))) {
-            input.insert(" ");
-        }
-        input.insert("@" + name + " ");
-    }
-
     private void completeMention(String name) {
         input.completeMention(name);
         menuDismissedFor = null;

@@ -113,9 +113,9 @@ class ChatSessionTest {
         assertEquals("bruno", seen.get(0).target());
         assertEquals(List.of("I can help with that."), texts(session, Kind.AGENT));
         assertEquals("bruno", session.messages().stream().filter(m -> m.kind() == Kind.AGENT).findFirst().orElseThrow().author());
-        assertEquals(null, session.mentionedAgent("mail me at someone@ana.example"), "an address is not a mention");
-        assertEquals(null, session.mentionedAgent("@nobody hello"));
-        assertEquals("ana", session.mentionedAgent("ask @ana"));
+        assertEquals(List.of(), session.mentioned("mail me at someone@ana.example"), "an address is not a mention");
+        assertEquals(List.of(), session.mentioned("@nobody hello"));
+        assertEquals(List.of("ana"), session.mentioned("ask @ana"));
     }
 
     @Test
