@@ -31,8 +31,8 @@ public final class ChatApp extends ToolkitApp {
     protected TuiConfig configure() {
         // no fixed tick: the screen is drawn when you type or click, and when the chat changes (see onStart)
         TuiConfig.Builder config = TuiConfig.builder().noTick().mouseCapture(mouse).bracketedPaste(true);
-        if (mouse && WindowsMouseBackend.isWindows()) {
-            WindowsMouseBackend backend = WindowsMouseBackend.open();
+        if (WindowsBackend.isWindows()) {
+            WindowsBackend backend = WindowsBackend.open(mouse);
             if (backend != null) {
                 config.backend(backend);
             }
