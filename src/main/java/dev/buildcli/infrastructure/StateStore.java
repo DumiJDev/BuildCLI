@@ -55,6 +55,7 @@ public final class StateStore implements RunStore, dev.buildcli.ports.ChatLog, A
     /** Index i migrates the schema from version i to version i+1. Never edit a released entry; append a new one. */
     static final List<List<String>> MIGRATIONS = List.of(
             List.of(
+                    // the "team" column holds the name of the group (or agent) a run was for; kept so existing databases need no migration
                     "CREATE TABLE runs (id TEXT PRIMARY KEY, team TEXT NOT NULL, request TEXT NOT NULL,"
                             + " started_at TEXT NOT NULL, finished_at TEXT, status TEXT NOT NULL, summary TEXT)",
                     "CREATE TABLE tasks (run_id TEXT NOT NULL, id INTEGER NOT NULL, parent_id INTEGER, from_agent TEXT NOT NULL,"
@@ -400,7 +401,7 @@ public final class StateStore implements RunStore, dev.buildcli.ports.ChatLog, A
     public void startRun(RunInfo r) {
         write("INSERT INTO runs (id, team, request, started_at, status) VALUES (?,?,?,?,?)", ps -> {
             ps.setString(1, r.id());
-            ps.setString(2, r.team());
+            ps.setString(2, r.group());
             ps.setString(3, cut(r.request()));
             ps.setString(4, r.startedAt().toString());
             ps.setString(5, r.status());

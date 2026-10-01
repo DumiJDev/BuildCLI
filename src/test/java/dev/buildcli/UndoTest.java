@@ -14,7 +14,7 @@ import dev.buildcli.domain.Limits;
 import dev.buildcli.domain.Permissions;
 import dev.buildcli.domain.Task;
 import dev.buildcli.domain.TaskStatus;
-import dev.buildcli.domain.Team;
+import dev.buildcli.domain.Roster;
 import dev.buildcli.infrastructure.StateStore;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -29,7 +29,7 @@ import org.junit.jupiter.api.io.TempDir;
 class UndoTest {
     @TempDir Path dir;
 
-    static final Team TEAM = new Team("backend", "ana", List.of(
+    static final Roster ROSTER = new Roster("backend", "ana", List.of(
             new Agent("ana", "architect", "", Set.of(), Permissions.none())), Limits.defaults());
 
     String read(String name) throws Exception {
@@ -139,7 +139,7 @@ class UndoTest {
     void aRunThatWritesFilesLeavesACardAndUndoPutsThemBack() throws Exception {
         Files.writeString(dir.resolve("a.txt"), "v1");
         try (StateStore store = new StateStore(StateStore.IN_MEMORY)) {
-            var session = new ChatSession(TEAM, List.of(TEAM.agents().get(0)), (team, request, ui, cancelled, dispatcher) -> {
+            var session = new ChatSession(ROSTER, List.of(ROSTER.agents().get(0)), (team, request, ui, cancelled, dispatcher) -> {
                 Files.writeString(dir.resolve("a.txt"), "v2");
                 ui.fileChanged(new FileChange("ana", "a.txt", true, "v1", "v2"));
                 Files.writeString(dir.resolve("b.txt"), "b");

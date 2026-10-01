@@ -11,7 +11,7 @@ import dev.buildcli.domain.Limits;
 import dev.buildcli.domain.Permissions;
 import dev.buildcli.domain.Task;
 import dev.buildcli.domain.TaskStatus;
-import dev.buildcli.domain.Team;
+import dev.buildcli.domain.Roster;
 import dev.buildcli.ports.ApprovalRequest;
 import java.util.List;
 import java.util.Set;
@@ -21,14 +21,14 @@ import org.junit.jupiter.api.Test;
 
 /** "Always here": a permission for one agent, one kind of request and one chat; never for a commit; taken back by /revoke. */
 class ApprovalGrantsTest {
-    static final Team TEAM = new Team("backend", "ana", List.of(
+    static final Roster ROSTER = new Roster("backend", "ana", List.of(
             new Agent("ana", "architect", "", Set.of(), Permissions.none()),
             new Agent("bruno", "developer", "", Set.of(), Permissions.none())), Limits.defaults());
 
     final List<String> results = new CopyOnWriteArrayList<>();
 
     ChatSession session(List<ApprovalRequest> asks) {
-        return new ChatSession(TEAM, (team, request, ui, cancelled, dispatcher) -> {
+        return new ChatSession(ROSTER, (team, request, ui, cancelled, dispatcher) -> {
             String me = request.target() == null ? "ana" : request.target();
             for (ApprovalRequest ask : asks) {
                 if (ask.agent().equals(me)) {
@@ -75,7 +75,7 @@ class ApprovalGrantsTest {
         idle(s);
         assertNull(s.pending(), "the second write did not ask");
         assertEquals(List.of("ana:write:true", "ana:write:true"), results);
-        assertEquals(List.of("let ana edit files in this chat (you can still undo)".replace(" (you can still undo)", "")), s.grants(ChatSession.TEAM));
+        assertEquals(List.of("let ana edit files in this chat (you can still undo)".replace(" (you can still undo)", "")), s.grants(ChatSession.MAIN));
     }
 
     @Test
@@ -125,7 +125,7 @@ class ApprovalGrantsTest {
             second = awaitPending(s);
         } while (second == first);
         assertNotNull(second, "approving with A does not turn a commit into an automatic one");
-        assertTrue(s.grants(ChatSession.TEAM).isEmpty());
+        assertTrue(s.grants(ChatSession.MAIN).isEmpty());
         second.answer().complete(true);
         idle(s);
         s.close();
@@ -160,8 +160,8 @@ class ApprovalGrantsTest {
         s.submit("one");
         s.approveAlways(awaitPending(s));
         idle(s);
-        assertEquals(1, s.revokeGrants(ChatSession.TEAM));
-        assertEquals(0, s.revokeGrants(ChatSession.TEAM));
+        assertEquals(1, s.revokeGrants(ChatSession.MAIN));
+        assertEquals(0, s.revokeGrants(ChatSession.MAIN));
         results.clear();
         s.submit("two");
         var again = awaitPending(s);

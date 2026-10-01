@@ -14,7 +14,7 @@ import dev.buildcli.domain.Limits;
 import dev.buildcli.domain.Permissions;
 import dev.buildcli.domain.Task;
 import dev.buildcli.domain.TaskStatus;
-import dev.buildcli.domain.Team;
+import dev.buildcli.domain.Roster;
 import dev.buildcli.ports.ApprovalRequest;
 import dev.buildcli.ports.ToolCall;
 import java.nio.file.Files;
@@ -37,7 +37,7 @@ import org.junit.jupiter.api.io.TempDir;
 class PeopleRuntimeTest {
     @TempDir Path workspace;
 
-    static final Team TEAM = new Team("backend", "ana", List.of(
+    static final Roster ROSTER = new Roster("backend", "ana", List.of(
             new Agent("ana", "architect", "", Set.of(), Permissions.none()),
             new Agent("bruno", "developer", "", Set.of(), Permissions.none())), Limits.defaults());
 
@@ -64,7 +64,7 @@ class PeopleRuntimeTest {
     @Test
     void differentAgentsAnswerInParallel() throws Exception {
         CountDownLatch anaMayFinish = new CountDownLatch(1);
-        var session = new ChatSession(TEAM, (team, request, ui, cancelled, dispatcher) -> {
+        var session = new ChatSession(ROSTER, (team, request, ui, cancelled, dispatcher) -> {
             String me = request.target() == null ? "ana" : request.target();
             if (me.equals("ana")) {
                 anaMayFinish.await(10, TimeUnit.SECONDS);
@@ -78,7 +78,7 @@ class PeopleRuntimeTest {
             Thread.sleep(10);
         }
         assertEquals(List.of("bruno answered"), agentTexts(session), "bruno answered while ana was still busy");
-        assertTrue(session.isActive(ChatSession.TEAM));
+        assertTrue(session.isActive(ChatSession.MAIN));
         anaMayFinish.countDown();
         awaitIdle(session);
         assertEquals(2, agentTexts(session).size());
@@ -91,7 +91,7 @@ class PeopleRuntimeTest {
         List<String> order = new CopyOnWriteArrayList<>();
         CountDownLatch firstStarted = new CountDownLatch(1);
         CountDownLatch firstMayFinish = new CountDownLatch(1);
-        var session = new ChatSession(TEAM, (team, request, ui, cancelled, dispatcher) -> {
+        var session = new ChatSession(ROSTER, (team, request, ui, cancelled, dispatcher) -> {
             maxInside.accumulateAndGet(inside.incrementAndGet(), Math::max);
             order.add(request.text());
             if (request.text().equals("in the team chat")) {
@@ -108,7 +108,7 @@ class PeopleRuntimeTest {
         session.submit("team again");
         assertTrue(firstStarted.await(10, TimeUnit.SECONDS));
         assertTrue(session.queued() >= 1, "ana has not read the later messages yet");
-        assertEquals(ChatSession.TEAM, session.agentThread("ana"), "busy in the team chat");
+        assertEquals(ChatSession.MAIN, session.agentThread("ana"), "busy in the team chat");
         firstMayFinish.countDown();
         awaitIdle(session);
         assertEquals(1, maxInside.get(), "one conversation at a time");
@@ -117,7 +117,7 @@ class PeopleRuntimeTest {
 
     @Test
     void streamedTextStaysInTheChatItWasWrittenFor() throws Exception {
-        var session = new ChatSession(TEAM, (team, request, ui, cancelled, dispatcher) -> {
+        var session = new ChatSession(ROSTER, (team, request, ui, cancelled, dispatcher) -> {
             // the HTTP client delivers streamed text on its own thread, not on the agent's
             Thread t = new Thread(() -> {
                 ui.onText(1, "ana", "secret for the direct chat");
@@ -140,7 +140,7 @@ class PeopleRuntimeTest {
         CountDownLatch brunoBusy = new CountDownLatch(1);
         CountDownLatch anaHandedOff = new CountDownLatch(1);
         Map<String, String> results = new ConcurrentHashMap<>();
-        var session = new ChatSession(TEAM, (team, request, ui, cancelled, dispatcher) -> {
+        var session = new ChatSession(ROSTER, (team, request, ui, cancelled, dispatcher) -> {
             String me = request.target() == null ? "ana" : request.target();
             String other = me.equals("ana") ? "bruno" : "ana";
             if (me.equals("bruno")) {
@@ -172,7 +172,7 @@ class PeopleRuntimeTest {
 
     @Test
     void severalAgentsCanAskForApprovalAtOnceAndAreAnsweredInOrder() throws Exception {
-        var session = new ChatSession(TEAM, (team, request, ui, cancelled, dispatcher) -> {
+        var session = new ChatSession(ROSTER, (team, request, ui, cancelled, dispatcher) -> {
             String me = request.target() == null ? "ana" : request.target();
             boolean ok = ui.approve(new ApprovalRequest(me, "write", "Write " + me + ".txt", ""));
             return done(me, me + (ok ? " approved" : " denied"));

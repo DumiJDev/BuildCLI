@@ -1,10 +1,10 @@
 # BuildCLI
 
 > **Your local AI engineering team.**
-> An open-source runtime that executes a configurable team of AI agents from your terminal. 100% local: no
+> An open-source runtime that lets you chat with a set of AI agents that work on your project from your terminal. 100% local: no
 > account, no server, no telemetry. With a local model (Ollama) everything runs offline.
 
-**Status: pre-1.0.** BuildCLI is being rebuilt from scratch as a runtime for teams of agents (the previous CLI is on the
+**Status: pre-1.0.** BuildCLI is being rebuilt from scratch as a runtime for agents you chat with (the previous CLI is on the
 [`legacy`](../../tree/legacy) branch, tag `v0.14.0`). The design is in [`docs/rfc/0001-buildcli-1.0.md`](docs/rfc/0001-buildcli-1.0.md).
 Read [Known limitations](#known-limitations) before relying on it.
 
@@ -22,7 +22,7 @@ You ── chat ──▶ BuildCLI Runtime ──┬── wheslley (architect)
                                    └── dumildes (innovator) ...
 ```
 
-You open a chat, like a messaging app, with your agents: a **group** for the whole team and a **direct chat** with each
+You open a chat, like a messaging app, with your agents: a **group** for several of them and a **direct chat** with each
 agent. Agents are people-like: each reads one conversation at a time, different agents work **in parallel**, they
 **@mention** and **hand off** work to each other, and you see who is reading, thinking, typing or waiting for you. The
 **runtime, not the LLM,** enforces what each agent may do: permissions, approvals, limits, and when a task has failed.
@@ -53,16 +53,16 @@ no administrator rights. Or build it yourself: `mvn verify` produces `target/bui
 
 ```bash
 cd my-project
-buildcli               # opens the chat; on first run it offers to connect a model and to add the sample team
+buildcli               # opens the chat; on first run it offers to connect a model and to add the sample agents
 ```
 
 Everything can be done **inside the app**: `/connect` picks a provider (OpenRouter, DeepSeek, Ollama, ...), asks for the
 API key (typed hidden, checked before it is saved, stored owner-only on your computer, or taken from the usual environment
-variable) and lets you choose a model; the empty chat has a button for the sample team and one to create your own agent.
-From the shell, the same setup is `buildcli init` (the sample team and an `AGENTS.md`), `buildcli provider login <name>`
+variable) and lets you choose a model; the empty chat has a button for the sample agents and one to create your own agent.
+From the shell, the same setup is `buildcli init` (the sample agents and an `AGENTS.md`), `buildcli provider login <name>`
 and `buildcli doctor` (checks Java, git, your configuration and whether Ollama has the model).
 
-The sample team is **wheslley** (architect, leads the group), **matheus** (developer), **breno** (devops) and
+The sample agents are **wheslley** (architect, leads the group), **matheus** (developer), **breno** (devops) and
 **dumildes** (innovator) in the group `maintainers`. Their files are drafts based on each maintainer's git history; edit
 them in `.buildcli/agents/`.
 
@@ -78,7 +78,7 @@ buildcli usage         # tokens per agent
 
 `init` uses `ollama / qwen2.5:7b` by default (`buildcli init --model provider:model` to change it); pull the model first
 (`ollama pull qwen2.5:7b`), use `/connect`, or point agents at any OpenAI-compatible endpoint. Every command is documented
-in the [CLI reference](docs/reference/cli.md); agent files in [agents and teams](docs/reference/agents-and-teams.md);
+in the [CLI reference](docs/reference/cli.md); agent files in [agents](docs/reference/agents.md);
 ready-to-copy agents in [`examples/`](examples). New to the ideas? Read [concepts](docs/concepts.md); stuck? [troubleshooting](docs/troubleshooting.md).
 
 ## In the chat
@@ -120,7 +120,7 @@ Be aware of these, they are stated plainly on purpose:
 - **Terminals:** the TUI was driven on Linux, and on the Windows JVM through WSL; the maintainer confirmed the mouse in
   Windows Terminal. It has not been driven on macOS, and the Windows ACL branch of the saved-keys file is untested. CI
   builds and tests on Linux, macOS and Windows, including the installers.
-- **Real-model coverage is thin:** the chat, `send_message`, undo and the sample team were tested mostly with scripted models;
+- **Real-model coverage is thin:** the chat, `send_message`, undo and the sample agents were tested mostly with scripted models;
   a hosted model passed the scenario, and small local models are unreliable with tools.
 - **No cost figures:** usage is reported in tokens; no prices are assumed.
 - **Parallel agents share one workspace:** reads are shared, but writes and commands take an exclusive lock, so two agents

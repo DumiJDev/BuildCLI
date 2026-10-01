@@ -10,7 +10,7 @@ import dev.buildcli.application.ToolRuntime;
 import dev.buildcli.domain.Agent;
 import dev.buildcli.domain.Limits;
 import dev.buildcli.domain.Permissions;
-import dev.buildcli.domain.Team;
+import dev.buildcli.domain.Roster;
 import dev.buildcli.infrastructure.HeadlessUi;
 import dev.buildcli.infrastructure.ScriptedGateway;
 import dev.buildcli.infrastructure.StateStore;
@@ -51,7 +51,7 @@ class SecurityTest {
 
     HeadlessUi run(ScriptedGateway script, HeadlessUi ui, StateStore store) {
         Events events = new Events(store, "run1", ui);
-        new Orchestrator(new Team("t", "ana", List.of(LEAD, DEV), Limits.defaults()), spy(script),
+        new Orchestrator(new Roster("t", "ana", List.of(LEAD, DEV), Limits.defaults()), spy(script),
                 new ToolRuntime(dir, ui, events), ui, events).run("go");
         return ui;
     }
@@ -152,7 +152,7 @@ class SecurityTest {
         var ui = new HeadlessUi(r -> true, EscalationChoice.ABORT, false);
         try (var store = new StateStore(StateStore.IN_MEMORY)) {
             Events events = new Events(store, "run1", ui);
-            new Orchestrator(new Team("t", "ana", List.of(LEAD, DEV), Limits.defaults()), spy(script),
+            new Orchestrator(new Roster("t", "ana", List.of(LEAD, DEV), Limits.defaults()), spy(script),
                     new ToolRuntime(dir, ui, events), ui, events).run("deploy with secret=supersecretvalue1");
             String stored = store.listRuns(1).get(0).request() + store.listRuns(1).get(0).summary()
                     + store.listTasks("run1").stream().map(t -> t.objective + t.result).reduce("", String::concat);

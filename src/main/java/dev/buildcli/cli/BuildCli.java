@@ -10,7 +10,7 @@ import picocli.CommandLine.IFactory;
 // INHERIT gives every subcommand --help and --version too, e.g. "buildcli agent create --help"
 @Command(name = "buildcli", mixinStandardHelpOptions = true, scope = CommandLine.ScopeType.INHERIT, versionProvider = BuildCli.Version.class,
         description = "Your local AI engineering team: agents you chat with, that work on your project with the permissions you give them.",
-        subcommands = {InitCommand.class, AgentCommand.class, TeamCommand.class, RunCommand.class, RunsCommand.class,
+        subcommands = {InitCommand.class, AgentCommand.class, RunCommand.class, RunsCommand.class,
                 TaskCommand.class, UsageCommand.class, DoctorCommand.class, ConfigCommand.class, ProviderCommand.class})
 public final class BuildCli implements Callable<Integer> {
     /** Set by picocli; used to open the TUI or print help when no subcommand is given. */

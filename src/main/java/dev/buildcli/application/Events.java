@@ -33,8 +33,8 @@ public final class Events {
         ui.onEvent(e);
     }
 
-    public void startRun(String team, String request) {
-        store.startRun(new RunInfo(runId, team, Redactor.redact(request), Instant.now(), null, "RUNNING", null));
+    public void startRun(String group, String request) {
+        store.startRun(new RunInfo(runId, group, Redactor.redact(request), Instant.now(), null, "RUNNING", null));
     }
 
     public void finishRun(String status, String summary) {

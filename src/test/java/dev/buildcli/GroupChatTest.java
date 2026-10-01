@@ -12,7 +12,7 @@ import dev.buildcli.domain.Limits;
 import dev.buildcli.domain.Permissions;
 import dev.buildcli.domain.Task;
 import dev.buildcli.domain.TaskStatus;
-import dev.buildcli.domain.Team;
+import dev.buildcli.domain.Roster;
 import dev.buildcli.infrastructure.FileChatStore;
 import dev.buildcli.ports.ChatStore;
 import java.nio.file.Path;
@@ -34,7 +34,7 @@ class GroupChatTest {
         return new Agent(name, "role of " + name, "", Set.of(), Permissions.none());
     }
 
-    static final Team TEAM = new Team("backend", "ana", List.of(agent("ana"), agent("bruno"), agent("carla")), Limits.defaults());
+    static final Roster ROSTER = new Roster("backend", "ana", List.of(agent("ana"), agent("bruno"), agent("carla")), Limits.defaults());
     static final List<Agent> CONTACTS = List.of(agent("ana"), agent("bruno"), agent("carla"), agent("dan"));
 
     final List<String> calls = new CopyOnWriteArrayList<>();
@@ -64,7 +64,7 @@ class GroupChatTest {
     }
 
     ChatSession session(ChatSession.Executor executor, ChatStore store, int hops) {
-        return new ChatSession(TEAM, CONTACTS, executor, store, () -> hops);
+        return new ChatSession(ROSTER, CONTACTS, executor, store, () -> hops);
     }
 
     ChatSession echo(ChatStore store, int hops) {
@@ -86,7 +86,7 @@ class GroupChatTest {
             assertTrue(bothStarted.await(5, TimeUnit.SECONDS), "both worked at the same time");
             return done(request.target(), "ok from " + request.target());
         }, ChatStore.NONE, 6);
-        long id = s.submit("@bruno and @carla, please look", List.of(), ChatSession.TEAM);
+        long id = s.submit("@bruno and @carla, please look", List.of(), ChatSession.MAIN);
         awaitIdle(s);
         var texts = s.messages().stream().filter(m -> m.kind() == ChatSession.Kind.AGENT).map(ChatSession.Message::text).toList();
         assertTrue(texts.contains("ok from bruno") && texts.contains("ok from carla"), texts.toString());
@@ -103,7 +103,7 @@ class GroupChatTest {
             }
             return done(request.target(), "ok");
         }, ChatStore.NONE, 6);
-        s.setAdmin(ChatSession.TEAM, "bruno", true);
+        s.setAdmin(ChatSession.MAIN, "bruno", true);
         s.submit("long job");
         waitFor(() -> calls.size() == 1);
         s.submit("quick question");
@@ -134,7 +134,7 @@ class GroupChatTest {
         awaitIdle(s);
         assertEquals(List.of("ana", "bruno", "ana", "bruno"), calls, "the user's message plus three agent-to-agent messages");
         assertTrue(notes(s).stream().anyMatch(n -> n.startsWith("The agents paused after 3 messages")), notes(s).toString());
-        assertTrue(s.messages().stream().filter(m -> m.kind() == ChatSession.Kind.AGENT).allMatch(m -> m.thread().equals(ChatSession.TEAM)));
+        assertTrue(s.messages().stream().filter(m -> m.kind() == ChatSession.Kind.AGENT).allMatch(m -> m.thread().equals(ChatSession.MAIN)));
     }
 
     @Test
@@ -151,14 +151,14 @@ class GroupChatTest {
         s.removeMember(id, "dan");
         assertEquals(List.of("carla", "bruno"), s.group(id).members());
         assertEquals(List.of("carla"), s.group(id).admins(), "removing the last admin makes the first member admin");
-        s.removeMember(ChatSession.TEAM, "carla");
+        s.removeMember(ChatSession.MAIN, "carla");
 
         var again = echo(new FileChatStore(dir), 6);
         Chat g = again.group(id);
         assertEquals("Frontend squad", g.name());
         assertEquals(List.of("carla", "bruno"), g.members());
-        assertFalse(again.group(ChatSession.TEAM).has("carla"), "changes to the team's own group are kept too");
-        assertFalse(again.deleteGroup(ChatSession.TEAM));
+        assertFalse(again.group(ChatSession.MAIN).has("carla"), "changes to the team's own group are kept too");
+        assertFalse(again.deleteGroup(ChatSession.MAIN));
         assertTrue(again.deleteGroup(id));
     }
 

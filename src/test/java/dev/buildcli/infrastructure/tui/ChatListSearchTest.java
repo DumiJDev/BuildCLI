@@ -69,7 +69,7 @@ class ChatListSearchTest {
         ctrlK(screen);
         ChatScreenTest.type(screen, "backend");
         ChatScreenTest.key(screen, KeyCode.ENTER);
-        assertEquals(ChatSession.TEAM, screen.selectedForTest(), "the group is found by its name too");
+        assertEquals(ChatSession.MAIN, screen.selectedForTest(), "the group is found by its name too");
     }
 
     @Test

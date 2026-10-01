@@ -16,7 +16,7 @@ import dev.buildcli.domain.Event;
 import dev.buildcli.domain.Limits;
 import dev.buildcli.domain.Permissions;
 import dev.buildcli.domain.Task;
-import dev.buildcli.domain.Team;
+import dev.buildcli.domain.Roster;
 import dev.buildcli.infrastructure.ScriptedGateway;
 import dev.buildcli.infrastructure.StateStore;
 import dev.buildcli.ports.ApprovalRequest;
@@ -37,7 +37,7 @@ class ChatSessionTest {
 
     static final Agent ANA = new Agent("ana", "architect", "You coordinate.", Set.of("filesystem.read", "agent.handoff"), Permissions.none());
     static final Agent BRUNO = new Agent("bruno", "developer", "You implement.", Set.of("filesystem.read"), Permissions.none());
-    static final Team TEAM = new Team("backend", "ana", List.of(ANA, BRUNO), Limits.defaults());
+    static final Roster ROSTER = new Roster("backend", "ana", List.of(ANA, BRUNO), Limits.defaults());
 
     /** Runs each request through a real orchestrator with the given model. */
     ChatSession.Executor orchestrated(LlmGateway llm, List<Orchestrator.Request> seen) {
@@ -70,7 +70,7 @@ class ChatSessionTest {
     void messagesSentWhileTheTeamIsBusyWaitInOrderAndAreAllAnswered() throws Exception {
         CountDownLatch release = new CountDownLatch(1);
         List<String> order = new java.util.concurrent.CopyOnWriteArrayList<>();
-        var session = new ChatSession(TEAM, (team, request, ui, cancelled, dispatcher) -> {
+        var session = new ChatSession(ROSTER, (team, request, ui, cancelled, dispatcher) -> {
             order.add(request.text());
             if (request.text().equals("first")) {
                 release.await(10, TimeUnit.SECONDS);
@@ -106,7 +106,7 @@ class ChatSessionTest {
     void aMentionSendsTheMessageStraightToThatAgent() throws Exception {
         List<Orchestrator.Request> seen = new ArrayList<>();
         var llm = new ScriptedGateway().say("bruno", "I can help with that.");
-        var session = new ChatSession(TEAM, orchestrated(llm, seen));
+        var session = new ChatSession(ROSTER, orchestrated(llm, seen));
         session.submit("hey @Bruno, what do you think?");
         awaitIdle(session);
 
@@ -121,7 +121,7 @@ class ChatSessionTest {
     @Test
     void aFailureIsShownAndTheSessionKeepsWorking() throws Exception {
         AtomicInteger calls = new AtomicInteger();
-        var session = new ChatSession(TEAM, (team, request, ui, cancelled, dispatcher) -> {
+        var session = new ChatSession(ROSTER, (team, request, ui, cancelled, dispatcher) -> {
             if (calls.incrementAndGet() == 1) {
                 throw new IllegalStateException("connection refused: localhost:11434");
             }
@@ -151,7 +151,7 @@ class ChatSessionTest {
     void laterMessagesCarryTheConversationSoFarAsContext() throws Exception {
         List<Orchestrator.Request> seen = new ArrayList<>();
         var llm = new ScriptedGateway().say("ana", "The port is 8080.").say("ana", "Yes, 8080.");
-        var session = new ChatSession(TEAM, orchestrated(llm, seen));
+        var session = new ChatSession(ROSTER, orchestrated(llm, seen));
         session.submit("what port do we use?");
         awaitIdle(session);
         session.submit("and is that the default?");
@@ -166,8 +166,8 @@ class ChatSessionTest {
     @Test
     void aDirectChatGoesToItsAgentAndKeepsItsOwnThreadAndHistory() throws Exception {
         List<Orchestrator.Request> seen = new ArrayList<>();
-        var llm = new ScriptedGateway().say("ana", "Team answer.").say("bruno", "Direct answer.").say("bruno", "Again.");
-        var session = new ChatSession(TEAM, orchestrated(llm, seen));
+        var llm = new ScriptedGateway().say("ana", "Roster answer.").say("bruno", "Direct answer.").say("bruno", "Again.");
+        var session = new ChatSession(ROSTER, orchestrated(llm, seen));
         session.submit("hello team");
         awaitIdle(session);
         session.submit("hi bruno", List.of(), "bruno");
@@ -187,7 +187,7 @@ class ChatSessionTest {
 
     @Test
     void stopEndsTheRunAndDeniesAnOpenQuestion() throws Exception {
-        var session = new ChatSession(TEAM, (team, request, ui, cancelled, dispatcher) -> {
+        var session = new ChatSession(ROSTER, (team, request, ui, cancelled, dispatcher) -> {
             boolean ok = ui.approve(new ApprovalRequest("bruno", "write", "Write out/a.txt", "+hi"));
             assertFalse(ok, "stopping answers 'no'");
             if (cancelled.getAsBoolean()) {
@@ -209,7 +209,7 @@ class ChatSessionTest {
 
     @Test
     void toolEventsBecomeShortActivityLinesWithoutDumpingFileContents() {
-        var session = new ChatSession(TEAM, (tm, r, u, c, d) -> null);
+        var session = new ChatSession(ROSTER, (tm, r, u, c, d) -> null);
         session.onEvent(new Event(Instant.now(), "ToolCalled", 2, "bruno", "write_file {path=out/a.txt, content=SECRET-BODY-OF-THE-FILE}"));
         session.onEvent(new Event(Instant.now(), "ToolCompleted", 2, "bruno", "ok: OK: wrote 20 chars"));
         session.onEvent(new Event(Instant.now(), "ToolCalled", 2, "bruno", "run_command {argv=[rm, -rf, out]}"));

@@ -21,7 +21,7 @@ public final class PerfProbe {
     public static void main(String[] args) throws Exception {
         int w = args.length > 0 ? Integer.parseInt(args[0]) : 120;
         int h = args.length > 1 ? Integer.parseInt(args[1]) : 40;
-        var session = new ChatSession(ChatScreenTest.TEAM, (team, request, ui, cancelled, dispatcher) -> {
+        var session = new ChatSession(ChatScreenTest.ROSTER, (team, request, ui, cancelled, dispatcher) -> {
             Task t = new Task(1, null, "user", "ana", request.text(), "");
             t.status = TaskStatus.DONE;
             t.result = "Here is **a plan** for `" + request.text() + "`.\n\n- first step with a fairly long line that wraps around the bubble when it is narrow enough\n- second step\n\n```java\nclass A {\n    int x = 1;\n}\n```\n\nDone.";

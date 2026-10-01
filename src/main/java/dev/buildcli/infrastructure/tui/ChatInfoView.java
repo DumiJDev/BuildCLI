@@ -150,10 +150,10 @@ final class ChatInfoView {
                     out.add(new Row("+ Add member", "", Theme.ACCENT, List.of(new Action("Add", 'a', () -> open(Mode.ADD_MEMBER)))));
                     out.add(new Row("Rename group", g.name(), Theme.TEXT, List.of(new Action("Rename", 'n',
                             () -> ask("New name", g.name(), name -> run(() -> session.renameGroup(g.id(), name), "Renamed"))))));
-                    if (!g.id().equals(ChatSession.TEAM)) {
+                    if (!g.id().equals(ChatSession.MAIN)) {
                         out.add(new Row("Delete group", "the messages stay in memory until you quit", Theme.RED, List.of(new Action("Delete", 'x', () -> {
                             session.deleteGroup(g.id());
-                            select.accept(ChatSession.TEAM);
+                            select.accept(ChatSession.MAIN);
                             close.run();
                         }))));
                     }

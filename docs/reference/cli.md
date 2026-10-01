@@ -7,7 +7,6 @@ Exit codes: **0** success, **1** the work failed or was aborted, **2** usage or 
 |---|---|
 | `buildcli init [--model provider:model]` | Creates `.buildcli/` with four sample agents (wheslley, breno, matheus, dumildes), a group `maintainers` (kept outside the project) and an `AGENTS.md`. Never overwrites existing files. The files it writes are pre-approved; anything you add later asks again. |
 | `buildcli agent list` / `show <name>` / `create <name> [--role R] [--capabilities a,b] [--global]` | Inspect and scaffold agents. |
-| `buildcli team list` / `show <name>` / `create <name> --agents a,b [--lead x] [--model p:m] [--global]` | Inspect and scaffold teams. |
 | `buildcli run [REQUEST...]` | Runs a request. Options below. |
 | `buildcli runs [--limit N]` | The recent runs of this project. |
 | `buildcli task list [--run ID]` / `task show <n> [--run ID]` | The tasks and handoffs of a run (default: the latest), and one task with its events. |
@@ -26,8 +25,8 @@ buildcli run --headless --approve writes "fix the typo"    # plain text, no TUI
 
 | Option | Meaning |
 |---|---|
-| `--team NAME` / `--agent NAME` | The team (default: the only team) or a single agent. A direct run uses the model of the first team that includes the agent. |
-| `--model provider:model` | Model for agents the team did not configure, e.g. `ollama:qwen2.5:7b` or `openai:gpt-x`. |
+| `--group NAME` / `--agent NAME` | The group (default: the only group) or a single agent. A group run goes to its first admin. |
+| `--model provider:model` | Model for agents with none chosen in the settings, e.g. `ollama:qwen2.5:7b` or `openai:gpt-x`. |
 | `--headless` | Plain-text output. Used automatically when there is no terminal. |
 | `--approve ask\|none\|writes\|all` | How approvals are decided **without the TUI**. `ask` prompts on the console (default on a terminal); `none` denies everything that needs approval (default without a terminal); `writes` approves file writes only; `all` approves everything, only for throwaway workspaces. |
 | `--no-stream`, `--threads N`, `--temperature T` | Model settings. `--threads` is Ollama's `num_thread` (default 4; Ollama's own default of 16 was ~50x slower on a WSL2 machine). |
@@ -51,8 +50,8 @@ agent. `F2` opens the settings, the mouse works, and `Enter` sends (Settings > G
 | `/log` | Show recent commits |  |
 | `/open <file>` | Open a file in the viewer | `Ctrl+O` |
 | `/attach <file>` | Attach an image or audio file (or paste its path) |  |
-| `/tasks` | Show what the team is doing: tasks and handoffs | `Ctrl+T` |
-| `/stop` | Stop the team's current work | `Ctrl+X` |
+| `/tasks` | Show what the agents are doing: tasks and handoffs | `Ctrl+T` |
+| `/stop` | Stop the work in this chat | `Ctrl+X` |
 | `/retry` | Send the last failed message again |  |
 | `/copy [message]` | Copy the last code block (or the whole last answer) |  |
 | `/find [text]` | Search this chat | `Ctrl+F` |
@@ -73,7 +72,7 @@ agent. `F2` opens the settings, the mouse works, and `Enter` sends (Settings > G
 | `/dismiss @agent` | Dismiss an admin of this group |  |
 | `/rename <name>` | Rename this group |  |
 | `/info` | Group or contact info |  |
-| `/team` | Show or hide the chat list | `Ctrl+B` |
+| `/sidebar` | Show or hide the chat list | `Ctrl+B` |
 | `/clear` | Delete this chat's messages (asks you to confirm) |  |
 | `/help` | Keys, commands and tips |  |
 | `/quit` | Leave BuildCLI | `Ctrl+C` |

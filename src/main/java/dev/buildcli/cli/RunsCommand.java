@@ -21,7 +21,7 @@ final class RunsCommand implements Callable<Integer> {
     @Override
     public Integer call() throws Exception {
         if (!ctx.hasState()) {
-            ctx.out.println("No runs yet for this project. Try: buildcli run --team <name> \"<what to do>\"");
+            ctx.out.println("No runs yet for this project. Try: buildcli run --group <name> \"<what to do>\"");
             return 0;
         }
         try (StateStore store = ctx.openState()) {
@@ -30,8 +30,8 @@ final class RunsCommand implements Callable<Integer> {
                 ctx.out.println("No runs yet for this project.");
                 return 0;
             }
-            Tables.print(ctx.out, List.of("RUN", "STATUS", "TEAM", "STARTED", "REQUEST"), runs.stream()
-                    .map(r -> List.of(r.id(), r.status(), r.team(), r.startedAt().toString().replace('T', ' ').substring(0, 19),
+            Tables.print(ctx.out, List.of("RUN", "STATUS", "GROUP", "STARTED", "REQUEST"), runs.stream()
+                    .map(r -> List.of(r.id(), r.status(), r.group(), r.startedAt().toString().replace('T', ' ').substring(0, 19),
                             Tables.cut(r.request(), 60))).toList());
         }
         return 0;

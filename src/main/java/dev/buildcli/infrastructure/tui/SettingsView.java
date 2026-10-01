@@ -127,11 +127,9 @@ final class SettingsView {
                     String key = Settings.AGENT_MODEL + a.name();
                     String own = s.stored(scope, key);
                     String effective = s.modelFor(a.name());
-                    String team = services.teamModel(a.name());
-                    String value = effective != null ? effective : team != null ? team + "  (team)" : s.defaultModel() != null
-                            ? s.defaultModel() + "  (default)" : "not set";
+                    String value = effective != null ? effective : s.defaultModel() != null ? s.defaultModel() + "  (default)" : "not set";
                     out.add(new Item(a.name(), value, effective != null ? Theme.TEXT : Theme.DIM,
-                            (own != null ? "Set " + scopeLabel() + ". " : "") + "Enter to choose a model · Del to go back to the team's",
+                            (own != null ? "Set " + scopeLabel() + ". " : "") + "Enter to choose a model · Del to go back to the default",
                             () -> pickModel("Model for " + a.name(), m -> save(key, m)), null, null, () -> save(key, null)));
                 }
             }
@@ -169,7 +167,7 @@ final class SettingsView {
                             })));
                 }
                 out.add(new Item("+ New agent", "", Theme.ACCENT, "Name, role, what it may do; saved " + scopeLabel(), this::newAgent, null, null, null));
-                out.add(new Item("+ Sample team", "", Theme.ACCENT, "ana (architect), bruno (developer), carla (reviewer) in a group, for this project",
+                out.add(new Item("+ Sample agents", "", Theme.ACCENT, "wheslley, breno, matheus and dumildes, in a group, for this project",
                         this::addSamples, null, null, null));
             }
             default -> { }
@@ -351,7 +349,7 @@ final class SettingsView {
 
     private void addSamples() {
         try {
-            ok("Added " + String.join(", ", services.createSampleAgents()) + " and a group 'backend'.");
+            ok("Added " + String.join(", ", services.createSampleAgents()) + " and a group for them.");
         } catch (Exception e) {
             fail(e.getMessage());
         }

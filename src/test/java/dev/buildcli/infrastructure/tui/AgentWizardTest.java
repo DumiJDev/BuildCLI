@@ -17,7 +17,7 @@ class AgentWizardTest {
     @TempDir Path dir;
 
     ChatScreen screen() {
-        var session = new ChatSession(ChatScreenTest.TEAM, (team, request, ui, cancelled, dispatcher) -> {
+        var session = new ChatSession(ChatScreenTest.ROSTER, (team, request, ui, cancelled, dispatcher) -> {
             Task t = new Task(1, null, "user", "ana", request.text(), "");
             t.status = TaskStatus.DONE;
             t.result = "ok";

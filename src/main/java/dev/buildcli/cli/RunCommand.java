@@ -12,7 +12,7 @@ import dev.buildcli.domain.Chat;
 import dev.buildcli.domain.ModelRef;
 import dev.buildcli.domain.Task;
 import dev.buildcli.domain.TaskStatus;
-import dev.buildcli.domain.Team;
+import dev.buildcli.domain.Roster;
 import dev.buildcli.infrastructure.ConsoleUi;
 import dev.buildcli.infrastructure.FileTrustStore;
 import dev.buildcli.infrastructure.ProviderSettings;
@@ -37,8 +37,8 @@ import picocli.CommandLine.Parameters;
 final class RunCommand implements Callable<Integer> {
     private final CliContext ctx;
 
-    @Option(names = {"--group", "--team"}, description = "Send the request to a group (default: the only group, if there is one)")
-    String teamName;
+    @Option(names = "--group", description = "Send the request to a group (default: the only group, if there is one)")
+    String groupName;
 
     @Option(names = "--agent", description = "Send the request to one agent")
     String agentName;
@@ -61,7 +61,7 @@ final class RunCommand implements Callable<Integer> {
     @Option(names = "--temperature", description = "Sampling temperature (default 0)")
     Double temperature;
 
-    @Parameters(arity = "0..*", paramLabel = "REQUEST", description = "What the team should do (asked for in the TUI if omitted)")
+    @Parameters(arity = "0..*", paramLabel = "REQUEST", description = "What the agents should do (asked for in the TUI if omitted)")
     List<String> request;
 
     private final AtomicInteger exit = new AtomicInteger();
@@ -76,7 +76,7 @@ final class RunCommand implements Callable<Integer> {
         if (config == null) {
             return 2;
         }
-        if (agentName != null && teamName != null) {
+        if (agentName != null && groupName != null) {
             ctx.err.println("error: use either --group or --agent, not both");
             return 2;
         }
@@ -103,12 +103,12 @@ final class RunCommand implements Callable<Integer> {
             ctx.err.println("error: a request is required without the TUI, for example: buildcli run --headless \"add a health endpoint\"");
             return 2;
         }
-        Team team = resolveTeam(config, setup);
-        if (team == null) {
+        Roster roster = resolveRoster(config, setup);
+        if (roster == null) {
             return 2;
         }
         RoutingGateway gateway = gateways.get();
-        for (Agent a : team.agents()) {
+        for (Agent a : roster.agents()) {
             try {
                 gateway.modelFor(a);
             } catch (IllegalStateException e) {
@@ -117,7 +117,7 @@ final class RunCommand implements Callable<Integer> {
             }
         }
         ConsoleUi.Policy policy = approve != null ? approve : ctx.terminal ? ConsoleUi.Policy.ASK : ConsoleUi.Policy.NONE;
-        execute(team, config, gateway, text, new ConsoleUi(ctx.out, ctx.in, policy));
+        execute(roster, config, gateway, text, new ConsoleUi(ctx.out, ctx.in, policy));
         return exit.get();
     }
 
@@ -139,14 +139,14 @@ final class RunCommand implements Callable<Integer> {
         // the conversation history lives in the project's state database, next to runs and events
         try (StateStore history = ctx.openState()) {
             ChatSession session = new ChatSession(config.agents(), setup.groups(), setup.limits(),
-                    (chatTeam, req, ui, cancelled, dispatcher) -> runOnce(chatTeam, config, gateways.get(), req, ui, cancelled, dispatcher,
+                    (chatRoster, req, ui, cancelled, dispatcher) -> runOnce(chatRoster, config, gateways.get(), req, ui, cancelled, dispatcher,
                             workspaceLock, history),
                     setup.store, () -> setup.settings.number(dev.buildcli.application.Settings.AGENT_HOPS, 6), history);
             services.attach(session);
             session.workspace(ctx.cwd, workspaceLock);
             try {
                 if (!text.isEmpty()) {
-                    Chat target = teamName == null ? null : setup.group(teamName);
+                    Chat target = groupName == null ? null : setup.group(groupName);
                     session.submit(text, List.of(), agentName != null ? agentName : target != null ? target.id() : null);
                 }
                 ctx.tui.launch(session, models, services);
@@ -157,24 +157,24 @@ final class RunCommand implements Callable<Integer> {
         return 0;
     }
 
-    /** Headless: --agent talks to one agent; --group (or --team) to a group; otherwise the only group, or the only agent. */
-    private Team resolveTeam(ConfigRepository config, ChatSetup setup) {
+    /** Headless: --agent talks to one agent; --group to a group; otherwise the only group, or the only agent. */
+    private Roster resolveRoster(ConfigRepository config, ChatSetup setup) {
         if (agentName != null) {
             Agent a = config.agent(agentName).orElse(null);
             if (a == null) {
                 ctx.err.println("error: no agent named '" + agentName + "'. Available: " + config.agents().stream().map(Agent::name).toList());
                 return null;
             }
-            return new Team(a.name(), a.name(), List.of(a), setup.limits(), setup.routing());
+            return new Roster(a.name(), a.name(), List.of(a), setup.limits(), setup.routing());
         }
         List<Chat> groups = setup.groups();
-        if (teamName != null) {
-            Chat g = setup.group(teamName);
+        if (groupName != null) {
+            Chat g = setup.group(groupName);
             if (g == null || g.members().isEmpty()) {
-                ctx.err.println("error: no group named '" + teamName + "'. Available: " + groups.stream().map(Chat::name).toList());
+                ctx.err.println("error: no group named '" + groupName + "'. Available: " + groups.stream().map(Chat::name).toList());
                 return null;
             }
-            return setup.teamOf(g);
+            return setup.rosterOf(g);
         }
         if (config.agents().isEmpty()) {
             ctx.err.println("error: there are no agents yet. Run 'buildcli init' for sample agents, or 'buildcli agent create <name>'.");
@@ -182,11 +182,11 @@ final class RunCommand implements Callable<Integer> {
         }
         List<Chat> usable = groups.stream().filter(g -> !g.members().isEmpty()).toList();
         if (usable.size() == 1) {
-            return setup.teamOf(usable.get(0));
+            return setup.rosterOf(usable.get(0));
         }
         if (usable.isEmpty() && config.agents().size() == 1) {
             Agent a = config.agents().get(0);
-            return new Team(a.name(), a.name(), List.of(a), setup.limits(), setup.routing());
+            return new Roster(a.name(), a.name(), List.of(a), setup.limits(), setup.routing());
         }
         ctx.err.println("error: choose who to ask with --agent " + config.agents().stream().map(Agent::name).toList()
                 + (usable.isEmpty() ? "" : " or --group " + usable.stream().map(Chat::name).toList()));
@@ -194,18 +194,18 @@ final class RunCommand implements Callable<Integer> {
     }
 
     /** One request, start to finish: trust check, a fresh run id and store, the orchestrator. Throws if it cannot run. */
-    private Task runOnce(Team team, ConfigRepository config, RoutingGateway gateway, Orchestrator.Request request, UserInterface ui,
+    private Task runOnce(Roster roster, ConfigRepository config, RoutingGateway gateway, Orchestrator.Request request, UserInterface ui,
             java.util.function.BooleanSupplier cancelled, Orchestrator.Dispatcher dispatcher,
             dev.buildcli.application.tools.WorkspaceLock workspaceLock, StateStore shared) throws Exception {
         String runId = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + "-"
                 + HexFormat.of().formatHex(randomBytes());
         StateStore store = shared != null ? shared : ctx.openState();
         try {
-            if (!TrustGate.ensureTrusted(team, config, new FileTrustStore(ctx.trustFile()), ctx.projectKey(), ui)) {
+            if (!TrustGate.ensureTrusted(roster, config, new FileTrustStore(ctx.trustFile()), ctx.projectKey(), ui)) {
                 throw new IllegalStateException("the project's agent definitions were not trusted, so nothing was run");
             }
             Events events = new Events(store, runId, ui);
-            Orchestrator orchestrator = new Orchestrator(team, gateway, new ToolRuntime(ctx.cwd, ui, events, workspaceLock).protect(List.of(ctx.globalDir())), ui, events,
+            Orchestrator orchestrator = new Orchestrator(roster, gateway, new ToolRuntime(ctx.cwd, ui, events, workspaceLock).protect(List.of(ctx.globalDir())), ui, events,
                     config.projectContext());
             orchestrator.cancelWhen(cancelled);
             orchestrator.dispatchWith(dispatcher);
@@ -224,9 +224,9 @@ final class RunCommand implements Callable<Integer> {
     private List<AgentUsage> lastUsage = List.of();
 
     /** Headless: runs on the calling thread and records the exit code in {@link #exit}. */
-    private void execute(Team team, ConfigRepository config, RoutingGateway gateway, String requestText, UserInterface ui) {
+    private void execute(Roster roster, ConfigRepository config, RoutingGateway gateway, String requestText, UserInterface ui) {
         try {
-            Task root = runOnce(team, config, gateway, new Orchestrator.Request(requestText), ui, () -> false,
+            Task root = runOnce(roster, config, gateway, new Orchestrator.Request(requestText), ui, () -> false,
                     Orchestrator.Dispatcher.INLINE, new dev.buildcli.application.tools.WorkspaceLock(), null);
             exit.set(root.status == TaskStatus.DONE ? 0 : 1);
             summarize(root, lastRunId, lastUsage);

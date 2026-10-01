@@ -5,7 +5,6 @@ import dev.buildcli.domain.Agent;
 import dev.buildcli.domain.Capability;
 import dev.buildcli.domain.ModelRef;
 import dev.buildcli.domain.Origin;
-import dev.buildcli.domain.Team;
 import dev.buildcli.infrastructure.FileCredentialStore;
 import dev.buildcli.infrastructure.ModelCatalog;
 import dev.buildcli.infrastructure.ProviderProbe;
@@ -167,12 +166,12 @@ final class ChatServices implements SettingsServices {
 
     @Override
     public List<String> createSampleAgents() throws Exception {
-        SampleTeam.writeFiles(ctx.cwd, msg -> { });
+        SampleAgents.writeFiles(ctx.cwd, msg -> { });
         retrust();
         var fresh = new dev.buildcli.infrastructure.FileConfigRepository(ctx.cwd, ctx.globalDir()); // reads exactly what was written
         List<String> added = new ArrayList<>();
         var s = session;
-        for (String name : SampleTeam.NAMES) {
+        for (String name : SampleAgents.NAMES) {
             Agent agent = fresh.agent(name).orElse(null);
             boolean known = (config.agent(name).isPresent() || created.containsKey(name)) && !deleted.contains(name);
             if (agent == null || known) {
@@ -188,8 +187,8 @@ final class ChatServices implements SettingsServices {
         if (added.isEmpty()) {
             throw new IllegalArgumentException("the sample agents are already here");
         }
-        if (s != null && s.group("#" + SampleTeam.GROUP) == null) {
-            s.createGroup(SampleTeam.GROUP, SampleTeam.NAMES); // the first member, wheslley, becomes its admin
+        if (s != null && s.group("#" + SampleAgents.GROUP) == null) {
+            s.createGroup(SampleAgents.GROUP, SampleAgents.NAMES); // the first member, wheslley, becomes its admin
         }
         return added;
     }
@@ -269,16 +268,5 @@ final class ChatServices implements SettingsServices {
         } catch (RuntimeException e) {
             // an invalid project file: nothing is trusted, and the next run reports the problem
         }
-    }
-
-    @Override
-    public String teamModel(String agent) {
-        for (Team t : config.teams()) {
-            ModelRef ref = t.agent(agent).isPresent() ? t.routing().forAgent(agent) : null;
-            if (ref != null) {
-                return ref.provider() + ":" + ref.model();
-            }
-        }
-        return null;
     }
 }

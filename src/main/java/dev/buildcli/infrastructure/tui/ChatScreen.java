@@ -37,7 +37,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
 /**
- * The chat screen. It looks like WhatsApp Web: a list of chats on the left (the team's group chat and a direct chat
+ * The chat screen. It looks like WhatsApp Web: a list of chats on the left (your groups and a direct chat
  * with each agent, with previews, times, "typing…" and unread counts), and the open chat on the right with bubbles,
  * ticks and date separators. It works like ChatGPT: streamed replies with markdown and code blocks, suggestions, a
  * {@code /} command menu, an {@code @} mention menu, and a viewer for git diffs and files.
@@ -66,8 +66,8 @@ final class ChatScreen implements Element {
             new Command("log", "", "Show recent commits", ""),
             new Command("open", "<file>", "Open a file in the viewer", "Ctrl+O"),
             new Command("attach", "<file>", "Attach an image or audio file (or paste its path)", ""),
-            new Command("tasks", "", "Show what the team is doing: tasks and handoffs", "Ctrl+T"),
-            new Command("stop", "", "Stop the team's current work", "Ctrl+X"),
+            new Command("tasks", "", "Show what the agents are doing: tasks and handoffs", "Ctrl+T"),
+            new Command("stop", "", "Stop the work in this chat", "Ctrl+X"),
             new Command("retry", "", "Send the last failed message again", ""),
             new Command("copy", "[message]", "Copy the last code block (or the whole last answer)", ""),
             new Command("find", "[text]", "Search this chat", "Ctrl+F"),
@@ -88,7 +88,7 @@ final class ChatScreen implements Element {
             new Command("dismiss", "@agent", "Dismiss an admin of this group", ""),
             new Command("rename", "<name>", "Rename this group", ""),
             new Command("info", "", "Group or contact info", ""),
-            new Command("team", "", "Show or hide the chat list", "Ctrl+B"),
+            new Command("sidebar", "", "Show or hide the chat list", "Ctrl+B"),
             new Command("clear", "", "Delete this chat's messages (asks you to confirm)", ""),
             new Command("help", "", "Keys, commands and tips", ""),
             new Command("quit", "", "Leave BuildCLI", "Ctrl+C"));
@@ -113,7 +113,7 @@ final class ChatScreen implements Element {
     /** True until the user toggles the chat list: then it follows their choice even on narrow terminals. */
     private boolean autoSidebar = true;
     private int sideWidth;
-    private String selected = ChatSession.TEAM;
+    private String selected = ChatSession.MAIN;
     private final Map<String, Long> seen = new java.util.HashMap<>();
     private int scrollOff;
     private int lastTotal;
@@ -248,10 +248,6 @@ final class ChatScreen implements Element {
                 throw new IllegalStateException("not available in the demo");
             }
 
-            @Override
-            public String teamModel(String agent) {
-                return models.get(agent);
-            }
         };
     }
 
@@ -291,10 +287,6 @@ final class ChatScreen implements Element {
         String own = services.settings().modelFor(agent);
         if (own != null) {
             return own;
-        }
-        String team = services.teamModel(agent);
-        if (team != null) {
-            return team;
         }
         String def = services.settings().defaultModel();
         return def != null ? def : models.getOrDefault(agent, "no model: type /connect");
@@ -414,7 +406,7 @@ final class ChatScreen implements Element {
 
     // ---- chat list (left) ----
 
-    /** The chats in the list: the team first, then one direct chat per agent. */
+    /** The chats in the list: groups, your notes, a direct chat per agent, and the private chats between agents. */
     private List<String> threads() {
         List<String> out = new ArrayList<>();
         session.groups().forEach(g -> out.add(g.id()));
@@ -728,12 +720,12 @@ final class ChatScreen implements Element {
     /** A coloured initial, like a profile picture. */
     private void avatar(Buffer buf, int x, int y, String thread) {
         var g = session.group(thread);
-        boolean team = g != null;
-        String name = team ? g.name() : thread;
+        boolean isGroup = g != null;
+        String name = isGroup ? g.name() : thread;
         String initial = name.isEmpty() ? "?" : name.substring(0, 1).toUpperCase(Locale.ROOT);
-        Color c = team ? Theme.ACCENT : Theme.agentColor(thread);
+        Color c = isGroup ? Theme.ACCENT : Theme.agentColor(thread);
         put(buf, x, y, " " + initial + " ", st(Theme.ON_ACCENT, c).bold(), x + 3);
-        String state = team ? "" : session.agentState(thread);
+        String state = isGroup ? "" : session.agentState(thread);
         if (!state.isEmpty() && !state.equals("idle")) {
             put(buf, x + 3, y, "●", st(state.startsWith("waiting") || state.equals("needs you") ? Theme.AMBER : Theme.GREEN, Theme.SIDEBAR), x + 4);
         }
@@ -791,25 +783,25 @@ final class ChatScreen implements Element {
             x += 2;
         }
         var group = session.group(selected);
-        boolean team = group != null;
-        String name = team ? group.name() : session.contact(selected) != null ? selected : "Welcome";
-        Color c = team ? Theme.ACCENT : Theme.agentColor(selected);
+        boolean isGroup = group != null;
+        String name = isGroup ? group.name() : session.contact(selected) != null ? selected : "Welcome";
+        Color c = isGroup ? Theme.ACCENT : Theme.agentColor(selected);
         put(buf, x, r.y(), " " + (name.isEmpty() ? "?" : name.substring(0, 1).toUpperCase(Locale.ROOT)) + " ", st(Theme.BG, c).bold(), r.right());
         int nx = x + 4;
-        put(buf, nx, r.y(), team || session.contact(selected) != null ? title(selected) : "Welcome", base.bold(), r.right() - 30);
+        put(buf, nx, r.y(), isGroup || session.contact(selected) != null ? title(selected) : "Welcome", base.bold(), r.right() - 30);
         String sub;
         Style subStyle = st(Theme.DIM, Theme.PANEL);
         ChatSession.Live live = session.live(selected);
-        String elsewhere = team ? null : session.agentThread(selected);
+        String elsewhere = isGroup ? null : session.agentThread(selected);
         if (session.isActive(selected)) {
             String who = live != null ? live.agent() : busyAgentIn(selected);
             String state = live != null ? "typing…" : who.isEmpty() ? "working…" : session.agentState(who) + "…";
-            sub = (team && !who.isEmpty() ? clean(who) + " is " : "") + state;
+            sub = (isGroup && !who.isEmpty() ? clean(who) + " is " : "") + state;
             subStyle = st(Theme.GREEN, Theme.PANEL);
         } else if (elsewhere != null) {
             sub = "busy in the " + title(elsewhere) + " chat · will read your messages after";
             subStyle = st(Theme.AMBER, Theme.PANEL);
-        } else if (team) {
+        } else if (isGroup) {
             StringBuilder sb = new StringBuilder();
             for (String m : group.members()) {
                 sb.append(sb.isEmpty() ? "" : ", ").append(clean(m));
@@ -1196,7 +1188,7 @@ final class ChatScreen implements Element {
         rows.add(new Row(0, List.of()));
         int boxW = Math.min(width - 4, 56);
         int x = Math.max(0, (width - boxW) / 2);
-        String[][] actions = {{"Add the sample team: wheslley, breno, matheus and dumildes", "samples"}, {"Create your own agent", "agent"},
+        String[][] actions = {{"Add the sample agents: wheslley, breno, matheus and dumildes", "samples"}, {"Create your own agent", "agent"},
             {"Connect a model and provider", "connect"}};
         for (String[] a : actions) {
             Runnable act = switch (a[1]) {
@@ -1217,7 +1209,7 @@ final class ChatScreen implements Element {
             rows.add(new Row(x, List.of(new Span(label + " ".repeat(Math.max(1, boxW - Wrap.width(label) - 2)) + "› ", st(Theme.TEXT, Theme.PANEL), act))));
             rows.add(new Row(0, List.of()));
         }
-        centred(rows, width, "The sample team: wheslley plans and leads, matheus does the coding, breno looks after the build and CI, dumildes brings ideas. "
+        centred(rows, width, "The sample agents: wheslley plans and leads, matheus does the coding, breno looks after the build and CI, dumildes brings ideas. "
                 + "Every write asks you first, and you can undo it.", st(Theme.FAINT, Theme.BG));
     }
 
@@ -1264,7 +1256,7 @@ final class ChatScreen implements Element {
         }
     }
 
-    /** The "add the sample team" button of an empty chat: writes the agents, adds them live and opens their group. */
+    /** The "add the sample agents" button of an empty chat: writes the agents, adds them live and opens their group. */
     private void addSampleAgents() {
         try {
             List<String> added = services.createSampleAgents();
@@ -1279,17 +1271,17 @@ final class ChatScreen implements Element {
 
     private void welcome(List<Row> rows, int width) {
         var g = session.group(selected);
-        boolean team = g != null;
-        String who = team ? clean(g.name()) : clean(selected);
+        boolean isGroup = g != null;
+        String who = isGroup ? clean(g.name()) : clean(selected);
         centred(rows, width, "Start a conversation with " + who, st(Theme.TEXT, Theme.BG).bold());
         rows.add(new Row(0, List.of()));
-        String sub = team ? (g.admins().isEmpty() ? "No admin yet" : clean(String.join(", ", g.admins())) + " (admin) answers messages that "
+        String sub = isGroup ? (g.admins().isEmpty() ? "No admin yet" : clean(String.join(", ", g.admins())) + " (admin) answers messages that "
                 + "mention nobody") + ". Type @ to talk to someone, or mention two people to ask both."
                 : clean(roleOf(selected)) + ". Messages here go straight to " + clean(selected) + ".";
         centred(rows, width, sub, st(Theme.DIM, Theme.BG));
         rows.add(new Row(0, List.of()));
         rows.add(new Row(0, List.of()));
-        String[][] ideas = team
+        String[][] ideas = isGroup
                 ? new String[][] {{"Review my uncommitted changes", "Review my uncommitted changes and point out risks."},
                     {"Explain this project", "Explain how this project is organised and where to start."},
                     {"Add missing tests", "Find important code without tests and add unit tests for it."},
@@ -1598,7 +1590,7 @@ final class ChatScreen implements Element {
         int y0 = box.y() - h - 1;
         Style bg = st(Theme.TEXT, Theme.DIALOG);
         fill(buf, new Rect(box.x(), y0, w, h + 1), bg);
-        put(buf, box.x() + 2, y0, items.get(0).label().startsWith("/") ? "Commands" : "Mention a teammate", st(Theme.DIM, Theme.DIALOG), box.right());
+        put(buf, box.x() + 2, y0, items.get(0).label().startsWith("/") ? "Commands" : "Mention an agent", st(Theme.DIM, Theme.DIALOG), box.right());
         int labelW = 0;
         for (MenuItem it : items) {
             labelW = Math.max(labelW, Wrap.width(it.label()));
@@ -1838,7 +1830,7 @@ final class ChatScreen implements Element {
     }
 
     private String where(ChatSession.Pending p) {
-        String chat = p.thread().equals(ChatSession.EVERYWHERE) ? title(ChatSession.TEAM) : title(p.thread());
+        String chat = p.thread().equals(ChatSession.EVERYWHERE) ? title(ChatSession.MAIN) : title(p.thread());
         int n = session.pendingCount();
         return " · " + chat + " chat" + (n > 1 ? " · 1 of " + n : "");
     }
@@ -2221,7 +2213,7 @@ final class ChatScreen implements Element {
                         session.system(session.queued() == 0 ? "No messages are waiting." : session.queued() + " message(s) waiting their turn.");
                     }
                 }
-                case "team" -> toggleSidebar();
+                case "sidebar" -> toggleSidebar();
                 case "settings" -> settingsOpen = true;
                 case "connect" -> openConnect(null);
                 case "chats" -> {
@@ -2318,8 +2310,8 @@ final class ChatScreen implements Element {
 
     private static List<String> help() {
         List<String> out = new ArrayList<>();
-        out.add("Talk to your team like in a chat. Press Enter to send; you can keep typing while they work,");
-        out.add("messages wait their turn. @name sends a message straight to one teammate.");
+        out.add("Talk to your agents like in a chat. Press Enter to send; you can keep typing while they work,");
+        out.add("messages wait their turn. @name sends a message straight to one agent.");
         out.add("");
         out.add("Commands (type / to see the menu)");
         for (Command c : COMMANDS) {
@@ -2332,7 +2324,7 @@ final class ChatScreen implements Element {
         out.add("  Ctrl+F find in this chat (↑ older, ↓ newer, Esc close) · Ctrl+K search your chats and agents · /copy copies the last code block");
         out.add("");
         out.add("Mouse");
-        out.add("  Click teammates to mention them, menu items, buttons, ⧉ copy on a code block and the ✕ on attachments.");
+        out.add("  Click agents to mention them, menu items, buttons, ⧉ copy on a code block and the ✕ on attachments.");
         out.add("  Drag the scrollbar. To select text for copying, hold Shift (Option on macOS) while dragging.");
         out.add("");
         out.add("Attachments");

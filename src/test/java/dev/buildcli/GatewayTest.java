@@ -163,7 +163,7 @@ class GatewayTest {
         var gateway = new RoutingGateway(ModelRouting.unspecified(), null, ref -> null);
         var ex = assertThrows(IllegalStateException.class, () -> gateway.chat(agent("ana"), HELLO, List.of()));
         assertTrue(ex.getMessage().contains("no model configured for agent 'ana'"), ex.getMessage());
-        assertTrue(ex.getMessage().contains("runtime.default"), ex.getMessage());
+        assertTrue(ex.getMessage().contains("/connect"), ex.getMessage());
     }
 
     @Test
