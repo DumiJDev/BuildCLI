@@ -179,8 +179,6 @@ public final class ChatSession implements UserInterface {
     private final Executor executor;
     private final ChatStore store;
     private final MessageStore transcript;
-    /** "Always allow" answers: thread, agent and what, to what it means. In memory only: a grant never outlives the session. */
-    private final Map<String, String> grants = new ConcurrentHashMap<>();
     private volatile java.nio.file.Path workspace;
     private volatile dev.buildcli.application.tools.WorkspaceLock workspaceLock;
     private final java.util.function.IntSupplier agentHops;
@@ -197,7 +195,7 @@ public final class ChatSession implements UserInterface {
     /** Who waits for whom because of a handoff: the graph in which a deadlock would be a cycle. */
     private final Map<String, String> waitsFor = new HashMap<>();
     private final List<Run> runs = new CopyOnWriteArrayList<>();
-    private final List<Pending> pending = new CopyOnWriteArrayList<>();
+    private final Approvals approvals;
     /** Goes up on every change a screen could show, so a front end redraws only when something changed. */
     private final AtomicLong version = new AtomicLong();
     private final AtomicInteger inputTokens = new AtomicInteger();
@@ -235,6 +233,7 @@ public final class ChatSession implements UserInterface {
         this.executor = executor;
         this.store = store;
         this.agentHops = agentHops;
+        this.approvals = new Approvals(this::touch, state::put);
         this.directory = new ChatDirectory(contacts, groups, store, this::touch, this::error, this::note);
         for (Agent a : directory.contacts()) {
             actors.put(a.name(), new Actor(a.name()));
@@ -512,23 +511,11 @@ public final class ChatSession implements UserInterface {
                 r.stop.set(true);
             }
         }
-        for (Pending p : pending) {
-            if (thread == null || p.thread().equals(thread)) {
-                answerNo(p);
-            }
-        }
+        approvals.declineAll(thread);
     }
 
     public void stop() {
         stop(null);
-    }
-
-    private static void answerNo(Pending p) {
-        if (p instanceof Pending.Approval a) {
-            a.answer().complete(false);
-        } else if (p instanceof Pending.Escalation e) {
-            e.answer().complete(EscalationChoice.ABORT);
-        }
     }
 
     /** Drops every user message that has not been read yet. @return how many were dropped */
@@ -619,15 +606,11 @@ public final class ChatSession implements UserInterface {
 
     /** The oldest open question, or null. */
     public Pending pending() {
-        // one read of the list: checking isEmpty() and then get(0) fails when an answer removes the request in between
-        for (Pending p : pending) {
-            return p;
-        }
-        return null;
+        return approvals.first();
     }
 
     public int pendingCount() {
-        return pending.size();
+        return approvals.count();
     }
 
     /** True while any agent has work. */
@@ -1063,84 +1046,31 @@ public final class ChatSession implements UserInterface {
         return r == null ? EVERYWHERE : r.thread;
     }
 
-    private static String grantId(String thread, ApprovalRequest r) {
-        return thread + "\u0001" + r.agent() + "\u0001" + r.grantKey();
-    }
-
     /** Answers yes to this request and to the same kind of request from this agent in this chat from now on. */
     public void approveAlways(Pending.Approval a) {
-        ApprovalRequest r = a.request();
-        if (r.grantKey() != null) {
-            grants.put(grantId(a.thread(), r), r.grantLabel());
-        }
-        a.answer().complete(true);
+        approvals.approveAlways(a);
     }
 
     /** What is being approved automatically in this chat. */
     public List<String> grants(String thread) {
-        List<String> out = new ArrayList<>();
-        grants.forEach((id, label) -> {
-            if (id.startsWith(thread + "\u0001")) {
-                out.add(label);
-            }
-        });
-        java.util.Collections.sort(out);
-        return out;
+        return approvals.grants(thread);
     }
 
     /** Asks again from now on. @return how many permissions were taken back */
     public int revokeGrants(String thread) {
-        int before = grants.size();
-        grants.keySet().removeIf(id -> id.startsWith(thread + "\u0001"));
-        int n = before - grants.size();
-        if (n > 0) {
-            touch();
-        }
-        return n;
+        return approvals.revokeGrants(thread);
     }
 
     @Override
     public boolean approve(ApprovalRequest request) {
         Run run = RUN.get();
-        if (run != null && run.stop.get()) {
-            return false;
-        }
-        if (request.grantKey() != null && grants.containsKey(grantId(threadNow(), request))) {
-            return true;
-        }
-        var answer = new CompletableFuture<Boolean>();
-        Pending p = new Pending.Approval(request, answer, threadNow());
-        pending.add(p);
-        touch();
-        state.put(request.agent(), "waiting for you");
-        try {
-            return answer.get();
-        } catch (Exception e) {
-            return false;
-        } finally {
-            pending.remove(p);
-            touch();
-            state.put(request.agent(), "working");
-        }
+        return approvals.approve(request, threadNow(), run != null && run.stop.get());
     }
 
     @Override
     public EscalationChoice escalate(int taskId, String agent, String objective, String reason) {
         Run run = RUN.get();
-        if (run != null && run.stop.get()) {
-            return EscalationChoice.ABORT;
-        }
-        var answer = new CompletableFuture<EscalationChoice>();
-        Pending p = new Pending.Escalation(taskId, agent, objective, reason, answer, threadNow());
-        pending.add(p);
-        touch();
-        try {
-            return answer.get();
-        } catch (Exception e) {
-            return EscalationChoice.ABORT;
-        } finally {
-            pending.remove(p);
-        }
+        return approvals.escalate(taskId, agent, objective, reason, threadNow(), run != null && run.stop.get());
     }
 
     @Override
