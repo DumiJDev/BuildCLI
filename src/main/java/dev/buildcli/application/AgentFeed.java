@@ -202,7 +202,7 @@ final class AgentFeed {
         }
         Matcher to = TO_ARG.matcher(args);
         if (name.equals("send_message") && to.find()) {
-            return "wrote to " + to.group(1).strip();
+            return Orchestrator.isPerson(to.group(1).strip()) ? "wrote to you" : "wrote to " + to.group(1).strip();
         }
         if (name.equals("ask_user")) {
             return "asked you a question";

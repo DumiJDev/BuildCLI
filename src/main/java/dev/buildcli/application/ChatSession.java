@@ -979,6 +979,16 @@ public final class ChatSession implements UserInterface {
     /** An agent writes, as itself, in a group it belongs to or in a private chat with a teammate. Runs on that agent's thread. */
     private String postAs(String from, String to, String text) {
         Run run = Run.CURRENT.get();
+        if (Orchestrator.isPerson(to)) {
+            // the agent writes to the person in its own private chat: it opens there, with an unread mark, wherever they are looking
+            directory.openDirect(from);
+            add(new Message(transcript.nextId(), Kind.AGENT, from, text, Instant.now(), State.NONE, List.of(), from));
+            String where = run == null ? from : run.origin;
+            if (!where.equals(from)) {
+                note(where, from + " wrote to you in your private chat.");
+            }
+            return "Sent to the person in your private chat with them; they will see it there. Tell whoever asked you that it is done.";
+        }
         Chat g = groups().stream().filter(c -> c.id().equalsIgnoreCase(to) || c.name().equalsIgnoreCase(to)).findFirst().orElse(null);
         if (g != null) {
             if (!g.has(from)) {
