@@ -8,7 +8,7 @@ import dev.buildcli.application.RunAborted;
 import dev.buildcli.application.ToolRuntime;
 import dev.buildcli.domain.*;
 import dev.buildcli.infrastructure.HeadlessUi;
-import dev.buildcli.infrastructure.SqliteRunStore;
+import dev.buildcli.infrastructure.StateStore;
 import dev.buildcli.infrastructure.ScriptedGateway;
 import dev.buildcli.ports.EscalationChoice;
 import dev.buildcli.ports.LlmGateway;
@@ -28,7 +28,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 class OrchestratorTest {
     @TempDir Path workspace;
-    SqliteRunStore store;
+    StateStore store;
 
     static final Agent ANA = new Agent("ana", "architect", "You design, you do not implement.",
             Set.of("filesystem.read", "agent.handoff"), Permissions.none());
@@ -38,7 +38,7 @@ class OrchestratorTest {
 
     @BeforeEach
     void setUp() {
-        store = new SqliteRunStore(SqliteRunStore.IN_MEMORY);
+        store = new StateStore(StateStore.IN_MEMORY);
     }
 
     Orchestrator orch(LlmGateway llm, HeadlessUi ui, Limits limits) {

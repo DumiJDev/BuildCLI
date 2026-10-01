@@ -55,7 +55,7 @@ escalates immediately. A denied approval is not a failure and is never retried.
 | Agents and teams of a project | `<project>/.buildcli/agents/`, `.buildcli/teams/` |
 | Project context for agents | `<project>/AGENTS.md` (information only, never configuration) |
 | Your own agents and teams | `~/.buildcli/agents/`, `~/.buildcli/teams/` |
-| Runs, tasks, events, usage | `~/.buildcli/projects/<id>/state.db` (SQLite), never inside the project |
+| Runs, tasks, events, usage, chat history | `~/.buildcli/projects/<id>/state.db` (SQLite; or `state.mv.db` with H2, or nothing on disk with `memory`: see Settings > State database), never inside the project |
 | Which project definitions you approved | `~/.buildcli/trust.json` |
 
 ## Choosing a model

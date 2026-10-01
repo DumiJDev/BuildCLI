@@ -13,7 +13,7 @@ import dev.buildcli.domain.Permissions;
 import dev.buildcli.domain.Team;
 import dev.buildcli.infrastructure.HeadlessUi;
 import dev.buildcli.infrastructure.ScriptedGateway;
-import dev.buildcli.infrastructure.SqliteRunStore;
+import dev.buildcli.infrastructure.StateStore;
 import dev.buildcli.ports.EscalationChoice;
 import dev.buildcli.ports.LlmGateway;
 import dev.buildcli.ports.LlmMessage;
@@ -49,7 +49,7 @@ class SecurityTest {
         };
     }
 
-    HeadlessUi run(ScriptedGateway script, HeadlessUi ui, SqliteRunStore store) {
+    HeadlessUi run(ScriptedGateway script, HeadlessUi ui, StateStore store) {
         Events events = new Events(store, "run1", ui);
         new Orchestrator(new Team("t", "ana", List.of(LEAD, DEV), Limits.defaults()), spy(script),
                 new ToolRuntime(dir, ui, events), ui, events).run("go");
@@ -70,7 +70,7 @@ class SecurityTest {
                 .say("bruno", "done")
                 .say("ana", "ok");
         var ui = new HeadlessUi(r -> false, EscalationChoice.ABORT, false);
-        try (var store = new SqliteRunStore(SqliteRunStore.IN_MEMORY)) {
+        try (var store = new StateStore(StateStore.IN_MEMORY)) {
             run(script, ui, store);
         }
 
@@ -97,7 +97,7 @@ class SecurityTest {
                 .say("ana", "ok");
         var ui = new HeadlessUi(r -> true, EscalationChoice.ABORT, false);
         List<String> logged = new ArrayList<>();
-        try (var store = new SqliteRunStore(SqliteRunStore.IN_MEMORY)) {
+        try (var store = new StateStore(StateStore.IN_MEMORY)) {
             run(script, ui, store);
             store.list("run1").forEach(e -> logged.add(e.payload()));
         }
@@ -120,7 +120,7 @@ class SecurityTest {
                 .say("bruno", "done")
                 .say("ana", "ok");
         var ui = new HeadlessUi(r -> true, EscalationChoice.ABORT, false);
-        try (var store = new SqliteRunStore(SqliteRunStore.IN_MEMORY)) {
+        try (var store = new StateStore(StateStore.IN_MEMORY)) {
             run(script, ui, store);
         }
         String detail = ui.approvals.get(0).detail();
@@ -137,7 +137,7 @@ class SecurityTest {
                 .say("bruno", "done")
                 .say("ana", "ok");
         var ui = new HeadlessUi(r -> true, EscalationChoice.ABORT, false);
-        try (var store = new SqliteRunStore(SqliteRunStore.IN_MEMORY)) {
+        try (var store = new StateStore(StateStore.IN_MEMORY)) {
             run(script, ui, store);
         }
         assertTrue(toolResultsSeenByBruno.get(0).startsWith("DENIED"), toolResultsSeenByBruno.get(0));
@@ -150,7 +150,7 @@ class SecurityTest {
                 .say("bruno", "done, the password=hunter2hunter2 still works")
                 .say("ana", "report with token ghp_abcdefghijklmnopqrstuvwxyz0123456789");
         var ui = new HeadlessUi(r -> true, EscalationChoice.ABORT, false);
-        try (var store = new SqliteRunStore(SqliteRunStore.IN_MEMORY)) {
+        try (var store = new StateStore(StateStore.IN_MEMORY)) {
             Events events = new Events(store, "run1", ui);
             new Orchestrator(new Team("t", "ana", List.of(LEAD, DEV), Limits.defaults()), spy(script),
                     new ToolRuntime(dir, ui, events), ui, events).run("deploy with secret=supersecretvalue1");

@@ -88,6 +88,25 @@ public final class CliContext {
         return StateLocations.projectStateDir(globalDir(), cwd);
     }
 
+    /** Which engine keeps the state: BUILDCLI_STORAGE, else the setting (project over global), else SQLite. */
+    public dev.buildcli.infrastructure.StateStore.Backend storageBackend() {
+        String fromEnv = processEnv.get("BUILDCLI_STORAGE");
+        if (fromEnv != null && !fromEnv.isBlank()) {
+            return dev.buildcli.infrastructure.StateStore.Backend.parse(fromEnv);
+        }
+        try {
+            var settings = new dev.buildcli.application.Settings(new dev.buildcli.infrastructure.FileSettingsStore(globalDir(), projectStateDir()));
+            return dev.buildcli.infrastructure.StateStore.Backend.parse(settings.get(dev.buildcli.application.Settings.STORAGE));
+        } catch (RuntimeException e) {
+            return dev.buildcli.infrastructure.StateStore.Backend.SQLITE;
+        }
+    }
+
+    /** Opens the project's state database with the chosen engine; writes are batched, and closing waits for them. */
+    public dev.buildcli.infrastructure.StateStore openState() {
+        return dev.buildcli.infrastructure.StateStore.open(stateDb(), storageBackend(), true);
+    }
+
     public Path stateDb() {
         return StateLocations.stateDb(globalDir(), cwd);
     }
@@ -117,7 +136,11 @@ public final class CliContext {
     }
 
     public boolean hasState() {
-        return Files.isRegularFile(stateDb());
+        return switch (storageBackend()) {
+            case SQLITE -> Files.isRegularFile(stateDb());
+            case H2 -> Files.isRegularFile(stateDb().resolveSibling("state.mv.db"));
+            case MEMORY -> false; // another process cannot see it, and this one has just started
+        };
     }
 
     /**

@@ -9,7 +9,7 @@ import dev.buildcli.domain.Agent;
 import dev.buildcli.domain.Event;
 import dev.buildcli.domain.Limits;
 import dev.buildcli.domain.Permissions;
-import dev.buildcli.infrastructure.SqliteRunStore;
+import dev.buildcli.infrastructure.StateStore;
 import dev.buildcli.ports.ChatLog;
 import dev.buildcli.ports.LlmGateway;
 import dev.buildcli.ports.LlmMessage;
@@ -28,7 +28,8 @@ import java.util.function.Consumer;
 
 /**
  * A hand-run load test (not a unit test): {@code java -cp ... dev.buildcli.LoadProbe events|chat [args]}.
- * "events" hammers the event log; "chat" runs many agents through the real session, orchestrator and SQLite with a fake
+ * "events W N virtual|platform ENGINE" hammers the event log; "chat A M LATENCY_MS ENGINE" with ENGINE one of sqlite, sqlite-batched, h2,
+ * h2-batched, memory-batched, none (no history); "chat" runs many agents through the real session, orchestrator and SQLite with a fake
  * model that takes a fixed time to answer, so what is measured is BuildCLI's own overhead.
  */
 public final class LoadProbe {
@@ -39,9 +40,9 @@ public final class LoadProbe {
         Path dir = Files.createTempDirectory("loadprobe");
         try {
             if (what.equals("events")) {
-                events(dir, Integer.parseInt(args[1]), Integer.parseInt(args[2]), args[3]);
+                events(dir, Integer.parseInt(args[1]), Integer.parseInt(args[2]), args[3], args[4]);
             } else {
-                chat(dir, Integer.parseInt(args[1]), Integer.parseInt(args[2]), Integer.parseInt(args[3]), args[4].equals("sqlite"));
+                chat(dir, Integer.parseInt(args[1]), Integer.parseInt(args[2]), Integer.parseInt(args[3]), args[4]);
             }
         } finally {
             try (var s = Files.walk(dir)) {
@@ -57,8 +58,18 @@ public final class LoadProbe {
     }
 
     /** {@code writers} concurrent writers append {@code perWriter} events each into the SQLite event log. */
-    static void events(Path dir, int writers, int perWriter, String kind) throws Exception {
-        try (SqliteRunStore store = new SqliteRunStore("jdbc:sqlite:" + dir.resolve("state.db"))) {
+    static StateStore open(Path dir, String engine) {
+        boolean batched = engine.endsWith("-batched");
+        return switch (engine.replace("-batched", "")) {
+            case "sqlite" -> StateStore.open(dir.resolve("state.db"), StateStore.Backend.SQLITE, batched);
+            case "h2" -> StateStore.open(dir.resolve("state.db"), StateStore.Backend.H2, batched);
+            case "memory" -> StateStore.open(dir.resolve("state.db"), StateStore.Backend.MEMORY, batched);
+            default -> StateStore.open(dir.resolve("state.db"), StateStore.Backend.SQLITE, false);
+        };
+    }
+
+    static void events(Path dir, int writers, int perWriter, String kind, String engine) throws Exception {
+        try (StateStore store = open(dir, engine)) {
             var done = new CountDownLatch(writers);
             long t0 = System.nanoTime();
             var pool = kind.equals("virtual") ? Executors.newVirtualThreadPerTaskExecutor() : Executors.newFixedThreadPool(writers);
@@ -72,16 +83,17 @@ public final class LoadProbe {
                 });
             }
             done.await();
+            store.list("nothing"); // a read waits for every queued write, so the time includes getting it all stored
             double s = (System.nanoTime() - t0) / 1e9;
             long total = (long) writers * perWriter;
-            System.out.printf("events: %d writers (%s) x %d = %d events in %.2f s = %,.0f events/s%n", writers, kind, perWriter, total, s, total / s);
+            System.out.printf("events (%s): %d writers (%s) x %d = %d events in %.2f s = %,.0f events/s%n", engine, writers, kind, perWriter, total, s, total / s);
             pool.shutdown();
         }
     }
 
-    static void chat(Path dir, int agents, int perAgent, int latencyMs, boolean sqlite) throws Exception {
-        SqliteRunStore store = new SqliteRunStore("jdbc:sqlite:" + dir.resolve("state.db"));
-        ChatLog log = sqlite ? store : ChatLog.NONE;
+    static void chat(Path dir, int agents, int perAgent, int latencyMs, String engine) throws Exception {
+        StateStore store = open(dir, engine);
+        ChatLog log = engine.equals("none") ? ChatLog.NONE : store;
         List<Agent> team = new ArrayList<>();
         for (int i = 0; i < agents; i++) {
             team.add(new Agent("a" + i, "dev", "", Set.of(), Permissions.none()));
@@ -135,8 +147,8 @@ public final class LoadProbe {
         double ideal = perAgent * latencyMs / 1000.0;
         long msgs = (long) agents * perAgent;
         frame.sort(null);
-        System.out.printf("chat: %d agents x %d messages (model %d ms, history %s): %d answers in %.2f s (ideal %.2f s, overhead x%.2f) = %,.0f answers/s; "
-                        + "submitting took %.0f ms%n", agents, perAgent, latencyMs, sqlite ? "sqlite" : "memory", msgs, wall, ideal, wall / ideal, msgs / wall,
+        System.out.printf("chat: %d agents x %d messages (model %d ms, state %s): %d answers in %.2f s (ideal %.2f s, overhead x%.2f) = %,.0f answers/s; "
+                        + "submitting took %.0f ms%n", agents, perAgent, latencyMs, engine, msgs, wall, ideal, wall / ideal, msgs / wall,
                 (submitted - t0) / 1e6);
         if (!frame.isEmpty()) {
             System.out.printf("  a screen asking every 16 ms: median %.2f ms, p99 %.2f ms, max %.2f ms (%d samples)%n", frame.get(frame.size() / 2) / 1e6,

@@ -15,7 +15,7 @@ import dev.buildcli.domain.Permissions;
 import dev.buildcli.domain.Task;
 import dev.buildcli.domain.TaskStatus;
 import dev.buildcli.domain.Team;
-import dev.buildcli.infrastructure.SqliteRunStore;
+import dev.buildcli.infrastructure.StateStore;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -89,7 +89,7 @@ class UndoTest {
 
     @Test
     void changesSurviveARestartExceptTheContentOfFilesThatMayHoldSecrets() throws Exception {
-        try (SqliteRunStore store = new SqliteRunStore(SqliteRunStore.IN_MEMORY)) {
+        try (StateStore store = new StateStore(StateStore.IN_MEMORY)) {
             store.saveChanges(7, List.of(new FileChange("ana", "src/A.java", true, "old", "new"),
                     new FileChange("ana", ".env", false, null, "API_KEY=abc"), new FileChange("ana", "config/db-password.txt", true, "a", "b")));
             var back = store.changes(7);
@@ -105,7 +105,7 @@ class UndoTest {
 
     @Test
     void onlyTheNewestChangeSetsAreKeptAndClearingAChatDropsItsChanges() throws Exception {
-        try (SqliteRunStore store = new SqliteRunStore(SqliteRunStore.IN_MEMORY)) {
+        try (StateStore store = new StateStore(StateStore.IN_MEMORY)) {
             for (int i = 1; i <= 60; i++) {
                 store.saveChanges(i, List.of(new FileChange("ana", "f" + i, false, null, "x")));
             }
@@ -138,7 +138,7 @@ class UndoTest {
     @Test
     void aRunThatWritesFilesLeavesACardAndUndoPutsThemBack() throws Exception {
         Files.writeString(dir.resolve("a.txt"), "v1");
-        try (SqliteRunStore store = new SqliteRunStore(SqliteRunStore.IN_MEMORY)) {
+        try (StateStore store = new StateStore(StateStore.IN_MEMORY)) {
             var session = new ChatSession(TEAM, List.of(TEAM.agents().get(0)), (team, request, ui, cancelled, dispatcher) -> {
                 Files.writeString(dir.resolve("a.txt"), "v2");
                 ui.fileChanged(new FileChange("ana", "a.txt", true, "v1", "v2"));

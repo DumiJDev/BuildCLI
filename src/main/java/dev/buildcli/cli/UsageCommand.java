@@ -2,7 +2,7 @@ package dev.buildcli.cli;
 
 import dev.buildcli.domain.AgentUsage;
 import dev.buildcli.domain.RunInfo;
-import dev.buildcli.infrastructure.SqliteRunStore;
+import dev.buildcli.infrastructure.StateStore;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -30,7 +30,7 @@ final class UsageCommand implements Callable<Integer> {
             ctx.out.println(json ? "{\"runs\":[]}" : "No runs yet for this project.");
             return 0;
         }
-        try (SqliteRunStore store = SqliteRunStore.open(ctx.stateDb())) {
+        try (StateStore store = ctx.openState()) {
             RunInfo r = TaskCommand.pickRun(ctx, store, run);
             if (r == null) {
                 return run == null ? 0 : 2;
