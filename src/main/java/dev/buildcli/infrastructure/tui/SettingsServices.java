@@ -76,6 +76,14 @@ public interface SettingsServices {
 
     void deleteAgent(String name) throws Exception;
 
+    /**
+     * Writes the three sample agents (architect, developer, reviewer) and AGENTS.md into the project, puts the agents in the open
+     * chat and makes a group of them. Files that exist are kept. @return the names of the agents that were added
+     */
+    default List<String> createSampleAgents() throws Exception {
+        throw new IllegalStateException("not available here");
+    }
+
     /** The model the team configuration gives an agent, or null. */
     String teamModel(String agent);
 }

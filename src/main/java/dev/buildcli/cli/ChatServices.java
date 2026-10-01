@@ -166,6 +166,35 @@ final class ChatServices implements SettingsServices {
     }
 
     @Override
+    public List<String> createSampleAgents() throws Exception {
+        SampleTeam.writeFiles(ctx.cwd, msg -> { });
+        retrust();
+        var fresh = new dev.buildcli.infrastructure.FileConfigRepository(ctx.cwd, ctx.globalDir()); // reads exactly what was written
+        List<String> added = new ArrayList<>();
+        var s = session;
+        for (String name : SampleTeam.NAMES) {
+            Agent agent = fresh.agent(name).orElse(null);
+            boolean known = (config.agent(name).isPresent() || created.containsKey(name)) && !deleted.contains(name);
+            if (agent == null || known) {
+                continue;
+            }
+            deleted.remove(name);
+            created.put(name, new AgentInfo(name, agent.role(), "this project", agent.source(), agent.capabilities().stream().sorted().toList()));
+            added.add(name);
+            if (s != null) {
+                s.addContact(agent);
+            }
+        }
+        if (added.isEmpty()) {
+            throw new IllegalArgumentException("the sample agents are already here");
+        }
+        if (s != null && s.group("#" + SampleTeam.GROUP) == null) {
+            s.createGroup(SampleTeam.GROUP, SampleTeam.NAMES); // the first member, ana, becomes its admin
+        }
+        return added;
+    }
+
+    @Override
     public String createAgent(String name, String role, String instructions, List<String> capabilities, boolean global) throws Exception {
         if (!NAME.matcher(name).matches()) {
             throw new IllegalArgumentException("the name must be lowercase letters, digits, - and _");

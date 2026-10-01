@@ -1037,23 +1037,42 @@ final class ChatScreen implements Element {
         rows.add(new Row(0, List.of()));
         int boxW = Math.min(width - 4, 56);
         int x = Math.max(0, (width - boxW) / 2);
-        String[][] actions = {{"Create your first agent", "agent"}, {"Choose a model and provider", "settings"}};
+        String[][] actions = {{"Add the sample team: ana, bruno and carla", "samples"}, {"Create your own agent", "agent"},
+            {"Connect a model and provider", "connect"}};
         for (String[] a : actions) {
-            Runnable act = a[1].equals("agent") ? () -> {
-                settingsOpen = true;
-                settingsView.startNewAgent();
-            } : () -> {
-                if (services.canConnect()) {
-                    openConnect(null);
-                } else {
+            Runnable act = switch (a[1]) {
+                case "samples" -> this::addSampleAgents;
+                case "agent" -> () -> {
                     settingsOpen = true;
-                }
+                    settingsView.startNewAgent();
+                };
+                default -> () -> {
+                    if (services.canConnect()) {
+                        openConnect(null);
+                    } else {
+                        settingsOpen = true;
+                    }
+                };
             };
             String label = "  " + a[0];
             rows.add(new Row(x, List.of(new Span(label + " ".repeat(Math.max(1, boxW - Wrap.width(label) - 2)) + "› ", st(Theme.TEXT, Theme.PANEL), act))));
             rows.add(new Row(0, List.of()));
         }
-        centred(rows, width, "Or run 'buildcli init' in a terminal for three sample agents in a group.", st(Theme.FAINT, Theme.BG));
+        centred(rows, width, "The sample team: ana plans and leads, bruno writes under src/ and runs mvn, carla reviews. "
+                + "Every write asks you first, and you can undo it.", st(Theme.FAINT, Theme.BG));
+    }
+
+    /** The "add the sample team" button of an empty chat: writes the agents, adds them live and opens their group. */
+    private void addSampleAgents() {
+        try {
+            List<String> added = services.createSampleAgents();
+            if (session.group("#backend") != null) {
+                select("#backend");
+            }
+            say("Added " + String.join(", ", added) + ". Say something in the group to start.");
+        } catch (Exception e) {
+            say("Could not add them: " + e.getMessage());
+        }
     }
 
     private void welcome(List<Row> rows, int width) {

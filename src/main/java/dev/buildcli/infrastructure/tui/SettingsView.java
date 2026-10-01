@@ -147,6 +147,8 @@ final class SettingsView {
                             })));
                 }
                 out.add(new Item("+ New agent", "", Theme.ACCENT, "Name, role, what it may do; saved " + scopeLabel(), this::newAgent, null, null, null));
+                out.add(new Item("+ Sample team", "", Theme.ACCENT, "ana (architect), bruno (developer), carla (reviewer) in a group, for this project",
+                        this::addSamples, null, null, null));
             }
             default -> { }
         }
@@ -255,6 +257,14 @@ final class SettingsView {
                                         fail(e.getMessage());
                                     }
                                 }))));
+    }
+
+    private void addSamples() {
+        try {
+            ok("Added " + String.join(", ", services.createSampleAgents()) + " and a group 'backend'.");
+        } catch (Exception e) {
+            fail(e.getMessage());
+        }
     }
 
     private void testProvider(String provider) {
