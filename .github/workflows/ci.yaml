@@ -41,14 +41,14 @@ jobs:
       - name: Smoke test the packaged jar
         run: java -jar target/buildcli.jar --help
 
-      - name: Smoke test the CLI (init, team list, doctor)
+      - name: Smoke test the CLI (init, agent list, doctor)
         shell: bash
         run: |
           work="$(mktemp -d)"
           export BUILDCLI_HOME="$work/home"
           cd "$work"
           java -jar "$GITHUB_WORKSPACE/target/buildcli.jar" init
-          java -jar "$GITHUB_WORKSPACE/target/buildcli.jar" team list
+          java -jar "$GITHUB_WORKSPACE/target/buildcli.jar" agent list
           java -jar "$GITHUB_WORKSPACE/target/buildcli.jar" doctor
 
       - name: Test the Unix installer

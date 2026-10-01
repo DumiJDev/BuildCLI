@@ -66,5 +66,5 @@ escalates immediately. A denied approval is not a failure and is never retried.
 
 The runtime bounds what a model can do but cannot make a weak one reliable. Agents that use tools need a capable model:
 7B and larger for local use, or any hosted OpenAI-compatible model. A 3B model passed a simple scenario once and then
-failed after small prompt changes ([findings](m2-real-model-findings.md)). Qualify a model before relying on it with
-`buildcli bench`, which needs a temperature above 0 and at least 10 runs to mean anything.
+failed after small prompt changes ([findings](m2-real-model-findings.md)). Qualify a model before relying on it by
+trying your own tasks with it several times: one run proves little, especially at temperature 0.
