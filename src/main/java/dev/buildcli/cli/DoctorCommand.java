@@ -92,7 +92,8 @@ final class DoctorCommand implements Callable<Integer> {
 
     private void checkGit() {
         try {
-            Process p = new ProcessBuilder("git", "--version").redirectErrorStream(true).start();
+            // the point of this check is to run the git that is first on the user's PATH, the one the agents will run too
+            Process p = new ProcessBuilder("git", "--version").redirectErrorStream(true).start(); // NOSONAR java:S4036
             String out = new String(p.getInputStream().readAllBytes()).strip();
             if (p.waitFor(5, TimeUnit.SECONDS) && p.exitValue() == 0) {
                 ok(out);

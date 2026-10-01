@@ -38,7 +38,7 @@ public final class FileConfigRepository implements ConfigRepository {
     public static final int SCHEMA = 1;
     public static final int MAX_CONTEXT_CHARS = 8000;
     /** Definition files are small; a huge one in a cloned project is refused instead of being read into memory. */
-    public static final long MAX_FILE_BYTES = 256 * 1024;
+    public static final long MAX_FILE_BYTES = 256L * 1024;
 
     private static final ObjectMapper YAML = new ObjectMapper(new YAMLFactory());
     private static final Pattern NAME = Pattern.compile("[a-z][a-z0-9_-]*");

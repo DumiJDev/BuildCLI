@@ -62,8 +62,8 @@ class StateBackendsTest {
             store.saveTask("r1", t);
             t.status = TaskStatus.DONE;
             t.result = "all good";
-            t.attempts = 2;
-            t.tokens = 123;
+            t.attempts(2);
+            t.tokens(123);
             store.saveTask("r1", t);
             Task child = new Task(2, 1, "ana", "bruno", "child", "");
             store.saveTask("r1", child);
@@ -76,7 +76,7 @@ class StateBackendsTest {
             assertEquals(2, tasks.size(), "saving a task again updates it");
             assertEquals(TaskStatus.DONE, tasks.get(0).status);
             assertEquals("all good", tasks.get(0).result);
-            assertEquals(123, tasks.get(0).tokens);
+            assertEquals(123, tasks.get(0).tokens());
             assertEquals(null, tasks.get(0).parentId);
             assertEquals(1, tasks.get(1).parentId);
             assertEquals(List.of("step=1", "step=2", "read_file"), store.list("r1").stream().map(Event::payload).toList(), "in the order written");

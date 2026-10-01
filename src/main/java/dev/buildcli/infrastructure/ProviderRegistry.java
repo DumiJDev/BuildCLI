@@ -20,7 +20,7 @@ import java.util.regex.Pattern;
  */
 public final class ProviderRegistry {
     public static final String FILE_NAME = "providers.yaml";
-    private static final long MAX_BYTES = 256 * 1024;
+    private static final long MAX_BYTES = 256L * 1024;
     private static final Pattern NAME = Pattern.compile("[a-z][a-z0-9-]{0,39}");
     private static final Pattern ENV = Pattern.compile("[A-Z_][A-Z0-9_]{0,63}");
 

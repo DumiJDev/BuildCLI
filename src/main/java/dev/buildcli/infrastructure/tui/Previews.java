@@ -21,7 +21,22 @@ final class Previews {
     private Previews() {}
 
     /** Pixels are packed 0xRRGGBB, row-major, {@code width x height}. */
-    record Image(int width, int height, int[] pixels) {}
+    record Image(int width, int height, int[] pixels) {
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof Image i && width == i.width && height == i.height && java.util.Arrays.equals(pixels, i.pixels);
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * (31 * width + height) + java.util.Arrays.hashCode(pixels);
+        }
+
+        @Override
+        public String toString() {
+            return "Image[" + width + "x" + height + "]";
+        }
+    }
 
     record Audio(double seconds, String waveform) {}
 
@@ -132,14 +147,14 @@ final class Previews {
                     int lo = big ? buf[i + 1] & 0xFF : buf[i] & 0xFF;
                     int hi = big ? buf[i] : buf[i + 1];
                     double v = Math.abs((hi << 8 | lo)) / 32768.0;
-                    int bar = (int) Math.min(bars - 1, seen * bars / frames);
+                    int bar = (int) Math.min(bars - 1, (long) seen * bars / frames);
                     peak[bar] = Math.max(peak[bar], v);
                     seen++;
                 }
             }
             StringBuilder sb = new StringBuilder();
             for (double p : peak) {
-                sb.append(BARS.charAt((int) Math.min(BARS.length() - 1, Math.round(Math.sqrt(p) * (BARS.length() - 1)))));
+                sb.append(BARS.charAt((int) Math.min((long) BARS.length() - 1, Math.round(Math.sqrt(p) * (BARS.length() - 1)))));
             }
             return new Audio(seconds, sb.toString());
         } catch (Exception e) {

@@ -30,7 +30,7 @@ public final class Redactor {
 
     /** name = value / name: value where the name looks like a secret. Keeps the name, masks the value. */
     private static final Pattern ASSIGNMENT = Pattern.compile(
-            "(?i)(\\b[\\w.-]*(?:api[_-]?key|secret|token|passw(?:or)?d|passwd|private[_-]?key|credential)[\\w.-]*\"?\\s*[:=]\\s*)"
+            "(?i)(\\b[\\w.-]*(?:api[_-]?key|secret|token|passw(?:or)?d|private[_-]?key|credential)[\\w.-]*\"?\\s*[:=]\\s*)"
                     + "(\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s,;\"']+)");
 
     private static final int MIN_SECRET_LENGTH = 6;
@@ -52,7 +52,7 @@ public final class Redactor {
 
     /** Short values and literals (tokens = 3, password = null) are code, not credentials; masking them is only noise. */
     private static boolean looksLikeASecret(String value) {
-        String v = value.replaceAll("^[\"']|[\"']$", "");
+        String v = value.replaceAll("(?:^[\"'])|(?:[\"']$)", "");
         return v.length() >= MIN_SECRET_LENGTH && !LITERALS.contains(v.toLowerCase());
     }
 }

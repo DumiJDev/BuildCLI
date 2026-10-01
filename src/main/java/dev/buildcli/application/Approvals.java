@@ -7,8 +7,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiConsumer;
 
@@ -54,7 +56,10 @@ final class Approvals {
         setState.accept(request.agent(), "waiting for you");
         try {
             return answer.get();
-        } catch (Exception e) {
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        } catch (ExecutionException | CancellationException e) {
             return false;
         } finally {
             pending.remove(p);
@@ -73,7 +78,10 @@ final class Approvals {
         changed.run();
         try {
             return answer.get();
-        } catch (Exception e) {
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return EscalationChoice.ABORT;
+        } catch (ExecutionException | CancellationException e) {
             return EscalationChoice.ABORT;
         } finally {
             pending.remove(p);
@@ -93,7 +101,10 @@ final class Approvals {
         try {
             String text = answer.get();
             return text == null || text.isBlank() ? "The user chose not to answer. Decide yourself, or report that you could not go on." : "The user answered: " + text;
-        } catch (Exception e) {
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return "No answer (interrupted).";
+        } catch (ExecutionException | CancellationException e) {
             return "No answer (" + e.getClass().getSimpleName() + ").";
         } finally {
             pending.remove(p);
@@ -137,10 +148,8 @@ final class Approvals {
     /** The oldest open question, or null. */
     Pending first() {
         // one read of the list: checking isEmpty() and then get(0) fails when an answer removes the request in between
-        for (Pending p : pending) {
-            return p;
-        }
-        return null;
+        var oldest = pending.iterator();
+        return oldest.hasNext() ? oldest.next() : null;
     }
 
     int count() {

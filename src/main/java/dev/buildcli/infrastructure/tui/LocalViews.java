@@ -14,9 +14,9 @@ import java.util.concurrent.TimeUnit;
  * bounded (time, size) and cannot be turned into writes (no user-supplied git options).
  */
 final class LocalViews {
-    private static final long MAX_FILE_BYTES = 512 * 1024;
+    private static final long MAX_FILE_BYTES = 512L * 1024;
     private static final int MAX_LINES = 20_000;
-    private static final long MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
+    private static final long MAX_OUTPUT_BYTES = 2L * 1024 * 1024;
 
     private LocalViews() {}
 

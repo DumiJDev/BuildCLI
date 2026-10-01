@@ -191,6 +191,7 @@ final class StateDb implements AutoCloseable {
                 // closing: apply what is still waiting, then stop
                 queue.drainTo(batch);
                 apply(batch);
+                Thread.currentThread().interrupt();
                 return;
             }
             queue.drainTo(batch, MAX_BATCH - 1);

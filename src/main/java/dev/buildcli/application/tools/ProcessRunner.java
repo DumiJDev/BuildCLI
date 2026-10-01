@@ -29,7 +29,8 @@ final class ProcessRunner {
         pb.environment().putAll(extraEnv);
         Process process = pb.start();
         ByteArrayOutputStream captured = new ByteArrayOutputStream();
-        Thread drain = Thread.ofVirtual().start(() -> {
+        // a platform thread: reading a process's pipe blocks in native code, which would pin a virtual thread's carrier
+        Thread drain = Thread.ofPlatform().daemon().start(() -> {
             try (InputStream in = process.getInputStream()) {
                 byte[] buf = new byte[8192];
                 int n;

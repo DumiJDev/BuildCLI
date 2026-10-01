@@ -42,8 +42,8 @@ class StateStoreTest {
             Task t = new Task(1, null, "user", "ana", "objective", "brief");
             t.status = TaskStatus.DONE;
             t.result = "all good";
-            t.attempts = 2;
-            t.tokens = 123;
+            t.attempts(2);
+            t.tokens(123);
             store.saveTask("r1", t);
             store.append("r1", new Event(Instant.now(), "TaskCreated", 1, "ana", "payload"));
             store.finishRun("r1", "DONE", "summary");
@@ -57,8 +57,8 @@ class StateStoreTest {
             Task t = store.listTasks("r1").get(0);
             assertEquals(TaskStatus.DONE, t.status);
             assertEquals("all good", t.result);
-            assertEquals(2, t.attempts);
-            assertEquals(123, t.tokens);
+            assertEquals(2, t.attempts());
+            assertEquals(123, t.tokens());
             assertNull(t.parentId);
             assertEquals(1, store.list("r1").size());
         }
