@@ -297,7 +297,7 @@ final class ConversationRows {
     }
 
     private void userBubble(List<Row> rows, int width, Message m, boolean retryable) {
-        Style base = st(Theme.TEXT, Theme.ME);
+        Style base = st(Theme.ON_ME, Theme.ME);
         Style code = st(Theme.CODE_TEXT, Theme.CODE);
         int max = maxBody(width);
         List<List<Span>> body = new ArrayList<>();
@@ -312,10 +312,10 @@ final class ConversationRows {
         footer.add(new Span(TIME.format(m.at()) + " ", meta));
         switch (m.state()) {
             case QUEUED -> footer.add(new Span("✓", meta));
-            case RUNNING -> footer.add(new Span("✓✓", st(Theme.BLUE, Theme.ME)));
-            case DONE -> footer.add(new Span("✓✓", st(Theme.BLUE, Theme.ME)));
+            case RUNNING -> footer.add(new Span("✓✓", st(Theme.TICK, Theme.ME)));
+            case DONE -> footer.add(new Span("✓✓", st(Theme.TICK, Theme.ME)));
             case FAILED -> {
-                footer.add(new Span("! not sent ", st(Theme.RED, Theme.ME).bold()));
+                footer.add(new Span("! not sent ", st(Theme.DANGER, Theme.ME).bold()));
                 if (retryable) {
                     footer.add(new Span(" Retry ", st(Theme.BG, Theme.AMBER).bold(), () -> session.retry(m.id())));
                     if (services.canConnect()) {
@@ -463,7 +463,7 @@ final class ConversationRows {
             Previews.Audio audio = Previews.audio(a);
             String d = audio == null ? "" : Previews.duration(audio.seconds());
             List<Span> l = new ArrayList<>();
-            l.add(new Span("▶ ", st(Theme.TEXT, Theme.ME).bold()));
+            l.add(new Span("▶ ", st(Theme.ON_ME, Theme.ME).bold()));
             l.add(new Span(audio != null && !audio.waveform().isEmpty() ? audio.waveform() : "━━━━━━━━━━━━━━━━━━", st(Theme.BLUE, Theme.ME)));
             l.add(new Span("  " + (d.isEmpty() ? size : d), st(Theme.ON_ME_DIM, Theme.ME)));
             body.add(l);

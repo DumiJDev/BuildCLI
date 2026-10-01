@@ -4,7 +4,7 @@ import dev.tamboui.style.Color;
 import dev.tamboui.style.Style;
 
 /**
- * Colours of the chat: WhatsApp Web's dark and light themes, and a high-contrast one. Every style sets both
+ * Colours of the chat, taken from the BuildCLI logo: deep navy and cream (dark, light) and a high-contrast one. Every style sets both
  * foreground and background, so the look does not depend on the terminal's own theme. Switched live from Settings.
  */
 final class Theme {
@@ -29,7 +29,10 @@ final class Theme {
     static Color BLUE;
     static Color RED;
     static Color AMBER;
+    static Color ON_ME;
     static Color ON_ME_DIM;
+    /** The double tick of a delivered message, readable on the colour of your own bubbles. */
+    static Color TICK;
     static Color CODE_TEXT;
     static Color LINE;
     static Color ON_ACCENT;
@@ -55,29 +58,31 @@ final class Theme {
         current = n;
         switch (n) {
             case "light" -> {
-                BG = Color.rgb(239, 234, 226);
-                SIDEBAR = Color.rgb(255, 255, 255);
-                PANEL = Color.rgb(240, 242, 245);
+                BG = Color.rgb(234, 237, 233);
+                SIDEBAR = Color.rgb(250, 252, 249);
+                PANEL = Color.rgb(241, 244, 240);
                 FIELD = Color.rgb(255, 255, 255);
-                SELECTED = Color.rgb(240, 242, 245);
-                ME = Color.rgb(217, 253, 211);
+                SELECTED = Color.rgb(226, 231, 226);
+                ME = Color.rgb(30, 37, 48);
                 THEM = Color.rgb(255, 255, 255);
                 PILL = Color.rgb(255, 255, 255);
-                CODE = Color.rgb(240, 240, 240);
+                CODE = Color.rgb(238, 240, 237);
                 ERROR_BG = Color.rgb(253, 226, 226);
                 DIALOG = Color.rgb(255, 255, 255);
-                TEXT = Color.rgb(17, 27, 33);
-                DIM = Color.rgb(102, 119, 129);
-                FAINT = Color.rgb(160, 170, 176);
-                ACCENT = Color.rgb(0, 128, 105);
-                GREEN = Color.rgb(0, 150, 80);
-                BLUE = Color.rgb(0, 132, 214);
+                TEXT = Color.rgb(28, 34, 44);
+                DIM = Color.rgb(96, 108, 122);
+                FAINT = Color.rgb(158, 168, 176);
+                ACCENT = Color.rgb(30, 37, 48);
+                GREEN = Color.rgb(30, 140, 80);
+                BLUE = Color.rgb(0, 112, 200);
                 RED = Color.rgb(200, 40, 60);
-                AMBER = Color.rgb(180, 110, 0);
-                ON_ME_DIM = Color.rgb(90, 120, 100);
+                AMBER = Color.rgb(176, 108, 0);
+                ON_ME = Color.rgb(246, 250, 244);
+                TICK = Color.rgb(120, 180, 255);
+                ON_ME_DIM = Color.rgb(170, 182, 196);
                 CODE_TEXT = Color.rgb(150, 60, 0);
-                LINE = Color.rgb(222, 226, 230);
-                ON_ACCENT = Color.rgb(255, 255, 255);
+                LINE = Color.rgb(220, 225, 220);
+                ON_ACCENT = Color.rgb(246, 250, 244);
                 ADD_BG = Color.rgb(220, 245, 225);
                 ADD_FG = Color.rgb(20, 110, 40);
                 DEL_BG = Color.rgb(253, 225, 225);
@@ -92,7 +97,7 @@ final class Theme {
                 PANEL = Color.rgb(20, 20, 20);
                 FIELD = Color.rgb(30, 30, 30);
                 SELECTED = Color.rgb(50, 50, 50);
-                ME = Color.rgb(0, 70, 55);
+                ME = Color.rgb(255, 255, 255);
                 THEM = Color.rgb(30, 30, 30);
                 PILL = Color.rgb(25, 25, 25);
                 CODE = Color.rgb(15, 15, 15);
@@ -101,12 +106,14 @@ final class Theme {
                 TEXT = Color.rgb(255, 255, 255);
                 DIM = Color.rgb(200, 200, 200);
                 FAINT = Color.rgb(150, 150, 150);
-                ACCENT = Color.rgb(0, 230, 170);
-                GREEN = Color.rgb(80, 255, 120);
+                ACCENT = Color.rgb(255, 255, 255);
+                GREEN = Color.rgb(110, 255, 150);
                 BLUE = Color.rgb(120, 200, 255);
                 RED = Color.rgb(255, 90, 100);
                 AMBER = Color.rgb(255, 215, 0);
-                ON_ME_DIM = Color.rgb(200, 230, 220);
+                ON_ME = Color.rgb(0, 0, 0);
+                TICK = Color.rgb(0, 80, 200);
+                ON_ME_DIM = Color.rgb(60, 60, 60);
                 CODE_TEXT = Color.rgb(255, 220, 150);
                 LINE = Color.rgb(120, 120, 120);
                 ON_ACCENT = Color.rgb(0, 0, 0);
@@ -119,34 +126,36 @@ final class Theme {
                     Color.rgb(255, 160, 110), Color.rgb(255, 130, 180), Color.rgb(100, 240, 250), Color.rgb(200, 240, 140)};
             }
             default -> {
-                BG = Color.rgb(11, 20, 26);
-                SIDEBAR = Color.rgb(17, 27, 33);
-                PANEL = Color.rgb(32, 44, 51);
-                FIELD = Color.rgb(42, 57, 66);
-                SELECTED = Color.rgb(42, 57, 66);
-                ME = Color.rgb(0, 92, 75);
-                THEM = Color.rgb(32, 44, 51);
-                PILL = Color.rgb(24, 34, 41);
-                CODE = Color.rgb(8, 14, 18);
-                ERROR_BG = Color.rgb(74, 28, 28);
-                DIALOG = Color.rgb(32, 44, 51);
-                TEXT = Color.rgb(233, 237, 239);
-                DIM = Color.rgb(134, 150, 160);
-                FAINT = Color.rgb(84, 101, 111);
-                ACCENT = Color.rgb(0, 168, 132);
-                GREEN = Color.rgb(37, 211, 102);
-                BLUE = Color.rgb(83, 189, 235);
-                RED = Color.rgb(241, 92, 109);
-                AMBER = Color.rgb(255, 202, 40);
-                ON_ME_DIM = Color.rgb(160, 200, 190);
+                BG = Color.rgb(20, 26, 35);
+                SIDEBAR = Color.rgb(30, 37, 48);
+                PANEL = Color.rgb(38, 47, 60);
+                FIELD = Color.rgb(50, 61, 77);
+                SELECTED = Color.rgb(50, 61, 77);
+                ME = Color.rgb(246, 250, 244);
+                THEM = Color.rgb(38, 47, 60);
+                PILL = Color.rgb(27, 34, 44);
+                CODE = Color.rgb(14, 18, 25);
+                ERROR_BG = Color.rgb(74, 30, 36);
+                DIALOG = Color.rgb(38, 47, 60);
+                TEXT = Color.rgb(240, 243, 240);
+                DIM = Color.rgb(142, 154, 170);
+                FAINT = Color.rgb(92, 104, 120);
+                ACCENT = Color.rgb(246, 250, 244);
+                GREEN = Color.rgb(125, 205, 155);
+                BLUE = Color.rgb(112, 172, 240);
+                RED = Color.rgb(240, 104, 114);
+                AMBER = Color.rgb(240, 192, 92);
+                ON_ME = Color.rgb(30, 37, 48);
+                TICK = Color.rgb(38, 118, 210);
+                ON_ME_DIM = Color.rgb(104, 116, 132);
                 CODE_TEXT = Color.rgb(255, 214, 165);
-                LINE = Color.rgb(34, 45, 52);
-                ON_ACCENT = Color.rgb(11, 20, 26);
-                ADD_BG = Color.rgb(22, 50, 32);
-                ADD_FG = Color.rgb(140, 220, 150);
-                DEL_BG = Color.rgb(60, 24, 24);
-                DEL_FG = Color.rgb(240, 150, 150);
-                DANGER = Color.rgb(150, 40, 40);
+                LINE = Color.rgb(46, 56, 71);
+                ON_ACCENT = Color.rgb(30, 37, 48);
+                ADD_BG = Color.rgb(24, 56, 42);
+                ADD_FG = Color.rgb(140, 220, 160);
+                DEL_BG = Color.rgb(70, 30, 36);
+                DEL_FG = Color.rgb(240, 150, 158);
+                DANGER = Color.rgb(178, 48, 60);
                 agentColors = new Color[] {Color.rgb(83, 189, 235), Color.rgb(255, 202, 40), Color.rgb(224, 120, 255), Color.rgb(102, 187, 106),
                     Color.rgb(255, 138, 101), Color.rgb(240, 98, 146), Color.rgb(77, 208, 225), Color.rgb(174, 213, 129)};
             }
