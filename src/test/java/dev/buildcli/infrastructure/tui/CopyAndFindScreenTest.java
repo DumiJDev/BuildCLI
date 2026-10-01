@@ -30,7 +30,7 @@ class CopyAndFindScreenTest {
     final List<String> copied = new CopyOnWriteArrayList<>();
 
     ChatScreen screen(String answer) throws Exception {
-        var session = new ChatSession(ChatScreenTest.TEAM, (team, request, ui, cancelled, dispatcher) -> {
+        var session = new ChatSession(ChatScreenTest.ROSTER, (team, request, ui, cancelled, dispatcher) -> {
             Task t = new Task(1, null, "user", "ana", request.text(), "");
             t.status = TaskStatus.DONE;
             t.result = request.text().startsWith("again") ? "second banana" : answer;

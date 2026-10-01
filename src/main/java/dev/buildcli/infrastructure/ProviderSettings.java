@@ -8,7 +8,7 @@ import java.util.Map;
 /**
  * Machine configuration for talking to models: which providers exist (built in, plus the user's {@code providers.yaml}),
  * the environment the API keys are read from (never stored), and generation settings. Model choice ("openrouter /
- * openrouter/free") is team configuration.
+ * openrouter/free") is configuration of the agents.
  */
 public record ProviderSettings(ProviderRegistry registry, Map<String, String> env, int ollamaThreads, double temperature,
                                boolean streaming) {

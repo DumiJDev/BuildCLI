@@ -2,7 +2,7 @@ package dev.buildcli.domain;
 
 import java.util.Map;
 
-/** Which model serves which agent: a team default plus per-agent overrides. Either may be absent. */
+/** Which model serves which agent: a default plus per-agent overrides. Either may be absent. */
 public record ModelRouting(ModelRef defaultModel, Map<String, ModelRef> overrides) {
 
     public static ModelRouting unspecified() {

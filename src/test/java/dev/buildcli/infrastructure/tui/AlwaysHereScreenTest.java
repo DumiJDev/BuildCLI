@@ -24,7 +24,7 @@ class AlwaysHereScreenTest {
     final List<Boolean> answers = new CopyOnWriteArrayList<>();
 
     ChatSession session(ApprovalRequest ask) {
-        return new ChatSession(ChatScreenTest.TEAM, (team, request, ui, cancelled, dispatcher) -> {
+        return new ChatSession(ChatScreenTest.ROSTER, (team, request, ui, cancelled, dispatcher) -> {
             answers.add(ui.approve(ask));
             Task t = new Task(1, null, "user", "ana", request.text(), "");
             t.status = TaskStatus.DONE;

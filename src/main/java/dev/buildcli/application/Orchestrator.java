@@ -5,7 +5,7 @@ import dev.buildcli.domain.Capability;
 import dev.buildcli.domain.Limits;
 import dev.buildcli.domain.Task;
 import dev.buildcli.domain.TaskStatus;
-import dev.buildcli.domain.Team;
+import dev.buildcli.domain.Roster;
 import dev.buildcli.ports.EscalationChoice;
 import dev.buildcli.ports.LlmGateway;
 import dev.buildcli.ports.LlmMessage;
@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
  * written, commands run) stay visible to the agent and are not repeated.
  */
 public final class Orchestrator {
-    private final Team team;
+    private final Roster roster;
     private final Limits limits;
     private final LlmGateway llm;
     private final ToolRuntime tools;
@@ -90,9 +90,9 @@ public final class Orchestrator {
         }
     }
 
-    public Orchestrator(Team team, LlmGateway llm, ToolRuntime tools, UserInterface ui, Events events, String projectContext) {
-        this.team = team;
-        this.limits = team.limits();
+    public Orchestrator(Roster roster, LlmGateway llm, ToolRuntime tools, UserInterface ui, Events events, String projectContext) {
+        this.roster = roster;
+        this.limits = roster.limits();
         this.llm = llm;
         this.tools = tools;
         this.ui = ui;
@@ -100,8 +100,8 @@ public final class Orchestrator {
         this.projectContext = projectContext == null ? "" : projectContext;
     }
 
-    public Orchestrator(Team team, LlmGateway llm, ToolRuntime tools, UserInterface ui, Events events) {
-        this(team, llm, tools, ui, events, "");
+    public Orchestrator(Roster roster, LlmGateway llm, ToolRuntime tools, UserInterface ui, Events events) {
+        this(roster, llm, tools, ui, events, "");
     }
 
     public List<Task> tasks() {
@@ -113,19 +113,19 @@ public final class Orchestrator {
         this.cancelled = cancelled;
     }
 
-    /** Runs a request through the team's lead. Throws RunAborted if the user aborts an escalation. */
+    /** Runs a request through the lead of the roster. Throws RunAborted if the user aborts an escalation. */
     public Task run(String request) {
         return run(new Request(request));
     }
 
-    /** Runs a request through the agent it is addressed to, or the team's lead. */
+    /** Runs a request through the agent it is addressed to, or the roster's lead. */
     public Task run(Request request) {
-        String to = request.target() == null ? team.lead() : request.target();
-        if (team.agent(to).isEmpty()) {
-            throw new IllegalArgumentException("no agent named '" + to + "' in team '" + team.name() + "'");
+        String to = request.target() == null ? roster.lead() : request.target();
+        if (roster.agent(to).isEmpty()) {
+            throw new IllegalArgumentException("no agent named '" + to + "' in '" + roster.name() + "'");
         }
         this.request = request;
-        events.startRun(team.name(), request.text());
+        events.startRun(roster.name(), request.text());
         events.emit("RunStarted", 0, "user", request.text());
         Task root = newTask(null, "user", to, request.text(), "");
         try {
@@ -155,7 +155,7 @@ public final class Orchestrator {
     }
 
     private String runTask(Task t, int depth) {
-        Agent agent = team.agent(t.to).orElseThrow();
+        Agent agent = roster.agent(t.to).orElseThrow();
         List<LlmMessage> transcript = new ArrayList<>();
         transcript.add(new LlmMessage.System(systemPrompt(agent)));
         transcript.add(t.parentId == null ? new LlmMessage.User(taskPrompt(t), request.attachments()) : new LlmMessage.User(taskPrompt(t)));
@@ -298,7 +298,7 @@ public final class Orchestrator {
             return "ERROR: " + error;
         }
         String to = String.valueOf(call.args().get("to"));
-        Agent target = team.agent(to).orElseThrow();
+        Agent target = roster.agent(to).orElseThrow();
         Object brief = call.args().get("brief");
         handoffs[0]++;
         Task child = newTask(parent.id, from.name(), target.name(), String.valueOf(call.args().get("objective")),
@@ -317,8 +317,8 @@ public final class Orchestrator {
             return from.name() + " does not have capability agent.handoff";
         }
         Object to = args.get("to");
-        if (to == null || team.agent(to.toString()).isEmpty()) {
-            return "unknown teammate '" + to + "'. Team members: " + roster(from);
+        if (to == null || roster.agent(to.toString()).isEmpty()) {
+            return "unknown teammate '" + to + "'. Teammates: " + mates(from);
         }
         if (to.toString().equalsIgnoreCase(from.name())) {
             return "you cannot hand off to yourself";
@@ -333,16 +333,16 @@ public final class Orchestrator {
         return null;
     }
 
-    private String roster(Agent self) {
-        return team.agents().stream().filter(a -> !a.name().equals(self.name()) && dispatcher.sees(self.name(), a.name()))
+    private String mates(Agent self) {
+        return roster.agents().stream().filter(a -> !a.name().equals(self.name()) && dispatcher.sees(self.name(), a.name()))
                 .map(a -> a.name() + " (" + a.role() + ")").collect(Collectors.joining(", "));
     }
 
     private String systemPrompt(Agent agent) {
         StringBuilder sb = new StringBuilder();
         sb.append("You are ").append(agent.name()).append(", the ").append(agent.role())
-                .append(" of the team '").append(team.name()).append("'.\n").append(agent.instructions()).append('\n');
-        String mates = roster(agent);
+                .append(".\n").append(agent.instructions()).append('\n');
+        String mates = mates(agent);
         if (!mates.isEmpty()) {
             sb.append("Teammates: ").append(mates).append(".\n");
         }

@@ -12,12 +12,12 @@ import java.util.function.Consumer;
  * of everything, an innovator; their files are drafts based on what each of them committed, for them to correct) and an AGENTS.md, written
  * by {@code buildcli init} and by the "add the sample agents" button of an empty chat. Existing files are never overwritten.
  */
-final class SampleTeam {
+final class SampleAgents {
     static final List<String> NAMES = List.of("wheslley", "breno", "matheus", "dumildes");
     /** The group the samples are put in; wheslley, the first, is its admin. */
     static final String GROUP = "maintainers";
 
-    private SampleTeam() {}
+    private SampleAgents() {}
 
     /** @return how many files were created; each one, and each one skipped, is reported to {@code log} */
     static int writeFiles(Path project, Consumer<String> log) throws IOException {

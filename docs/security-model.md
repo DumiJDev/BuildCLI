@@ -60,8 +60,8 @@ call. The model may be *fooled*; it cannot be *given more power*.
   between the check and the use could still escape. Agents in the chat can run in parallel, but writes and commands are
   serialised by the workspace lock, so this needs something else on your machine acting concurrently.
 - **Approvals are only as good as your attention.** A diff you approve without reading is still applied.
-- **Small models make mistakes.** The runtime bounds what a mistake can do; it cannot make a weak model reliable. See the
-  M0 findings for measurements.
+- **Small models make mistakes.** The runtime bounds what a mistake can do; it cannot make a weak model reliable. See
+  [`m2-real-model-findings.md`](m2-real-model-findings.md) for measurements.
 - **Untested on macOS and Windows terminals**, and the command tests use `java -version` for portability; the real-model
   scenario is Unix-only.
 

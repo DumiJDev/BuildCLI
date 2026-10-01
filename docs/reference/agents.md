@@ -1,4 +1,4 @@
-# Agents, teams and project context (schema 1)
+# Agents and project context (schema 1)
 
 BuildCLI reads its configuration from files you can commit with the project. Everything is validated strictly when
 loaded: a typo in a key or a permission is an **error** (never silently ignored), and **all** problems are reported at
@@ -10,9 +10,8 @@ once.
 |---|---|---|
 | `AGENTS.md` (project root) | Project **context** for humans and agents: build commands, architecture, conventions. Read as information only; it can never change an agent's role or permissions. Truncated at 8,000 characters. | Yes |
 | `.buildcli/agents/*.md`, `*.yaml` | Agent definitions of the project | Optional |
-| `.buildcli/teams/*.yaml` | Team definitions of the project | Optional |
-| `~/.buildcli/agents`, `~/.buildcli/teams` | Global (per-user) definitions. `BUILDCLI_HOME` overrides `~/.buildcli`. | n/a |
-| `~/.buildcli/projects/<id>/state.db` | Operational state (runs, tasks, events), keyed by project. **Never inside the project tree.** | Never |
+| `~/.buildcli/agents` | Global (per-user) agent definitions. `BUILDCLI_HOME` overrides `~/.buildcli`. | n/a |
+| `~/.buildcli/projects/<id>/` | Operational state keyed by project: the database (runs, tasks, events, chat history), your groups (`chats.yaml`), who may contact whom (`reach.yaml`) and your settings. **Never inside the project tree.** | Never |
 
 Project definitions override global ones with the same name. Definitions from a project are **untrusted until you approve them** (see the [security model](../security-model.md)). (`.agents/` compatibility is planned for 1.4.)
 
@@ -63,25 +62,15 @@ Notes on permissions:
 - `permissions.network` is **rejected** in 1.0: it cannot be enforced without the command sandbox planned for 1.2, and
   an unenforced permission would be misleading.
 
-## Team
+## Groups, models and limits are not agent files
 
-```yaml
-schema: 1
-name: backend
-lead: ana                  # receives your request and delegates
-agents: [ana, bruno, carla]
-runtime:                   # which model serves which agent (runtime configuration, not part of the agent)
-  default: { provider: ollama, model: qwen3-coder }
-  ana:     { provider: openai, model: <model-id> }
-limits:                    # all optional; defaults shown
-  max_retries: 3                 # 0..10, retries before escalating to you
-  max_steps: 12                  # 1..100, model calls per attempt
-  max_depth: 3                   # 1..10, handoff nesting
-  max_tokens_per_task: 30000     # >= 1000, hard budget per task
-  max_handoffs_per_attempt: 3    # 1..20
-```
+A **group** is a chat you put agents in (members and admins): you create it in the chat (`/newgroup`, or the sample agents button) or
+`buildcli init` makes one, and it is kept per project outside the project tree, so a cloned repository cannot define who talks to
+whom. The **model** of each agent is a setting (Settings > Models, `/model`, or `--model` on the command line). Run **limits** are
+fixed: 3 retries before escalating to you, 12 model calls per attempt, handoffs nested 3 deep, 3 handoffs per attempt and 30 000
+tokens per task.
 
-Providers: `ollama`, `openai` (any OpenAI-compatible endpoint).
+Providers: `ollama`, `openai` (any OpenAI-compatible endpoint), and the hosted ones listed by `buildcli provider list`.
 
 ## Versioning
 

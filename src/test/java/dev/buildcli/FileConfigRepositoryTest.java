@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.buildcli.domain.Agent;
 import dev.buildcli.domain.Origin;
-import dev.buildcli.domain.Team;
 import dev.buildcli.infrastructure.FileConfigRepository;
 import dev.buildcli.ports.ConfigException;
 import java.io.IOException;
@@ -54,19 +53,6 @@ class FileConfigRepositoryTest {
                 timeout: 10m
             """;
 
-    static final String TEAM = """
-            schema: 1
-            name: backend
-            lead: ana
-            agents: [ana, bruno]
-            runtime:
-              default: { provider: ollama, model: qwen3-coder }
-              ana: { provider: openai, model: some-model }
-            limits:
-              max_retries: 2
-              max_tokens_per_task: 20000
-            """;
-
     @BeforeEach
     void setUp() throws IOException {
         project = Files.createDirectories(root.resolve("project"));
@@ -96,10 +82,9 @@ class FileConfigRepositoryTest {
     }
 
     @Test
-    void loadsAgentsAndTeamsFromTheProject() throws IOException {
+    void loadsAgentsFromTheProject() throws IOException {
         writeProject("agents/ana.md", ANA);
         writeProject("agents/bruno.yaml", BRUNO);
-        writeProject("teams/backend.yaml", TEAM);
         var repo = load();
 
         Agent ana = repo.agent("ana").orElseThrow();
@@ -115,14 +100,6 @@ class FileConfigRepositoryTest {
         assertEquals(List.of(List.of("mvn", "test"), List.of("./mvnw", "-q", "verify")), bruno.permissions().commandAllow());
         assertEquals(Duration.ofMinutes(10), bruno.permissions().commandTimeout());
 
-        Team team = repo.team("backend").orElseThrow();
-        assertEquals("ana", team.lead());
-        assertEquals(List.of("ana", "bruno"), team.agents().stream().map(Agent::name).toList());
-        assertEquals(2, team.limits().maxRetries());
-        assertEquals(20_000, team.limits().maxTokensPerTask());
-        assertEquals(12, team.limits().maxSteps(), "unspecified limits keep their defaults");
-        assertEquals("ollama", team.routing().forAgent("bruno").provider());
-        assertEquals("openai", team.routing().forAgent("ana").provider());
     }
 
     @Test
@@ -144,7 +121,6 @@ class FileConfigRepositoryTest {
     void noConfigurationAtAllIsValidAndEmpty() {
         var repo = load();
         assertTrue(repo.agents().isEmpty());
-        assertTrue(repo.teams().isEmpty());
         assertEquals("", repo.projectContext());
     }
 
@@ -206,32 +182,6 @@ class FileConfigRepositoryTest {
     void aMarkdownAgentWithoutFrontMatterIsRejected() throws IOException {
         writeProject("agents/a.md", "Just some text");
         assertTrue(anyContains(problems(this::load), "front matter"));
-    }
-
-    @Test
-    void teamsMustReferenceDefinedAgentsAndHaveAMemberAsLead() throws IOException {
-        writeProject("agents/ana.md", ANA);
-        writeProject("teams/t.yaml", "schema: 1\nname: t\nlead: zoe\nagents: [ana, ghost]\n");
-        var p = problems(this::load);
-        assertTrue(anyContains(p, "agent 'ghost' is not defined"));
-        assertTrue(anyContains(p, "lead 'zoe' must be one of the team's agents"));
-    }
-
-    @Test
-    void runtimeEntriesNeedAWellFormedProviderAndAMemberAgent() throws IOException {
-        writeProject("agents/ana.md", ANA);
-        writeProject("teams/t.yaml", "schema: 1\nname: t\nlead: ana\nagents: [ana]\nruntime:\n"
-                + "  default: { provider: \"Not A Name!\", model: x }\n  bob: { provider: ollama, model: y }\n");
-        var p = problems(this::load);
-        assertTrue(anyContains(p, "runtime.default needs a provider"), p.toString());
-        assertTrue(anyContains(p, "runtime.bob refers to an agent that is not in the team"));
-    }
-
-    @Test
-    void limitsAreBounded() throws IOException {
-        writeProject("agents/ana.md", ANA);
-        writeProject("teams/t.yaml", "schema: 1\nname: t\nlead: ana\nagents: [ana]\nlimits:\n  max_retries: 99\n");
-        assertTrue(anyContains(problems(this::load), "limits.max_retries must be an integer between 0 and 10"));
     }
 
     @Test

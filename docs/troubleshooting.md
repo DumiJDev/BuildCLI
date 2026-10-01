@@ -4,7 +4,7 @@ Start with `buildcli doctor`: it checks Java, git, the state directory, your con
 
 | Symptom | Cause and fix |
 |---|---|
-| `no model configured for agent 'x'` | The team has no `runtime.default` for that agent. Add one to the team file, or pass `--model provider:model`. |
+| `no model configured for agent 'x'` | No model is chosen for that agent and there is no default. Type `/connect` in the chat, set one in Settings (F2), or pass `--model provider:model`. |
 | `Ollama is not reachable` | Start Ollama, or set `OLLAMA_HOST` if it runs elsewhere. Only needed for the `ollama` provider. |
 | `model 'x' is not pulled` | `ollama pull x`. |
 | Generation is extremely slow | Ollama's default of 16 threads was about 50x slower than 4 on a WSL2 machine. BuildCLI defaults to `--threads 4`; tune it to your physical cores. |

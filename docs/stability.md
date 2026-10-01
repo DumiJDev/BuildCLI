@@ -6,7 +6,7 @@ What a user can rely on across 1.x releases, and what may change. BuildCLI follo
 
 | Surface | Promise |
 |---|---|
-| **Agent and team file schema (`schema: 1`)** | Files that load today keep loading. New *optional* keys may be added. Removing or changing the meaning of a key requires `schema: 2`, and 1.x keeps reading schema 1. A newer schema than the running version is refused with a clear message, never guessed at. |
+| **Agent file schema (`schema: 1`)** | Files that load today keep loading. New *optional* keys may be added. Removing or changing the meaning of a key requires `schema: 2`, and 1.x keeps reading schema 1. A newer schema than the running version is refused with a clear message, never guessed at. |
 | **Permissions semantics** | A permission never becomes broader than documented. Security fixes may make enforcement *stricter* (for example, refusing a path that was wrongly allowed); that is not a breaking change. |
 | **CLI commands, options and exit codes** | Documented commands and options keep working; `0` success, `1` the work failed or was aborted, `2` usage or configuration error. Breaking changes only in a new major version. |
 | **State database** | Migrations are ordered and forward-only (`PRAGMA user_version`). A released migration is never edited. A database written by a newer version is refused and left untouched, so downgrading cannot corrupt it. |

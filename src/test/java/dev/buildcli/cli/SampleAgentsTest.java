@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /** "Add the sample team" from an empty chat: the same agents as `init`, alive in the open chat, in a group, already trusted. */
-class SampleTeamTest {
+class SampleAgentsTest {
     @TempDir Path root;
 
     @Test

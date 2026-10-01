@@ -19,8 +19,9 @@ public final class FileChatStore implements ChatStore {
     public static final String FILE_NAME = "chats.yaml";
     public static final String REACH_FILE_NAME = "reach.yaml";
     private static final ObjectMapper YAML = new ObjectMapper(new YAMLFactory());
-    /** How the team's own group (whose id is empty) is written in the file. */
-    private static final String TEAM_KEY = "~team";
+    /** How the main group (whose id is empty) is written in the file; files from before it was renamed say "~team". */
+    private static final String MAIN_KEY = "~main";
+    private static final String OLD_MAIN_KEY = "~team";
     private final Path file;
     private final Path reachFile;
 
@@ -43,7 +44,7 @@ public final class FileChatStore implements ChatStore {
                 List<String> admins = new ArrayList<>();
                 g.path("admins").forEach(m -> admins.add(m.asText()));
                 String raw = g.path("id").asText("");
-                String id = raw.equals(TEAM_KEY) ? "" : raw;
+                String id = raw.equals(MAIN_KEY) || raw.equals(OLD_MAIN_KEY) ? "" : raw;
                 if (!raw.isBlank()) {
                     out.add(new Chat(id, g.path("name").asText(id), true, members, admins));
                 }
@@ -59,7 +60,7 @@ public final class FileChatStore implements ChatStore {
         List<Map<String, Object>> list = new ArrayList<>();
         for (Chat c : groups) {
             Map<String, Object> m = new LinkedHashMap<>();
-            m.put("id", c.id().isEmpty() ? TEAM_KEY : c.id());
+            m.put("id", c.id().isEmpty() ? MAIN_KEY : c.id());
             m.put("name", c.name());
             m.put("members", c.members());
             m.put("admins", c.admins());

@@ -13,7 +13,7 @@ import java.util.Map;
  * and is never written into the project tree.
  *
  * <pre>
- * ~/.buildcli/                         global agents, teams (override with BUILDCLI_HOME)
+ * ~/.buildcli/                         global agents (override with BUILDCLI_HOME)
  * ~/.buildcli/projects/&lt;id&gt;/state.db   runs, tasks and events of one project
  * </pre>
  */

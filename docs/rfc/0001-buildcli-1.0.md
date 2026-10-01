@@ -1,5 +1,7 @@
 # [RFC] BuildCLI 1.0: rebuild as a local runtime for AI engineering teams
 
+> **Historical design record.** Later decisions changed parts of it: *teams* were replaced by *groups* in a chat (see [concepts](../concepts.md)), agents run in parallel, and the interface is a chat. The M0 spike mentioned below has been removed from the code.
+
 > **BuildCLI: your local AI engineering team.**
 > A local, open-source runtime that executes a configurable team of AI agents, driven from your terminal.
 

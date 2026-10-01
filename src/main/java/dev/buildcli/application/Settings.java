@@ -118,7 +118,7 @@ public final class Settings {
         store.save(scope, m);
     }
 
-    /** The model an agent should use, from settings, or null to fall back to the team configuration. */
+    /** The model an agent should use, from settings, or null to fall back to the default model. */
     public String modelFor(String agent) {
         String own = get(AGENT_MODEL + agent);
         return own == null || own.isBlank() ? null : own;

@@ -77,15 +77,11 @@ class ConnectViewTest {
             @Override
             public void deleteAgent(String name) { }
 
-            @Override
-            public String teamModel(String agent) {
-                return null;
-            }
         };
     }
 
     ChatSession session() {
-        return new ChatSession(ChatScreenTest.TEAM, (team, request, ui, cancelled, dispatcher) -> {
+        return new ChatSession(ChatScreenTest.ROSTER, (team, request, ui, cancelled, dispatcher) -> {
             Task t = new Task(1, null, "user", "ana", request.text(), "");
             t.status = TaskStatus.DONE;
             t.result = "ok";

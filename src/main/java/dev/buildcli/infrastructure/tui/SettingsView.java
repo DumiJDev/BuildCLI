@@ -1,12 +1,14 @@
 package dev.buildcli.infrastructure.tui;
 
+import static dev.buildcli.infrastructure.tui.Draw.fill;
+import static dev.buildcli.infrastructure.tui.Draw.putSafe;
+import static dev.buildcli.infrastructure.tui.Draw.st;
 import dev.buildcli.application.Settings;
 import dev.buildcli.domain.Capability;
 import dev.buildcli.infrastructure.ModelCatalog;
-import dev.buildcli.infrastructure.TerminalText;
 import dev.buildcli.ports.SettingsStore.Scope;
+import dev.buildcli.infrastructure.TerminalText;
 import dev.tamboui.buffer.Buffer;
-import dev.tamboui.buffer.Cell;
 import dev.tamboui.layout.Rect;
 import dev.tamboui.style.Color;
 import dev.tamboui.style.Style;
@@ -127,11 +129,9 @@ final class SettingsView {
                     String key = Settings.AGENT_MODEL + a.name();
                     String own = s.stored(scope, key);
                     String effective = s.modelFor(a.name());
-                    String team = services.teamModel(a.name());
-                    String value = effective != null ? effective : team != null ? team + "  (team)" : s.defaultModel() != null
-                            ? s.defaultModel() + "  (default)" : "not set";
+                    String value = effective != null ? effective : s.defaultModel() != null ? s.defaultModel() + "  (default)" : "not set";
                     out.add(new Item(a.name(), value, effective != null ? Theme.TEXT : Theme.DIM,
-                            (own != null ? "Set " + scopeLabel() + ". " : "") + "Enter to choose a model · Del to go back to the team's",
+                            (own != null ? "Set " + scopeLabel() + ". " : "") + "Enter to choose a model · Del to go back to the default",
                             () -> pickModel("Model for " + a.name(), m -> save(key, m)), null, null, () -> save(key, null)));
                 }
             }
@@ -169,7 +169,7 @@ final class SettingsView {
                             })));
                 }
                 out.add(new Item("+ New agent", "", Theme.ACCENT, "Name, role, what it may do; saved " + scopeLabel(), this::newAgent, null, null, null));
-                out.add(new Item("+ Sample team", "", Theme.ACCENT, "ana (architect), bruno (developer), carla (reviewer) in a group, for this project",
+                out.add(new Item("+ Sample agents", "", Theme.ACCENT, "wheslley, breno, matheus and dumildes, in a group, for this project",
                         this::addSamples, null, null, null));
             }
             default -> { }
@@ -315,7 +315,7 @@ final class SettingsView {
 
     private void agentCapabilities(Draft d) {
         List<String> names = dev.buildcli.domain.Capability.KNOWN.stream().sorted().toList();
-        List<String> notes = names.stream().map(SettingsView::describe).toList();
+        List<String> notes = names.stream().map(CapabilityInfo::describe).toList();
         checklist = new Checklist("What " + d.a + " may do (3/4)", names, notes, d.caps, picked -> {
             d.caps = picked;
             agentHow(d);
@@ -334,24 +334,9 @@ final class SettingsView {
         }, () -> agentCapabilities(d));
     }
 
-    /** What a capability lets an agent do, in the words of someone who has not read the docs. */
-    private static String describe(String capability) {
-        return switch (capability) {
-            case Capability.FILESYSTEM_READ -> "read files in the project";
-            case Capability.FILESYSTEM_WRITE -> "create and change files (you approve each write)";
-            case Capability.SEARCH -> "search the code";
-            case Capability.GIT_READ -> "read git status, log and diffs";
-            case Capability.GIT_COMMIT -> "commit to git (you approve)";
-            case Capability.COMMAND_EXECUTE -> "run commands, such as tests (you approve)";
-            case Capability.AGENT_HANDOFF -> "ask other agents for help";
-            case Capability.CHAT_POST -> "write in a group or to an agent when you ask";
-            default -> "";
-        };
-    }
-
     private void addSamples() {
         try {
-            ok("Added " + String.join(", ", services.createSampleAgents()) + " and a group 'backend'.");
+            ok("Added " + String.join(", ", services.createSampleAgents()) + " and a group for them.");
         } catch (Exception e) {
             fail(e.getMessage());
         }
@@ -400,37 +385,21 @@ final class SettingsView {
 
     // ---- drawing ----
 
-    private static void fill(Buffer buf, Rect r, Style style) {
-        if (r.width() > 0 && r.height() > 0) {
-            buf.fill(r, new Cell(" ", style));
-        }
-    }
 
-    private static int put(Buffer buf, int x, int y, String text, Style style, int limit) {
-        if (x >= limit || text.isEmpty()) {
-            return 0;
-        }
-        String clipped = CharWidth.substringByWidth(TerminalText.sanitize(text), limit - x);
-        buf.setString(x, y, clipped, style);
-        return CharWidth.of(clipped);
-    }
 
-    private static Style st(Color fg, Color bg) {
-        return Theme.on(fg, bg);
-    }
 
     void render(Buffer buf, Rect r) {
         hits.clear();
         fill(buf, r, st(Theme.TEXT, Theme.BG));
         Rect bar = new Rect(r.x(), r.y(), r.width(), 2);
         fill(buf, bar, st(Theme.TEXT, Theme.PANEL));
-        put(buf, r.x() + 2, r.y(), "Settings", st(Theme.TEXT, Theme.PANEL).bold(), r.right());
-        put(buf, r.x() + 2, r.y() + 1, "Saved " + scopeLabel(), st(Theme.DIM, Theme.PANEL), r.right());
+        putSafe(buf, r.x() + 2, r.y(), "Settings", st(Theme.TEXT, Theme.PANEL).bold(), r.right());
+        putSafe(buf, r.x() + 2, r.y() + 1, "Saved " + scopeLabel(), st(Theme.DIM, Theme.PANEL), r.right());
         int x = r.x() + 14;
         for (Scope sc : new Scope[] {Scope.PROJECT, Scope.GLOBAL}) {
             String label = sc == Scope.PROJECT ? " This project " : " All projects ";
             boolean on = sc == scope;
-            int w = put(buf, x, r.y(), label, on ? st(Theme.ON_ACCENT, Theme.ACCENT).bold() : st(Theme.TEXT, Theme.FIELD), r.right());
+            int w = putSafe(buf, x, r.y(), label, on ? st(Theme.ON_ACCENT, Theme.ACCENT).bold() : st(Theme.TEXT, Theme.FIELD), r.right());
             hits.add(new Hit(new Rect(x, r.y(), w, 1), () -> {
                 if (scope != sc) {
                     toggleScope();
@@ -440,7 +409,7 @@ final class SettingsView {
         }
         String closeLabel = " ✕ Esc ";
         int cx = r.right() - CharWidth.of(closeLabel) - 1;
-        put(buf, cx, r.y(), closeLabel, st(Theme.DIM, Theme.PANEL), r.right());
+        putSafe(buf, cx, r.y(), closeLabel, st(Theme.DIM, Theme.PANEL), r.right());
         hits.add(new Hit(new Rect(cx, r.y(), CharWidth.of(closeLabel), 1), close));
 
         int navW = 18;
@@ -451,7 +420,7 @@ final class SettingsView {
             boolean on = s == section;
             Rect row = new Rect(nav.x(), ny, navW, 1);
             fill(buf, row, st(Theme.TEXT, on ? Theme.SELECTED : Theme.SIDEBAR));
-            put(buf, row.x() + 2, ny, (on ? "▌ " : "  ") + s.label, on ? st(Theme.TEXT, Theme.SELECTED).bold() : st(Theme.DIM, Theme.SIDEBAR), row.right());
+            putSafe(buf, row.x() + 2, ny, (on ? "▌ " : "  ") + s.label, on ? st(Theme.TEXT, Theme.SELECTED).bold() : st(Theme.DIM, Theme.SIDEBAR), row.right());
             hits.add(new Hit(row, () -> select(s)));
             ny += 2;
         }
@@ -473,10 +442,10 @@ final class SettingsView {
             Color bg = sel ? Theme.SELECTED : Theme.BG;
             Rect row = new Rect(content.x(), y, content.width(), 2);
             fill(buf, row, st(Theme.TEXT, bg));
-            put(buf, row.x() + 1, y, it.label(), st(Theme.TEXT, bg).bold(), row.right() - 2);
+            putSafe(buf, row.x() + 1, y, it.label(), st(Theme.TEXT, bg).bold(), row.right() - 2);
             int vw = CharWidth.of(TerminalText.sanitize(it.value()));
-            put(buf, Math.max(row.x() + 24, row.right() - vw - 2), y, it.value(), st(it.valueColor(), bg), row.right() - 1);
-            put(buf, row.x() + 1, y + 1, it.help(), st(Theme.DIM, bg), row.right() - 1);
+            putSafe(buf, Math.max(row.x() + 24, row.right() - vw - 2), y, it.value(), st(it.valueColor(), bg), row.right() - 1);
+            putSafe(buf, row.x() + 1, y + 1, it.help(), st(Theme.DIM, bg), row.right() - 1);
             int idx = i;
             hits.add(new Hit(row, () -> {
                 index = idx;
@@ -484,13 +453,13 @@ final class SettingsView {
             }));
         }
         if (items.size() > visible) {
-            put(buf, content.right() - 12, content.bottom(), (firstVisible + 1) + "–" + Math.min(items.size(), firstVisible + visible) + " of " + items.size(),
+            putSafe(buf, content.right() - 12, content.bottom(), (firstVisible + 1) + "–" + Math.min(items.size(), firstVisible + visible) + " of " + items.size(),
                     st(Theme.FAINT, Theme.BG), content.right());
         }
         Rect foot = new Rect(r.x(), r.bottom() - 1, r.width(), 1);
         fill(buf, foot, st(Theme.DIM, Theme.PANEL));
         String keys = "↑↓ choose · Enter change · ←→ switch · Del reset · Tab section · S scope · Esc close";
-        put(buf, foot.x() + navW + 2, foot.y(), status.isEmpty() ? keys : status, st(status.isEmpty() ? Theme.DIM : statusColor, Theme.PANEL), foot.right());
+        putSafe(buf, foot.x() + navW + 2, foot.y(), status.isEmpty() ? keys : status, st(status.isEmpty() ? Theme.DIM : statusColor, Theme.PANEL), foot.right());
 
         if (picker != null || prompt != null || confirm != null || checklist != null) {
             hits.clear(); // a dialog is modal: clicks outside it do nothing
@@ -515,26 +484,26 @@ final class SettingsView {
     private void frame(Buffer buf, Rect b, String title) {
         fill(buf, b, st(Theme.TEXT, Theme.DIALOG));
         Style border = st(Theme.FAINT, Theme.DIALOG);
-        put(buf, b.x(), b.y(), "╭" + "─".repeat(b.width() - 2) + "╮", border, b.right());
+        putSafe(buf, b.x(), b.y(), "╭" + "─".repeat(b.width() - 2) + "╮", border, b.right());
         for (int y = b.y() + 1; y < b.bottom() - 1; y++) {
-            put(buf, b.x(), y, "│", border, b.right());
-            put(buf, b.right() - 1, y, "│", border, b.right());
+            putSafe(buf, b.x(), y, "│", border, b.right());
+            putSafe(buf, b.right() - 1, y, "│", border, b.right());
         }
-        put(buf, b.x(), b.bottom() - 1, "╰" + "─".repeat(b.width() - 2) + "╯", border, b.right());
-        put(buf, b.x() + 2, b.y(), " " + title + " ", st(Theme.TEXT, Theme.DIALOG).bold(), b.right() - 2);
+        putSafe(buf, b.x(), b.bottom() - 1, "╰" + "─".repeat(b.width() - 2) + "╯", border, b.right());
+        putSafe(buf, b.x() + 2, b.y(), " " + title + " ", st(Theme.TEXT, Theme.DIALOG).bold(), b.right() - 2);
     }
 
     private void drawPrompt(Buffer buf, Rect r) {
         Rect b = box(r, 70, 7);
         frame(buf, b, prompt.title());
-        put(buf, b.x() + 2, b.y() + 1, prompt.hint(), st(Theme.DIM, Theme.DIALOG), b.right() - 2);
+        putSafe(buf, b.x() + 2, b.y() + 1, prompt.hint(), st(Theme.DIM, Theme.DIALOG), b.right() - 2);
         Rect field = new Rect(b.x() + 2, b.y() + 3, b.width() - 4, 1);
         fill(buf, field, st(Theme.TEXT, Theme.FIELD));
         String t = prompt.editor().text();
         int avail = field.width() - 2;
         String shown = CharWidth.of(t) > avail ? CharWidth.substringByWidthFromEnd(t, avail) : t;
-        put(buf, field.x() + 1, field.y(), shown + "▏", st(Theme.TEXT, Theme.FIELD), field.right());
-        put(buf, b.x() + 2, b.bottom() - 2, prompt.back() == null ? "Enter next · Esc cancel" : "Enter next · Esc back", st(Theme.DIM, Theme.DIALOG), b.right() - 2);
+        putSafe(buf, field.x() + 1, field.y(), shown + "▏", st(Theme.TEXT, Theme.FIELD), field.right());
+        putSafe(buf, b.x() + 2, b.bottom() - 2, prompt.back() == null ? "Enter next · Esc cancel" : "Enter next · Esc back", st(Theme.DIM, Theme.DIALOG), b.right() - 2);
     }
 
     private void drawChecklist(Buffer buf, Rect r) {
@@ -548,14 +517,14 @@ final class SettingsView {
             int row = i;
             Rect line = new Rect(b.x() + 1, y, b.width() - 2, 1);
             fill(buf, line, st);
-            put(buf, b.x() + 2, y, (checklist.checked.contains(opt) ? "[x] " : "[ ] ") + opt, st, b.right() - 2);
-            put(buf, b.x() + 26, y, checklist.notes.get(i), on ? st : st(Theme.DIM, Theme.DIALOG), b.right() - 2);
+            putSafe(buf, b.x() + 2, y, (checklist.checked.contains(opt) ? "[x] " : "[ ] ") + opt, st, b.right() - 2);
+            putSafe(buf, b.x() + 26, y, checklist.notes.get(i), on ? st : st(Theme.DIM, Theme.DIALOG), b.right() - 2);
             hits.add(new Hit(line, () -> {
                 checklist.index = row;
                 toggle(checklist, opt);
             }));
         }
-        put(buf, b.x() + 2, b.bottom() - 2, "↑↓ move · Space tick · Enter next · Esc back", st(Theme.DIM, Theme.DIALOG), b.right() - 2);
+        putSafe(buf, b.x() + 2, b.bottom() - 2, "↑↓ move · Space tick · Enter next · Esc back", st(Theme.DIM, Theme.DIALOG), b.right() - 2);
     }
 
     private void drawConfirm(Buffer buf, Rect r) {
@@ -563,12 +532,12 @@ final class SettingsView {
         Rect b = box(r, 66, lines.size() + 5);
         frame(buf, b, "Are you sure?");
         for (int i = 0; i < lines.size(); i++) {
-            put(buf, b.x() + 2, b.y() + 1 + i, lines.get(i), st(Theme.TEXT, Theme.DIALOG), b.right() - 2);
+            putSafe(buf, b.x() + 2, b.y() + 1 + i, lines.get(i), st(Theme.TEXT, Theme.DIALOG), b.right() - 2);
         }
         int y = b.bottom() - 2;
-        int w1 = put(buf, b.x() + 2, y, " Yes  Y ", st(Theme.TEXT, Theme.DANGER).bold(), b.right());
+        int w1 = putSafe(buf, b.x() + 2, y, " Yes  Y ", st(Theme.TEXT, Theme.DANGER).bold(), b.right());
         hits.add(new Hit(new Rect(b.x() + 2, y, w1, 1), this::confirmYes));
-        int w2 = put(buf, b.x() + 4 + w1, y, " No  N ", st(Theme.TEXT, Theme.FIELD), b.right());
+        int w2 = putSafe(buf, b.x() + 4 + w1, y, " No  N ", st(Theme.TEXT, Theme.FIELD), b.right());
         hits.add(new Hit(new Rect(b.x() + 4 + w1, y, w2, 1), () -> confirm = null));
     }
 
@@ -584,7 +553,7 @@ final class SettingsView {
         Rect field = new Rect(b.x() + 2, b.y() + 1, b.width() - 4, 1);
         fill(buf, field, st(Theme.TEXT, Theme.FIELD));
         String f = picker.filter.text();
-        put(buf, field.x() + 1, field.y(), f.isEmpty() ? "Search models, or type provider:model and press Enter▏" : f + "▏",
+        putSafe(buf, field.x() + 1, field.y(), f.isEmpty() ? "Search models, or type provider:model and press Enter▏" : f + "▏",
                 st(f.isEmpty() ? Theme.DIM : Theme.TEXT, Theme.FIELD), field.right());
         List<ModelCatalog.Model> items = pickerItems();
         int rows = b.height() - 5;
@@ -610,8 +579,8 @@ final class SettingsView {
             Color bg = sel ? Theme.SELECTED : Theme.DIALOG;
             Rect row = new Rect(b.x() + 1, b.y() + 3 + i, b.width() - 2, 1);
             fill(buf, row, st(Theme.TEXT, bg));
-            int w = put(buf, row.x() + 1, row.y(), m.ref(), st(m.tools() ? Theme.TEXT : Theme.DIM, bg), row.right() - 2);
-            put(buf, row.x() + 3 + w, row.y(), m.note(), st(m.free() ? Theme.ACCENT : Theme.DIM, bg), row.right() - 1);
+            int w = putSafe(buf, row.x() + 1, row.y(), m.ref(), st(m.tools() ? Theme.TEXT : Theme.DIM, bg), row.right() - 2);
+            putSafe(buf, row.x() + 3 + w, row.y(), m.note(), st(m.free() ? Theme.ACCENT : Theme.DIM, bg), row.right() - 1);
             int idx = picker.first + i;
             hits.add(new Hit(row, () -> {
                 picker.index = idx;
@@ -620,7 +589,7 @@ final class SettingsView {
         }
         String info = loading > 0 ? "Loading models from " + loading + " provider(s)…"
                 : items.size() + " models" + (problems.isEmpty() ? "" : " · " + String.join(" · ", problems));
-        put(buf, b.x() + 2, b.bottom() - 2, info + "   ·  ↑↓ Enter pick · Esc cancel", st(Theme.DIM, Theme.DIALOG), b.right() - 2);
+        putSafe(buf, b.x() + 2, b.bottom() - 2, info + "   ·  ↑↓ Enter pick · Esc cancel", st(Theme.DIM, Theme.DIALOG), b.right() - 2);
     }
 
     private void pickSelected() {

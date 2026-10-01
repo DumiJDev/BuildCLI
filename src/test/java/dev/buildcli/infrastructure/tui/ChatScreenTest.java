@@ -10,7 +10,7 @@ import dev.buildcli.domain.Limits;
 import dev.buildcli.domain.Permissions;
 import dev.buildcli.domain.Task;
 import dev.buildcli.domain.TaskStatus;
-import dev.buildcli.domain.Team;
+import dev.buildcli.domain.Roster;
 import dev.tamboui.buffer.Buffer;
 import dev.tamboui.layout.Rect;
 import dev.tamboui.terminal.Frame;
@@ -36,7 +36,7 @@ import org.junit.jupiter.api.io.TempDir;
 class ChatScreenTest {
     @TempDir Path dir;
 
-    static final Team TEAM = new Team("backend", "ana", List.of(
+    static final Roster ROSTER = new Roster("backend", "ana", List.of(
             new Agent("ana", "architect", "", Set.of(), Permissions.none()),
             new Agent("bruno", "developer", "", Set.of(), Permissions.none())), Limits.defaults());
 
@@ -45,7 +45,7 @@ class ChatScreenTest {
     boolean quit;
 
     ChatSession session() {
-        return new ChatSession(TEAM, (team, request, ui, cancelled, dispatcher) -> {
+        return new ChatSession(ROSTER, (team, request, ui, cancelled, dispatcher) -> {
             requests.add(request.text());
             targets.add(request.target());
             Task t = new Task(1, null, "user", request.target() == null ? "ana" : request.target(), request.text(), "");
@@ -121,7 +121,7 @@ class ChatScreenTest {
         render(screen, 120, 36);
         type(screen, "ask @b");
         String out = render(screen, 120, 36);
-        assertTrue(out.contains("Mention a teammate"), out);
+        assertTrue(out.contains("Mention an agent"), out);
         assertTrue(out.contains("@bruno"));
         assertFalse(out.contains("@ana "), "filtered by what was typed");
         key(screen, KeyCode.ENTER);
@@ -164,13 +164,13 @@ class ChatScreenTest {
         assertEquals("bruno", targets.get(0));
         out = render(screen, 120, 36);
         assertTrue(out.contains("reply to hi"), out);
-        assertTrue(out.lines().limit(12).anyMatch(l -> l.contains("bruno") && l.indexOf("bruno") < 20), "the direct chat is now in the list");
+        assertTrue(out.lines().limit(18).anyMatch(l -> l.contains("bruno") && l.indexOf("bruno") < 20), "the direct chat is now in the list");
     }
 
     @Test
     void messagesTypedWhileTheTeamWorksAreQueued() throws Exception {
         var gate = new java.util.concurrent.CountDownLatch(1);
-        var s = new ChatSession(TEAM, (team, request, ui, cancelled, dispatcher) -> {
+        var s = new ChatSession(ROSTER, (team, request, ui, cancelled, dispatcher) -> {
             gate.await(5, TimeUnit.SECONDS);
             Task t = new Task(1, null, "user", "ana", request.text(), "");
             t.status = TaskStatus.DONE;
@@ -305,7 +305,7 @@ class ChatScreenTest {
         assertTrue(out.contains("Group info") && out.contains("Make admin"), out);
         key(screen, KeyCode.DOWN);
         type(screen, "a");
-        assertTrue(s.group(ChatSession.TEAM).isAdmin("bruno"));
+        assertTrue(s.group(ChatSession.MAIN).isAdmin("bruno"));
         key(screen, KeyCode.ESCAPE);
     }
 
@@ -315,9 +315,9 @@ class ChatScreenTest {
                 dev.buildcli.ports.ChatStore.NONE, () -> 6, dev.buildcli.ports.ChatLog.NONE);
         var screen = screen(s);
         String out = render(screen, 120, 36);
-        assertTrue(out.contains("No agents yet") && out.contains("Add the sample team: wheslley, breno, matheus and dumildes") && out.contains("Create your own agent")
+        assertTrue(out.contains("No agents yet") && out.contains("Add the sample agents: wheslley, breno, matheus and dumildes") && out.contains("Create your own agent")
                 && out.contains("Connect a model and provider"), out);
-        int[] button = CopyAndFindScreenTest.find(out, "Add the sample team", 0);
+        int[] button = CopyAndFindScreenTest.find(out, "Add the sample agents", 0);
         screen.handleMouseEvent(MouseEvent.press(MouseButton.LEFT, button[0] + 2, button[1]));
         String toast = "";
         for (int i = 0; i < 50 && !toast.contains("Could not add them"); i++) {
