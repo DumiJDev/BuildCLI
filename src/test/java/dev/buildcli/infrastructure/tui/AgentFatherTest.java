@@ -256,4 +256,30 @@ class AgentFatherTest {
         say(screen, "/samples dev");
         assertEquals(List.of("writing", "dev"), sampled, "a team named with the command is added at once");
     }
+
+    @Test
+    void agentFatherSpeaksPortugueseAndUnderstandsSimNaoEnglishAside() {
+        settings.set(dev.buildcli.ports.SettingsStore.Scope.GLOBAL, Settings.LANGUAGE, "pt");
+        try {
+            ChatSession session = session();
+            session.addContact(new dev.buildcli.domain.Agent("rita", "revisora", "", java.util.Set.of("filesystem.read"),
+                    dev.buildcli.domain.Permissions.none(), dev.buildcli.domain.Origin.PROJECT, "/p/.buildcli/agents/rita.md"));
+            ChatScreen screen = screen(session);
+            openFather(screen);
+            String out = ChatScreenTest.render(screen, 130, 40);
+            assertTrue(out.contains("Olá, sou o AgentFather"), out);
+            say(screen, "/editagent rita");
+            out = ChatScreenTest.render(screen, 130, 40);
+            assertTrue(out.contains("agora:") && out.contains("O que queres mudar?"), out);
+            say(screen, "4");
+            assertTrue(ChatScreenTest.render(screen, 130, 40).contains("Em que pastas pode rita escrever?"));
+            say(screen, "src/**");
+            say(screen, "sim");
+            assertEquals(1, edited.size());
+            say(screen, "feito");
+            assertTrue(ChatScreenTest.render(screen, 130, 40).contains("como o deixaste"));
+        } finally {
+            dev.buildcli.application.I18n.use("en");
+        }
+    }
 }

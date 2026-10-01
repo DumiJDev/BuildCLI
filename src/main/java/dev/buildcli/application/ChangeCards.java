@@ -1,5 +1,6 @@
 package dev.buildcli.application;
 
+import static dev.buildcli.application.I18n.t;
 import dev.buildcli.application.ChatSession.Kind;
 import dev.buildcli.application.ChatSession.Message;
 import dev.buildcli.application.ChatSession.State;
@@ -47,7 +48,7 @@ final class ChangeCards {
         long id = transcript.nextId();
         transcript.keepChanges(id, files);
         transcript.add(new Message(id, Kind.CHANGES, run.me,
-                "Changed " + paths.size() + (paths.size() == 1 ? " file: " : " files: ") + String.join(", ", paths), Instant.now(), State.DONE,
+                (paths.size() == 1 ? t("Changed 1 file: {0}", String.join(", ", paths)) : t("Changed {0} files: {1}", paths.size(), String.join(", ", paths))), Instant.now(), State.DONE,
                 List.of(), run.thread));
     }
 
@@ -58,17 +59,17 @@ final class ChangeCards {
     String undo(long id) {
         Message m = transcript.find(id);
         if (m == null || m.kind() != Kind.CHANGES) {
-            return "Nothing to undo.";
+            return t("Nothing to undo.");
         }
         if (m.state() == State.UNDONE) {
-            return "Already undone.";
+            return t("Already undone.");
         }
         if (workspace == null) {
-            return "Undo is not available here.";
+            return t("Undo is not available here.");
         }
         List<FileChange> files = transcript.changes(id);
         if (files.isEmpty()) {
-            return "These changes were not kept, so they cannot be undone.";
+            return t("These changes were not kept, so they cannot be undone.");
         }
         String text;
         try {
@@ -76,9 +77,9 @@ final class ChangeCards {
             if (!r.restored().isEmpty() || !r.deleted().isEmpty()) {
                 transcript.replace(id, State.UNDONE);
             }
-            text = "Undid " + m.author() + "'s changes: " + r.summary() + ".";
+            text = t("Undid {0}'s changes: {1}.", m.author(), r.summary());
         } catch (Exception e) {
-            text = "Undo failed: " + e.getMessage();
+            text = t("Undo failed: {0}", e.getMessage());
         }
         note.accept(m.thread(), text);
         return text;

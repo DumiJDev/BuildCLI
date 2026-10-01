@@ -1,5 +1,6 @@
 package dev.buildcli.infrastructure.tui;
 
+import static dev.buildcli.application.I18n.t;
 import static dev.buildcli.infrastructure.tui.Draw.fill;
 import static dev.buildcli.infrastructure.tui.Draw.putSafe;
 import static dev.buildcli.infrastructure.tui.Draw.st;
@@ -74,7 +75,7 @@ final class SettingsView {
                 }
                 if (section == Section.GENERAL) {
                     out.add(new Item("Where settings are saved", scope == Scope.PROJECT ? "this project" : "all projects", Theme.DIM,
-                            "Project settings win over the ones for all projects. Press S or click the switch above to change.",
+                            t("Project settings win over the ones for all projects. Press S or click the switch above to change."),
                             this::toggleScope, this::toggleScope, this::toggleScope, null));
                 }
             }
@@ -84,23 +85,23 @@ final class SettingsView {
                     String key = Settings.AGENT_MODEL + a.name();
                     String own = s.stored(scope, key);
                     String effective = s.modelFor(a.name());
-                    String value = effective != null ? effective : s.defaultModel() != null ? s.defaultModel() + "  (default)" : "not set";
+                    String value = effective != null ? effective : s.defaultModel() != null ? s.defaultModel() + "  (" + t("default") + ")" : t("not set");
                     out.add(new Item(a.name(), value, effective != null ? Theme.TEXT : Theme.DIM,
-                            (own != null ? "Set " + scopeLabel() + ". " : "") + "Enter to choose a model · Del to go back to the default",
-                            () -> pickModel("Model for " + a.name(), m -> save(key, m)), null, null, () -> save(key, null)));
+                            (own != null ? t("Set {0}.", scopeLabel()) + " " : "") + t("Enter to choose a model · Del to go back to the default"),
+                            () -> pickModel(t("Model for {0}", a.name()), m -> save(key, m)), null, null, () -> save(key, null)));
                 }
             }
             case PROVIDERS -> {
                 for (SettingsServices.Provider p : services.providers()) {
                     boolean needsKey = p.keyEnv() != null && !p.keySet();
-                    String key = p.keyEnv() == null ? "no key needed" : !p.keySet() ? "no key yet"
-                            : p.keyFrom().equals("saved") ? "key saved" : "key from " + p.keyEnv();
+                    String key = p.keyEnv() == null ? t("no key needed") : !p.keySet() ? t("no key yet")
+                            : p.keyFrom().equals("saved") ? t("key saved") : t("key from {0}", p.keyEnv());
                     out.add(new Item(p.name(), key, p.keyEnv() == null || p.keySet() ? Theme.GREEN : Theme.AMBER,
-                            p.url() + (needsKey ? "   ·  Enter to add your key" : "   ·  Enter to test") + (p.removable() ? " · Del to remove" : ""),
-                            needsKey ? connect : () -> testProvider(p.name()), null, null, p.removable() ? () -> confirm("Remove provider " + p.name() + "?", () -> {
+                            p.url() + (needsKey ? "   ·  " + t("Enter to add your key") : "   ·  " + t("Enter to test")) + (p.removable() ? " · " + t("Del to remove") : ""),
+                            needsKey ? connect : () -> testProvider(p.name()), null, null, p.removable() ? () -> confirm(t("Remove provider {0}?", p.name()), () -> {
                                 try {
                                     services.removeProvider(p.name());
-                                    ok("Removed " + p.name());
+                                    ok(t("Removed {0}", p.name()));
                                 } catch (Exception e) {
                                     fail(e.getMessage());
                                 }
@@ -112,12 +113,12 @@ final class SettingsView {
             case AGENTS -> {
                 for (SettingsServices.AgentInfo a : services.agents()) {
                     out.add(new Item(a.name(), a.role() + " · " + a.origin(), Theme.agentColor(a.name()),
-                            String.join(", ", a.capabilities()) + "   ·  Enter to view · Del to delete",
+                            String.join(", ", a.capabilities()) + "   ·  " + t("Enter to view · Del to delete"),
                             () -> open.accept(a.file()), null, null,
-                            () -> confirm("Delete agent " + a.name() + "? This deletes " + a.file(), () -> {
+                            () -> confirm(t("Delete agent {0}? This deletes {1}", a.name(), a.file()), () -> {
                                 try {
                                     services.deleteAgent(a.name());
-                                    ok("Deleted " + a.name() + "; it left every group.");
+                                    ok(t("Deleted {0}; it left every group.", a.name()));
                                 } catch (Exception e) {
                                     fail(e.getMessage());
                                 }
@@ -137,28 +138,28 @@ final class SettingsView {
         Scope scope = d.section().equals("About you") ? Scope.GLOBAL : this.scope;
         String stored = s.stored(scope, d.key());
         String effective = s.get(d.key());
-        String origin = stored != null ? scopeLabel() : s.stored(other(), d.key()) != null ? (other() == Scope.PROJECT ? "this project" : "all projects") : "default";
-        String help = d.help() + "   ·  " + (d.section().equals("About you") ? "all projects" : origin) + (stored != null ? " · Del to reset" : "");
+        String origin = stored != null ? scopeLabel() : s.stored(other(), d.key()) != null ? (other() == Scope.PROJECT ? t("this project") : t("all projects")) : t("default");
+        String help = t(d.help()) + "   ·  " + (d.section().equals("About you") ? t("all projects") : origin) + (stored != null ? " · " + t("Del to reset") : "");
         Runnable reset = () -> save(scope, d.key(), null);
         return switch (d.type()) {
             case BOOLEAN -> {
                 boolean on = Boolean.parseBoolean(effective);
                 Runnable toggle = () -> save(scope, d.key(), Boolean.toString(!on));
-                yield new Item(d.label(), on ? "● On" : "○ Off", on ? Theme.ACCENT : Theme.DIM, help, toggle, toggle, toggle, reset);
+                yield new Item(t(d.label()), on ? "● On" : "○ Off", on ? Theme.ACCENT : Theme.DIM, help, toggle, toggle, toggle, reset);
             }
             case CHOICE -> {
                 int i = Math.max(0, d.choices().indexOf(effective));
                 Runnable next = () -> save(scope, d.key(), d.choices().get((i + 1) % d.choices().size()));
                 Runnable prev = () -> save(scope, d.key(), d.choices().get((i - 1 + d.choices().size()) % d.choices().size()));
-                yield new Item(d.label(), "‹ " + effective + " ›", Theme.TEXT, help, next, prev, next, reset);
+                yield new Item(t(d.label()), "‹ " + effective + " ›", Theme.TEXT, help, next, prev, next, reset);
             }
-            case MODEL -> new Item(d.label(), effective == null || effective.isBlank() ? "not set" : effective,
+            case MODEL -> new Item(t(d.label()), effective == null || effective.isBlank() ? t("not set") : effective,
                     effective == null || effective.isBlank() ? Theme.DIM : Theme.TEXT, help,
-                    () -> pickModel(d.label(), m -> save(scope, d.key(), m)), null, null, reset);
-            default -> new Item(d.label(), effective == null ? "" : effective, Theme.TEXT, help,
-                    () -> ask(d.label(), d.help(), effective == null ? "" : effective, v -> {
+                    () -> pickModel(t(d.label()), m -> save(scope, d.key(), m)), null, null, reset);
+            default -> new Item(t(d.label()), effective == null ? "" : effective, Theme.TEXT, help,
+                    () -> ask(t(d.label()), t(d.help()), effective == null ? "" : effective, v -> {
                         if (d.type() == Settings.Type.NUMBER && !v.isBlank() && !v.strip().matches("\\d{1,4}")) {
-                            fail("A whole number, please");
+                            fail(t("A whole number, please"));
                             return;
                         }
                         save(scope, d.key(), v);
@@ -171,12 +172,12 @@ final class SettingsView {
     }
 
     private String scopeLabel() {
-        return scope == Scope.PROJECT ? "for this project" : "for all projects";
+        return scope == Scope.PROJECT ? t("for this project") : t("for all projects");
     }
 
     private void toggleScope() {
         scope = other();
-        ok("Changes are now saved " + scopeLabel());
+        ok(t("Changes are now saved {0}", scopeLabel()));
     }
 
     private void save(String key, String value) {
@@ -186,7 +187,7 @@ final class SettingsView {
     private void save(Scope where, String key, String value) {
         try {
             services.settings().set(where, key, value);
-            ok(value == null ? "Reset " + scopeLabel() : "Saved " + scopeLabel());
+            ok(value == null ? t("Reset {0}", scopeLabel()) : t("Saved {0}", scopeLabel()));
         } catch (RuntimeException e) {
             fail(e.getMessage());
         }
@@ -198,7 +199,7 @@ final class SettingsView {
     }
 
     private void fail(String text) {
-        status = text == null ? "Failed" : text;
+        status = text == null ? t("Failed") : text;
         statusColor = Theme.RED;
     }
 
@@ -230,24 +231,24 @@ final class SettingsView {
     }
 
     private void providerName(Draft d) {
-        ask("New provider: name (1/3)", "lowercase, used as name:model", d.a, name -> {
+        ask(t("New provider: name (1/3)"), t("lowercase, used as name:model"), d.a, name -> {
             d.a = name.strip();
             providerUrl(d);
         });
     }
 
     private void providerUrl(Draft d) {
-        ask("URL of " + d.a + " (2/3)", "e.g. http://gpu-box:8000/v1", d.b.isEmpty() ? "https://" : d.b, url -> {
+        ask(t("URL of {0} (2/3)", d.a), t("e.g. http://gpu-box:8000/v1"), d.b.isEmpty() ? "https://" : d.b, url -> {
             d.b = url.strip();
             providerKey(d);
         }, () -> providerName(d));
     }
 
     private void providerKey(Draft d) {
-        ask("Environment variable with the key (3/3)", "leave empty if it needs none; you can also type the key in /connect", d.c, env -> {
+        ask(t("Environment variable with the key (3/3)"), t("leave empty if it needs none; you can also type the key in /connect"), d.c, env -> {
             try {
                 services.addProvider(d.a, d.b, env.isBlank() ? null : env.strip());
-                ok("Added " + d.a + (env.isBlank() ? "" : ". Set " + env.strip() + " or type the key in /connect."));
+                ok(env.isBlank() ? t("Added {0}", d.a) : t("Added {0}. Set {1} or type the key in /connect.", d.a, env.strip()));
             } catch (Exception e) {
                 fail(e.getMessage());
             }
@@ -259,14 +260,14 @@ final class SettingsView {
     }
 
     private void agentName(Draft d) {
-        ask("New agent: name (1/4)", "lowercase letters, digits, - and _", d.a, name -> {
+        ask(t("New agent: name (1/4)"), t("lowercase letters, digits, - and _"), d.a, name -> {
             d.a = name.strip();
             agentRole(d);
         });
     }
 
     private void agentRole(Draft d) {
-        ask("Role of " + d.a + " (2/4)", "e.g. writer, researcher, reviewer", d.b.isEmpty() ? "assistant" : d.b, role -> {
+        ask(t("Role of {0} (2/4)", d.a), t("e.g. writer, researcher, reviewer"), d.b.isEmpty() ? "assistant" : d.b, role -> {
             d.b = role.strip();
             agentCapabilities(d);
         }, () -> agentName(d));
@@ -274,19 +275,19 @@ final class SettingsView {
 
     private void agentCapabilities(Draft d) {
         List<String> names = dev.buildcli.domain.Capability.KNOWN.stream().sorted().toList();
-        List<String> notes = names.stream().map(CapabilityInfo::describe).toList();
-        dialogs.tick("What " + d.a + " may do (3/4)", names, notes, d.caps, picked -> {
+        List<String> notes = names.stream().map(c -> t(CapabilityInfo.describe(c))).toList();
+        dialogs.tick(t("What {0} may do (3/4)", d.a), names, notes, d.caps, picked -> {
             d.caps = picked;
             agentHow(d);
         }, () -> agentRole(d));
     }
 
     private void agentHow(Draft d) {
-        ask("How " + d.a + " should work (4/4)", "one sentence; edit the file later for more", d.c, how -> {
+        ask(t("How {0} should work (4/4)", d.a), t("one sentence; edit the file later for more"), d.c, how -> {
             d.c = how.strip();
             try {
                 String file = services.createAgent(d.a, d.b, d.c, d.caps, scope == Scope.GLOBAL);
-                ok("Created " + file + ". You can chat with " + d.a + " now.");
+                ok(t("Created {0}. You can chat with {1} now.", file, d.a));
             } catch (Exception e) {
                 fail(e.getMessage());
             }
@@ -295,7 +296,7 @@ final class SettingsView {
 
     private void addSamples() {
         try {
-            ok("Added " + String.join(", ", services.createSampleAgents()) + " and a group for them.");
+            ok(t("Added {0} and a group for them.", String.join(", ", services.createSampleAgents())));
         } catch (Exception e) {
             fail(e.getMessage());
         }
@@ -303,8 +304,8 @@ final class SettingsView {
 
     private void testProvider(String provider) {
         String suggestion = provider.equals("openrouter") ? "openrouter:openrouter/free" : provider + ":";
-        ask("Test " + provider, "provider:model to send a one-word request to", suggestion, model -> {
-            status = "Testing " + model + "…";
+        ask(t("Test {0}", provider), t("provider:model to send a one-word request to"), suggestion, model -> {
+            status = t("Testing {0}…", model);
             statusColor = Theme.DIM;
             services.test(model.strip()).thenAccept(line -> {
                 if (line.startsWith("ok")) {
@@ -340,7 +341,7 @@ final class SettingsView {
         putSafe(buf, r.x() + 2, r.y() + 1, "Saved " + scopeLabel(), st(Theme.DIM, Theme.PANEL), r.right());
         int x = r.x() + 14;
         for (Scope sc : new Scope[] {Scope.PROJECT, Scope.GLOBAL}) {
-            String label = sc == Scope.PROJECT ? " This project " : " All projects ";
+            String label = sc == Scope.PROJECT ? " " + t("This project") + " " : " " + t("All projects") + " ";
             boolean on = sc == scope;
             int w = putSafe(buf, x, r.y(), label, on ? st(Theme.ON_ACCENT, Theme.ACCENT).bold() : st(Theme.TEXT, Theme.FIELD), r.right());
             hits.add(new Hit(new Rect(x, r.y(), w, 1), () -> {
@@ -363,7 +364,7 @@ final class SettingsView {
             boolean on = s == section;
             Rect row = new Rect(nav.x(), ny, navW, 1);
             fill(buf, row, st(Theme.TEXT, on ? Theme.SELECTED : Theme.SIDEBAR));
-            putSafe(buf, row.x() + 2, ny, (on ? "▌ " : "  ") + s.label, on ? st(Theme.TEXT, Theme.SELECTED).bold() : st(Theme.DIM, Theme.SIDEBAR), row.right());
+            putSafe(buf, row.x() + 2, ny, (on ? "▌ " : "  ") + t(s.label), on ? st(Theme.TEXT, Theme.SELECTED).bold() : st(Theme.DIM, Theme.SIDEBAR), row.right());
             hits.add(new Hit(row, () -> select(s)));
             ny += 2;
         }
@@ -396,12 +397,12 @@ final class SettingsView {
             }));
         }
         if (items.size() > visible) {
-            putSafe(buf, content.right() - 12, content.bottom(), (firstVisible + 1) + "–" + Math.min(items.size(), firstVisible + visible) + " of " + items.size(),
+            putSafe(buf, content.right() - 12, content.bottom(), t("{0}–{1} of {2}", firstVisible + 1, Math.min(items.size(), firstVisible + visible), items.size()),
                     st(Theme.FAINT, Theme.BG), content.right());
         }
         Rect foot = new Rect(r.x(), r.bottom() - 1, r.width(), 1);
         fill(buf, foot, st(Theme.DIM, Theme.PANEL));
-        String keys = "↑↓ choose · Enter change · ←→ switch · Del reset · Tab section · S scope · Esc close";
+        String keys = t("↑↓ choose · Enter change · ←→ switch · Del reset · Tab section · S scope · Esc close");
         putSafe(buf, foot.x() + navW + 2, foot.y(), status.isEmpty() ? keys : status, st(status.isEmpty() ? Theme.DIM : statusColor, Theme.PANEL), foot.right());
 
         if (dialogs.active()) {

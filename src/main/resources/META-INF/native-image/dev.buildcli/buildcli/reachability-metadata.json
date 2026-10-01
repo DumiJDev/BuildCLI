@@ -2214,6 +2214,9 @@
     {
       "module": "jdk.jfr",
       "glob": "jdk/jfr/internal/types/metadata.bin"
+    },
+    {
+      "glob": "i18n/pt.tsv"
     }
   ]
 }

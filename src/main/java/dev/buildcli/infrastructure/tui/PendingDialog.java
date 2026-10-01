@@ -1,5 +1,6 @@
 package dev.buildcli.infrastructure.tui;
 
+import static dev.buildcli.application.I18n.t;
 import static dev.buildcli.infrastructure.tui.Draw.clean;
 import static dev.buildcli.infrastructure.tui.Draw.fill;
 import static dev.buildcli.infrastructure.tui.Draw.put;
@@ -92,7 +93,7 @@ final class PendingDialog {
         List<Runnable> actions = new ArrayList<>();
         List<Integer> questionRows = new ArrayList<>();
         if (p instanceof ChatSession.Pending.Approval a) {
-            title = clean(a.request().agent()) + " asks for approval" + where(p);
+            title = t("{0} asks for approval", clean(a.request().agent())) + where(p);
             body.add(List.of(new Span(clean(a.request().summary()), base.bold())));
             body.add(List.of());
             int limit = Math.max(3, r.height() - 12);
@@ -104,51 +105,51 @@ final class PendingDialog {
                 body.add(List.of(new Span(CharWidth.substringByWidth(l.replace("\t", "    "), w - 4), st(c, Theme.DIALOG))));
             }
             if (lines.size() > limit) {
-                body.add(List.of(new Span("… " + (lines.size() - limit) + " more lines", st(Theme.DIM, Theme.DIALOG))));
+                body.add(List.of(new Span(t("… {0} more lines", lines.size() - limit), st(Theme.DIM, Theme.DIALOG))));
             }
-            buttons.add(new String[] {" Approve  Y ", "primary"});
+            buttons.add(new String[] {" " + t("Approve") + "  Y ", "primary"});
             actions.add(() -> a.answer().complete(true));
             if (a.request().grantKey() != null) {
-                buttons.add(new String[] {" Always here  A ", "plain"});
+                buttons.add(new String[] {" " + t("Always here") + "  A ", "plain"});
                 actions.add(() -> session.approveAlways(a));
                 body.add(List.of());
-                for (String line : Wrap.lines("A: " + clean(a.request().grantLabel()) + ". Until you close BuildCLI; /revoke takes it back.", w - 4)) {
+                for (String line : Wrap.lines(t("A: {0}. Until you close BuildCLI; /revoke takes it back.", clean(a.request().grantLabel())), w - 4)) {
                     body.add(List.of(new Span(line, st(Theme.DIM, Theme.DIALOG))));
                 }
             }
-            buttons.add(new String[] {" Deny  N ", "plain"});
+            buttons.add(new String[] {" " + t("Deny") + "  N ", "plain"});
             actions.add(() -> a.answer().complete(false));
         } else if (p instanceof ChatSession.Pending.Question q) {
-            title = clean(q.agent()) + " asks you" + where(p);
+            title = t("{0} asks you", clean(q.agent())) + where(p);
             body.addAll(Styled.lines(clean(q.question()), w - 4, base, base.bold(), base));
             body.add(List.of());
             if (!q.options().isEmpty() && !typingAnswer) {
                 for (int i = 0; i <= q.options().size(); i++) {
                     boolean other = i == q.options().size();
-                    String label = other ? "Something else…" : clean(q.options().get(i));
+                    String label = other ? t("Something else…") : clean(q.options().get(i));
                     Style os = i == choice ? st(Theme.BG, Theme.TEXT).bold() : other ? st(Theme.DIM, Theme.DIALOG) : base;
                     int row = body.size();
                     questionRows.add(row);
                     body.add(List.of(new Span((i == choice ? " ❯ " : "   ") + (i + 1) + ". " + label + " ", os)));
                 }
                 body.add(List.of());
-                body.add(List.of(new Span("↑↓ or a number to choose · Enter confirms · Esc skips", st(Theme.DIM, Theme.DIALOG))));
+                body.add(List.of(new Span(t("↑↓ or a number to choose · Enter confirms · Esc skips"), st(Theme.DIM, Theme.DIALOG))));
             } else {
-                body.add(List.of(new Span(typingAnswer && !q.options().isEmpty() ? "Type your answer below · Enter sends · Esc goes back"
-                        : "Type your answer below · Enter sends · Esc skips", st(Theme.DIM, Theme.DIALOG))));
+                body.add(List.of(new Span(typingAnswer && !q.options().isEmpty() ? t("Type your answer below · Enter sends · Esc goes back")
+                        : t("Type your answer below · Enter sends · Esc skips"), st(Theme.DIM, Theme.DIALOG))));
             }
         } else {
             var e = (ChatSession.Pending.Escalation) p;
-            title = clean(e.agent()) + " is stuck (task #" + e.taskId() + ")" + where(p);
+            title = t("{0} is stuck (task #{1})", clean(e.agent()), e.taskId()) + where(p);
             body.addAll(Styled.lines(clean(e.objective()), w - 4, base, base.bold(), base));
             body.add(List.of());
-            body.addAll(Styled.lines("It failed after the automatic retries: " + clean(e.reason()), w - 4, st(Theme.RED, Theme.DIALOG),
+            body.addAll(Styled.lines(t("It failed after the automatic retries: {0}", clean(e.reason())), w - 4, st(Theme.RED, Theme.DIALOG),
                     st(Theme.RED, Theme.DIALOG).bold(), base));
-            buttons.add(new String[] {" Retry  R ", "primary"});
+            buttons.add(new String[] {" " + t("Retry") + "  R ", "primary"});
             actions.add(() -> e.answer().complete(EscalationChoice.RETRY));
-            buttons.add(new String[] {" Skip task  S ", "plain"});
+            buttons.add(new String[] {" " + t("Skip task") + "  S ", "plain"});
             actions.add(() -> e.answer().complete(EscalationChoice.SKIP));
-            buttons.add(new String[] {" Stop everything  A ", "danger"});
+            buttons.add(new String[] {" " + t("Stop everything") + "  A ", "danger"});
             actions.add(() -> e.answer().complete(EscalationChoice.ABORT));
         }
         int h = body.size() + (buttons.isEmpty() ? 3 : 5);
@@ -244,6 +245,6 @@ final class PendingDialog {
     private String where(ChatSession.Pending p) {
         String chat = chatTitle.apply(p.thread());
         int n = session.pendingCount();
-        return " · " + chat + " chat" + (n > 1 ? " · 1 of " + n : "");
+        return " · " + t("{0} chat", chat) + (n > 1 ? " · " + t("1 of {0}", n) : "");
     }
 }
