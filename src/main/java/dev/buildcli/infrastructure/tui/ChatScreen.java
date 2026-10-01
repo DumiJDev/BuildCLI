@@ -618,7 +618,7 @@ final class ChatScreen implements Element {
             String who = live != null ? live.agent() : chatList.busyAgentIn(selected);
             String state = live != null ? "typing…" : who.isEmpty() ? "working…" : session.agentState(who) + "…";
             sub = (isGroup && !who.isEmpty() ? clean(who) + " is " : "") + state;
-            subStyle = st(Theme.GREEN, Theme.PANEL);
+            subStyle = st(Theme.ACCENT, Theme.PANEL);
         } else if (elsewhere != null) {
             sub = "busy in the " + chatList.title(elsewhere) + " chat · will read your messages after";
             subStyle = st(Theme.AMBER, Theme.PANEL);
@@ -660,7 +660,7 @@ final class ChatScreen implements Element {
         px -= Wrap.width(pill);
         Style pillStyle = switch (mode) {
             case MANUAL -> st(Theme.DIM, Theme.FIELD);
-            case EDITS -> st(Theme.BG, Theme.ACCENT).bold();
+            case EDITS -> st(Theme.ON_ACCENT, Theme.ACCENT).bold();
             case AUTO -> st(Theme.TEXT, Theme.DANGER).bold();
         };
         put(buf, px, r.y() + 1, pill, pillStyle, r.right());
