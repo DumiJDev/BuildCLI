@@ -1,14 +1,14 @@
 package dev.buildcli.infrastructure.tui;
 
+import static dev.buildcli.infrastructure.tui.Draw.fill;
+import static dev.buildcli.infrastructure.tui.Draw.putSafe;
+import static dev.buildcli.infrastructure.tui.Draw.st;
 import dev.buildcli.application.ChatSession;
 import dev.buildcli.domain.Agent;
 import dev.buildcli.domain.Chat;
-import dev.buildcli.infrastructure.TerminalText;
 import dev.tamboui.buffer.Buffer;
-import dev.tamboui.buffer.Cell;
 import dev.tamboui.layout.Rect;
 import dev.tamboui.style.Color;
-import dev.tamboui.style.Style;
 import dev.tamboui.text.CharWidth;
 import dev.tamboui.tui.event.KeyCode;
 import dev.tamboui.tui.event.KeyEvent;
@@ -218,35 +218,19 @@ final class ChatInfoView {
 
     // ---- drawing ----
 
-    private static void fill(Buffer buf, Rect r, Style style) {
-        if (r.width() > 0 && r.height() > 0) {
-            buf.fill(r, new Cell(" ", style));
-        }
-    }
 
-    private static int put(Buffer buf, int x, int y, String text, Style style, int limit) {
-        if (x >= limit || text.isEmpty()) {
-            return 0;
-        }
-        String clipped = CharWidth.substringByWidth(TerminalText.sanitize(text), limit - x);
-        buf.setString(x, y, clipped, style);
-        return CharWidth.of(clipped);
-    }
 
-    private static Style st(Color fg, Color bg) {
-        return Theme.on(fg, bg);
-    }
 
     void render(Buffer buf, Rect r) {
         hits.clear();
         fill(buf, r, st(Theme.TEXT, Theme.BG));
         fill(buf, new Rect(r.x(), r.y(), r.width(), 2), st(Theme.TEXT, Theme.PANEL));
-        put(buf, r.x() + 2, r.y(), title(), st(Theme.TEXT, Theme.PANEL).bold(), r.right() - 10);
-        put(buf, r.x() + 2, r.y() + 1, mode == Mode.INFO ? "↑↓ choose · letters or click run the buttons · Esc back" : "↑↓ choose · Enter · Esc back",
+        putSafe(buf, r.x() + 2, r.y(), title(), st(Theme.TEXT, Theme.PANEL).bold(), r.right() - 10);
+        putSafe(buf, r.x() + 2, r.y() + 1, mode == Mode.INFO ? "↑↓ choose · letters or click run the buttons · Esc back" : "↑↓ choose · Enter · Esc back",
                 st(Theme.DIM, Theme.PANEL), r.right());
         String closeLabel = " ✕ Esc ";
         int cx = r.right() - CharWidth.of(closeLabel) - 1;
-        put(buf, cx, r.y(), closeLabel, st(Theme.DIM, Theme.PANEL), r.right());
+        putSafe(buf, cx, r.y(), closeLabel, st(Theme.DIM, Theme.PANEL), r.right());
         hits.add(new Hit(new Rect(cx, r.y(), CharWidth.of(closeLabel), 1), this::back));
 
         List<Row> rows = rows();
@@ -267,8 +251,8 @@ final class ChatInfoView {
             Color bg = sel ? Theme.SELECTED : Theme.BG;
             Rect line = new Rect(x0, y, w, 1);
             fill(buf, line, st(Theme.TEXT, bg));
-            int tw = put(buf, x0 + 1, y, row.text(), st(row.color(), bg).bold(), x0 + w / 2);
-            put(buf, x0 + 3 + tw, y, row.detail(), st(Theme.DIM, bg), x0 + w - 2);
+            int tw = putSafe(buf, x0 + 1, y, row.text(), st(row.color(), bg).bold(), x0 + w / 2);
+            putSafe(buf, x0 + 3 + tw, y, row.detail(), st(Theme.DIM, bg), x0 + w - 2);
             int idx = i;
             hits.add(new Hit(line, () -> index = idx));
             int bx = x0 + w - 1;
@@ -277,22 +261,22 @@ final class ChatInfoView {
                 String label = " " + act.label() + (act.key() == ' ' ? "" : " " + Character.toUpperCase(act.key())) + " ";
                 bx -= CharWidth.of(label) + 1;
                 Color btn = act.label().startsWith("Delete") || act.label().equals("Remove") ? Theme.DANGER : act.label().equals("Message") ? Theme.FIELD : Theme.ACCENT;
-                put(buf, bx, y, label, st(btn == Theme.ACCENT ? Theme.ON_ACCENT : Theme.TEXT, btn), x0 + w);
+                putSafe(buf, bx, y, label, st(btn == Theme.ACCENT ? Theme.ON_ACCENT : Theme.TEXT, btn), x0 + w);
                 hits.add(new Hit(new Rect(bx, y, CharWidth.of(label), 1), act.run()));
             }
         }
         fill(buf, new Rect(r.x(), r.bottom() - 1, r.width(), 1), st(Theme.DIM, Theme.PANEL));
-        put(buf, r.x() + 2, r.bottom() - 1, status, st(statusColor, Theme.PANEL), r.right());
+        putSafe(buf, r.x() + 2, r.bottom() - 1, status, st(statusColor, Theme.PANEL), r.right());
         if (prompt != null) {
             hits.clear();
             int bw = Math.min(r.width() - 4, 64);
             Rect b = new Rect(r.x() + (r.width() - bw) / 2, r.y() + r.height() / 3, bw, 5);
             fill(buf, b, st(Theme.TEXT, Theme.DIALOG));
-            put(buf, b.x() + 2, b.y() + 1, promptTitle, st(Theme.TEXT, Theme.DIALOG).bold(), b.right() - 2);
+            putSafe(buf, b.x() + 2, b.y() + 1, promptTitle, st(Theme.TEXT, Theme.DIALOG).bold(), b.right() - 2);
             Rect field = new Rect(b.x() + 2, b.y() + 2, b.width() - 4, 1);
             fill(buf, field, st(Theme.TEXT, Theme.FIELD));
-            put(buf, field.x() + 1, field.y(), prompt.text() + "▏", st(Theme.TEXT, Theme.FIELD), field.right());
-            put(buf, b.x() + 2, b.y() + 3, "Enter ok · Esc cancel", st(Theme.DIM, Theme.DIALOG), b.right() - 2);
+            putSafe(buf, field.x() + 1, field.y(), prompt.text() + "▏", st(Theme.TEXT, Theme.FIELD), field.right());
+            putSafe(buf, b.x() + 2, b.y() + 3, "Enter ok · Esc cancel", st(Theme.DIM, Theme.DIALOG), b.right() - 2);
         }
     }
 

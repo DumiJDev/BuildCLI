@@ -1,13 +1,14 @@
 package dev.buildcli.infrastructure.tui;
 
+import static dev.buildcli.infrastructure.tui.Draw.fill;
+import static dev.buildcli.infrastructure.tui.Draw.putSafe;
+import static dev.buildcli.infrastructure.tui.Draw.st;
 import dev.buildcli.application.Settings;
 import dev.buildcli.infrastructure.FileCredentialStore;
 import dev.buildcli.infrastructure.ModelCatalog;
 import dev.buildcli.infrastructure.ProviderRegistry;
-import dev.buildcli.infrastructure.TerminalText;
 import dev.buildcli.ports.SettingsStore.Scope;
 import dev.tamboui.buffer.Buffer;
-import dev.tamboui.buffer.Cell;
 import dev.tamboui.layout.Rect;
 import dev.tamboui.style.Color;
 import dev.tamboui.style.Style;
@@ -399,27 +400,11 @@ final class ConnectView {
 
     // ---- drawing ----
 
-    private static void fill(Buffer buf, Rect r, Style style) {
-        if (r.width() > 0 && r.height() > 0) {
-            buf.fill(r, new Cell(" ", style));
-        }
-    }
 
-    private static int put(Buffer buf, int x, int y, String text, Style style, int limit) {
-        if (x >= limit || text.isEmpty()) {
-            return 0;
-        }
-        String clipped = CharWidth.substringByWidth(TerminalText.sanitize(text), limit - x);
-        buf.setString(x, y, clipped, style);
-        return CharWidth.of(clipped);
-    }
 
-    private static Style st(Color fg, Color bg) {
-        return Theme.on(fg, bg);
-    }
 
     private int button(Buffer buf, int x, int y, String label, Style style, int limit, Runnable action) {
-        int w = put(buf, x, y, label, style, limit);
+        int w = putSafe(buf, x, y, label, style, limit);
         hits.add(new Hit(new Rect(x, y, w, 1), action));
         return w;
     }
@@ -429,15 +414,15 @@ final class ConnectView {
         pollKey();
         fill(buf, r, st(Theme.TEXT, Theme.BG));
         fill(buf, new Rect(r.x(), r.y(), r.width(), 2), st(Theme.TEXT, Theme.PANEL));
-        put(buf, r.x() + 2, r.y(), "Connect a model", st(Theme.TEXT, Theme.PANEL).bold(), r.right());
+        putSafe(buf, r.x() + 2, r.y(), "Connect a model", st(Theme.TEXT, Theme.PANEL).bold(), r.right());
         int x = r.x() + 2;
         String[] names = {"1 Provider", "2 Model", "3 Test"};
         for (int i = 0; i < names.length; i++) {
             boolean on = i == step.ordinal();
             boolean doneStep = i < step.ordinal();
-            x += put(buf, x, r.y() + 1, names[i], on ? st(Theme.ACCENT, Theme.PANEL).bold() : st(doneStep ? Theme.TEXT : Theme.FAINT, Theme.PANEL), r.right());
+            x += putSafe(buf, x, r.y() + 1, names[i], on ? st(Theme.ACCENT, Theme.PANEL).bold() : st(doneStep ? Theme.TEXT : Theme.FAINT, Theme.PANEL), r.right());
             if (i < names.length - 1) {
-                x += put(buf, x, r.y() + 1, "  ›  ", st(Theme.FAINT, Theme.PANEL), r.right());
+                x += putSafe(buf, x, r.y() + 1, "  ›  ", st(Theme.FAINT, Theme.PANEL), r.right());
             }
         }
         String closeLabel = " ✕ Esc ";
@@ -447,7 +432,7 @@ final class ConnectView {
         Rect body = new Rect(r.x() + 2, r.y() + 3, r.width() - 4, r.height() - 5);
         if (reason != null && !reason.isBlank() && step == Step.PROVIDER) {
             for (String line : Wrap.lines(reason, body.width())) {
-                put(buf, body.x(), body.y(), line, st(Theme.AMBER, Theme.BG), body.right());
+                putSafe(buf, body.x(), body.y(), line, st(Theme.AMBER, Theme.BG), body.right());
                 body = new Rect(body.x(), body.y() + 1, body.width(), body.height() - 1);
             }
             body = new Rect(body.x(), body.y() + 1, body.width(), body.height() - 1);
@@ -469,7 +454,7 @@ final class ConnectView {
         }
         Rect foot = new Rect(r.x(), r.bottom() - 1, r.width(), 1);
         fill(buf, foot, st(Theme.DIM, Theme.PANEL));
-        put(buf, foot.x() + 2, foot.y(), keys, st(Theme.DIM, Theme.PANEL), foot.right());
+        putSafe(buf, foot.x() + 2, foot.y(), keys, st(Theme.DIM, Theme.PANEL), foot.right());
     }
 
     /** What is typed, hidden: dots, except the last four characters so a wrong paste can be told from a right one. */
@@ -481,36 +466,36 @@ final class ConnectView {
     }
 
     private void drawKey(Buffer buf, Rect b) {
-        put(buf, b.x(), b.y(), "Your " + keyFor.name() + " key", st(Theme.TEXT, Theme.BG).bold(), b.right());
+        putSafe(buf, b.x(), b.y(), "Your " + keyFor.name() + " key", st(Theme.TEXT, Theme.BG).bold(), b.right());
         String page = ProviderRegistry.keyPage(keyFor.name());
         int y = b.y() + 1;
-        put(buf, b.x(), y, page != null ? "Create one at " + page : "Get one from " + keyFor.url(), st(Theme.DIM, Theme.BG), b.right());
+        putSafe(buf, b.x(), y, page != null ? "Create one at " + page : "Get one from " + keyFor.url(), st(Theme.DIM, Theme.BG), b.right());
         Rect field = new Rect(b.x(), b.y() + 3, b.width(), 1);
         fill(buf, field, st(Theme.TEXT, Theme.FIELD));
         String shown = masked(keyInput.text());
         int avail = field.width() - 3;
         String clipped = CharWidth.of(shown) > avail ? CharWidth.substringByWidthFromEnd(shown, avail) : shown;
-        put(buf, field.x() + 1, field.y(), shown.isEmpty() ? "Paste the key here▏" : clipped + "▏",
+        putSafe(buf, field.x() + 1, field.y(), shown.isEmpty() ? "Paste the key here▏" : clipped + "▏",
                 st(shown.isEmpty() ? Theme.DIM : Theme.TEXT, Theme.FIELD), field.right());
         int row = b.y() + 5;
         if (!keyMessage.isEmpty()) {
             for (String line : Wrap.lines(keyMessage, b.width())) {
-                put(buf, b.x(), row++, line, st(keyColor, Theme.BG), b.right());
+                putSafe(buf, b.x(), row++, line, st(keyColor, Theme.BG), b.right());
             }
             row++;
         }
         String where = services.keyFile().isEmpty() ? "on this computer" : "in " + services.keyFile();
         for (String line : Wrap.lines("It is saved only on this computer, " + where + ", readable by your account only. It is never put in a project, "
                 + "and it is sent nowhere except to " + keyFor.name() + " (" + keyFor.url() + ").", b.width())) {
-            put(buf, b.x(), row++, line, st(Theme.FAINT, Theme.BG), b.right());
+            putSafe(buf, b.x(), row++, line, st(Theme.FAINT, Theme.BG), b.right());
         }
         row++;
-        put(buf, b.x(), row, "You can also set " + keyFor.keyEnv() + " in your environment instead; that always wins over a saved key.",
+        putSafe(buf, b.x(), row, "You can also set " + keyFor.keyEnv() + " in your environment instead; that always wins over a saved key.",
                 st(Theme.FAINT, Theme.BG), b.right());
     }
 
     private void drawProviders(Buffer buf, Rect b) {
-        put(buf, b.x(), b.y(), "Where should your agents' model come from?", st(Theme.TEXT, Theme.BG).bold(), b.right());
+        putSafe(buf, b.x(), b.y(), "Where should your agents' model come from?", st(Theme.TEXT, Theme.BG).bold(), b.right());
         int top = b.y() + 2;
         int rows = Math.max(3, Math.min(providers.size(), b.height() / 2 - 1));
         index = Math.max(0, Math.min(index, providers.size() - 1));
@@ -527,12 +512,12 @@ final class ConnectView {
             Rect row = new Rect(b.x(), top + i - first, b.width(), 1);
             fill(buf, row, st(Theme.TEXT, bg));
             String mark = s.ready() ? "● " : "○ ";
-            int w = put(buf, row.x() + 1, row.y(), mark, st(s.ready() ? Theme.GREEN : Theme.FAINT, bg), row.right());
-            w += put(buf, row.x() + 1 + w, row.y(), p.name(), sel ? st(Theme.TEXT, bg).bold() : st(Theme.TEXT, bg), row.right());
-            put(buf, row.x() + 16, row.y(), p.local() ? "on this machine" : "cloud", st(Theme.FAINT, bg), row.right());
+            int w = putSafe(buf, row.x() + 1, row.y(), mark, st(s.ready() ? Theme.GREEN : Theme.FAINT, bg), row.right());
+            w += putSafe(buf, row.x() + 1 + w, row.y(), p.name(), sel ? st(Theme.TEXT, bg).bold() : st(Theme.TEXT, bg), row.right());
+            putSafe(buf, row.x() + 16, row.y(), p.local() ? "on this machine" : "cloud", st(Theme.FAINT, bg), row.right());
             String text = s.text().equals("checking…") ? SPINNER.charAt((int) (System.currentTimeMillis() / 80 % SPINNER.length())) + " checking" : s.text();
             int tw = CharWidth.of(text);
-            put(buf, Math.max(row.x() + 34, row.right() - tw - 1), row.y(), text, st(s.color(), bg), row.right());
+            putSafe(buf, Math.max(row.x() + 34, row.right() - tw - 1), row.y(), text, st(s.color(), bg), row.right());
             int idx = i;
             hits.add(new Hit(row, () -> {
                 if (index == idx) {
@@ -546,18 +531,18 @@ final class ConnectView {
             return;
         }
         int y = top + rows + 1;
-        put(buf, b.x(), y, "─".repeat(b.width()), st(Theme.LINE, Theme.BG), b.right());
+        putSafe(buf, b.x(), y, "─".repeat(b.width()), st(Theme.LINE, Theme.BG), b.right());
         y += 2;
         SettingsServices.Provider p = providers.get(index);
         Status s = status(p);
-        put(buf, b.x(), y - 1, p.name(), st(Theme.TEXT, Theme.BG).bold(), b.right());
+        putSafe(buf, b.x(), y - 1, p.name(), st(Theme.TEXT, Theme.BG).bold(), b.right());
         if (!notice.isEmpty()) {
-            put(buf, b.x(), y++, notice, st(Theme.GREEN, Theme.BG), b.right());
+            putSafe(buf, b.x(), y++, notice, st(Theme.GREEN, Theme.BG), b.right());
         }
         if (p.keyEnv() != null && p.keySet() && !p.keyFrom().isBlank()) {
             String source = p.keyFrom().equals("saved") ? "Key: saved by you (K replace · D forget)"
                     : "Key: from the environment variable " + p.keyEnv() + " (K saves a different one)";
-            put(buf, b.x(), y++, source, st(Theme.DIM, Theme.BG), b.right());
+            putSafe(buf, b.x(), y++, source, st(Theme.DIM, Theme.BG), b.right());
         }
         for (String line : s.help()) {
             for (String part : line.isEmpty() ? List.of("") : Wrap.lines(line, b.width())) {
@@ -565,7 +550,7 @@ final class ConnectView {
                     return;
                 }
                 boolean command = part.startsWith("    ");
-                put(buf, b.x(), y++, part, st(command ? Theme.ACCENT : Theme.DIM, Theme.BG), b.right());
+                putSafe(buf, b.x(), y++, part, st(command ? Theme.ACCENT : Theme.DIM, Theme.BG), b.right());
             }
         }
         if (p.keyEnv() != null && !p.keySet() && y + 1 < b.bottom()) {
@@ -578,11 +563,11 @@ final class ConnectView {
     }
 
     private void drawModels(Buffer buf, Rect b) {
-        put(buf, b.x(), b.y(), "Which " + provider.name() + " model?", st(Theme.TEXT, Theme.BG).bold(), b.right());
+        putSafe(buf, b.x(), b.y(), "Which " + provider.name() + " model?", st(Theme.TEXT, Theme.BG).bold(), b.right());
         Rect field = new Rect(b.x(), b.y() + 2, b.width(), 1);
         fill(buf, field, st(Theme.TEXT, Theme.FIELD));
         String f = filter.text();
-        put(buf, field.x() + 1, field.y(), f.isEmpty() ? "Search, or type a model name and press Enter▏" : f + "▏",
+        putSafe(buf, field.x() + 1, field.y(), f.isEmpty() ? "Search, or type a model name and press Enter▏" : f + "▏",
                 st(f.isEmpty() ? Theme.DIM : Theme.TEXT, Theme.FIELD), field.right());
         List<ModelCatalog.Model> items = models();
         int rows = Math.max(1, b.height() - 6);
@@ -599,8 +584,8 @@ final class ConnectView {
             Rect row = new Rect(b.x(), b.y() + 4 + i, b.width(), 1);
             fill(buf, row, st(Theme.TEXT, bg));
             String name = m.ref().substring(m.ref().indexOf(':') + 1);
-            int w = put(buf, row.x() + 1, row.y(), name, st(m.tools() ? Theme.TEXT : Theme.DIM, bg), row.right() - 2);
-            put(buf, row.x() + 3 + w, row.y(), m.note() + (m.tools() ? "" : " · no tools"), st(m.free() && !provider.local() ? Theme.ACCENT : Theme.DIM, bg),
+            int w = putSafe(buf, row.x() + 1, row.y(), name, st(m.tools() ? Theme.TEXT : Theme.DIM, bg), row.right() - 2);
+            putSafe(buf, row.x() + 3 + w, row.y(), m.note() + (m.tools() ? "" : " · no tools"), st(m.free() && !provider.local() ? Theme.ACCENT : Theme.DIM, bg),
                     row.right() - 1);
             int idx = modelFirst + i;
             hits.add(new Hit(row, () -> {
@@ -610,25 +595,25 @@ final class ConnectView {
         }
         String info = items.isEmpty() ? (f.isBlank() ? "No models listed." : "No match: Enter tests " + provider.name() + ":" + f.strip())
                 : items.size() + " models · models marked \"no tools\" can chat but cannot read or edit files";
-        put(buf, b.x(), b.bottom() - 1, info, st(Theme.FAINT, Theme.BG), b.right());
+        putSafe(buf, b.x(), b.bottom() - 1, info, st(Theme.FAINT, Theme.BG), b.right());
     }
 
     private void drawTest(Buffer buf, Rect b) {
-        put(buf, b.x(), b.y(), "Testing " + model, st(Theme.TEXT, Theme.BG).bold(), b.right());
+        putSafe(buf, b.x(), b.y(), "Testing " + model, st(Theme.TEXT, Theme.BG).bold(), b.right());
         String r = test == null ? null : test.getNow(null);
         int y = b.y() + 2;
         if (r == null) {
             long secs = (System.nanoTime() - testStarted) / 1_000_000_000L;
-            put(buf, b.x(), y, SPINNER.charAt((int) (System.currentTimeMillis() / 80 % SPINNER.length())) + " Sending a one-word message… " + secs + " s",
+            putSafe(buf, b.x(), y, SPINNER.charAt((int) (System.currentTimeMillis() / 80 % SPINNER.length())) + " Sending a one-word message… " + secs + " s",
                     st(Theme.DIM, Theme.BG), b.right());
             if (secs >= 10) {
-                put(buf, b.x(), y + 2, "Free and local models can take a while the first time (loading the model).", st(Theme.FAINT, Theme.BG), b.right());
+                putSafe(buf, b.x(), y + 2, "Free and local models can take a while the first time (loading the model).", st(Theme.FAINT, Theme.BG), b.right());
             }
             return;
         }
         if (r.startsWith("ok")) {
-            put(buf, b.x(), y, "✓ " + answered(r), st(Theme.GREEN, Theme.BG), b.right());
-            put(buf, b.x(), y + 2, "Use it for agents that have no model of their own:", st(Theme.TEXT, Theme.BG), b.right());
+            putSafe(buf, b.x(), y, "✓ " + answered(r), st(Theme.GREEN, Theme.BG), b.right());
+            putSafe(buf, b.x(), y + 2, "Use it for agents that have no model of their own:", st(Theme.TEXT, Theme.BG), b.right());
             int x = b.x();
             x += button(buf, x, y + 4, " This project  P ", st(Theme.ON_ACCENT, Theme.ACCENT).bold(), b.right(), () -> use(Scope.PROJECT)) + 2;
             x += button(buf, x, y + 4, " All projects  G ", st(Theme.TEXT, Theme.FIELD), b.right(), () -> use(Scope.GLOBAL)) + 2;
@@ -636,10 +621,10 @@ final class ConnectView {
             return;
         }
         for (String line : Wrap.lines("✗ " + r, b.width())) {
-            put(buf, b.x(), y++, line, st(Theme.RED, Theme.BG), b.right());
+            putSafe(buf, b.x(), y++, line, st(Theme.RED, Theme.BG), b.right());
         }
         if (r.contains("401") || r.contains("403") || r.toLowerCase(Locale.ROOT).contains("api key") || r.toLowerCase(Locale.ROOT).contains("unauthorized")) {
-            put(buf, b.x(), y++, "This looks like a key problem: press Esc until the provider list, select it and press K for a new key.",
+            putSafe(buf, b.x(), y++, "This looks like a key problem: press Esc until the provider list, select it and press K for a new key.",
                     st(Theme.AMBER, Theme.BG), b.right());
         }
         int x = b.x();
