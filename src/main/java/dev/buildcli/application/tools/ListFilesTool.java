@@ -44,6 +44,7 @@ public final class ListFilesTool implements Tool {
         List<String> readGlobs = agent.permissions().readGlobs();
         try (Stream<Path> entries = Files.list(dir)) {
             List<String> names = entries.sorted()
+                    .filter(p -> !ctx.isProtected(p))
                     .filter(p -> Files.isDirectory(p)
                             ? ToolContext.matches(readGlobs, ctx.relative(p) + "/x")
                             : ToolContext.matches(readGlobs, ctx.relative(p)))

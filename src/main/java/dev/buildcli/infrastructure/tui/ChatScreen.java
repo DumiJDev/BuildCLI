@@ -163,7 +163,7 @@ final class ChatScreen implements Element {
         this.settingsView = new SettingsView(services, () -> settingsOpen = false, file -> {
             settingsOpen = false;
             runCommand("/open " + file);
-        });
+        }, () -> openConnect(null));
         this.infoView = new ChatInfoView(session, () -> selected, this::select, () -> infoOpen = false, this::modelLabel);
         this.connectView = new ConnectView(services, message -> {
             connectOpen = false;

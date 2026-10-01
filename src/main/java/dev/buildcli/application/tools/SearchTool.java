@@ -72,7 +72,7 @@ public final class SearchTool implements Tool {
             if (matches.size() >= MAX_MATCHES) {
                 return;
             }
-            if (Files.isSymbolicLink(child)) {
+            if (Files.isSymbolicLink(child) || ctx.isProtected(child)) {
                 continue;
             }
             if (Files.isDirectory(child)) {

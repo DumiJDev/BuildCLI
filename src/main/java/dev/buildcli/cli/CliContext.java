@@ -35,7 +35,12 @@ public final class CliContext {
 
     public final Path cwd;
     public final Path home;
+    /** The environment plus the keys saved from inside BuildCLI; a variable that is set wins over a saved key. */
     public final Map<String, String> env;
+    /** The environment as the process has it, without saved keys. */
+    public final Map<String, String> processEnv;
+    /** Keys typed into BuildCLI, in the user's own folder. */
+    public final dev.buildcli.infrastructure.FileCredentialStore credentials;
     public final PrintStream out;
     public final PrintStream err;
     public final BufferedReader in;
@@ -47,7 +52,10 @@ public final class CliContext {
                       boolean terminal, GatewayFactory gateways, TuiLauncher tui) {
         this.cwd = cwd.toAbsolutePath().normalize();
         this.home = home;
-        this.env = env;
+        this.processEnv = env;
+        this.credentials = new dev.buildcli.infrastructure.FileCredentialStore(
+                StateLocations.globalDir(env, home).resolve(dev.buildcli.infrastructure.FileCredentialStore.FILE_NAME));
+        this.env = new KeyedEnvironment(env, credentials);
         // everything printed may contain untrusted text (model replies, tool output): never let it drive the terminal
         this.out = dev.buildcli.infrastructure.SafePrintStream.wrap(out);
         this.err = dev.buildcli.infrastructure.SafePrintStream.wrap(err);
@@ -73,7 +81,7 @@ public final class CliContext {
     }
 
     public Path globalDir() {
-        return StateLocations.globalDir(env, home);
+        return StateLocations.globalDir(processEnv, home);
     }
 
     public Path projectStateDir() {

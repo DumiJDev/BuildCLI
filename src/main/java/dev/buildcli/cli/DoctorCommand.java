@@ -80,7 +80,7 @@ final class DoctorCommand implements Callable<Integer> {
             if (spec == null) {
                 fail("an agent uses provider '" + name + "', which is not known (see 'buildcli provider list')");
             } else if (spec.needsKey() && ctx.env.getOrDefault(spec.apiKeyEnv(), "").isBlank()) {
-                warn("an agent uses '" + name + "' but " + spec.apiKeyEnv() + " is not set");
+                warn("an agent uses '" + name + "' but it has no key: run 'buildcli provider login " + name + "' (or set " + spec.apiKeyEnv() + ")");
             } else {
                 ok("provider '" + name + "' is configured (" + spec.baseUrl() + ")");
             }

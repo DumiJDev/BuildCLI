@@ -23,6 +23,7 @@ final class ConfigCommand implements Callable<Integer> {
         ctx.out.println("global directory  : " + ctx.globalDir() + "  (override with BUILDCLI_HOME)");
         ctx.out.println("state database    : " + ctx.stateDb());
         ctx.out.println("trust file        : " + ctx.trustFile());
+        ctx.out.println("saved API keys    : " + ctx.credentials.file() + "  (only if you saved any: 'buildcli provider login <provider>')");
         ctx.out.println();
         ctx.out.println("providers         : " + ctx.globalDir().resolve(dev.buildcli.infrastructure.ProviderRegistry.FILE_NAME)
                 + "  (your own; see 'buildcli provider list')");
@@ -30,7 +31,9 @@ final class ConfigCommand implements Callable<Integer> {
         for (var spec : s.registry().all()) {
             if (spec.needsKey() && !spec.name().equals("moonshot")) {
                 String key = ctx.env.get(spec.apiKeyEnv());
-                ctx.out.println(String.format("%-18s: %s", spec.apiKeyEnv(), key == null || key.isBlank() ? "not set" : "set (not shown)"));
+                boolean fromEnvironment = !ctx.processEnv.getOrDefault(spec.apiKeyEnv(), "").isBlank();
+                ctx.out.println(String.format("%-18s: %s", spec.apiKeyEnv(), key == null || key.isBlank() ? "not set"
+                        : fromEnvironment ? "set in the environment (not shown)" : "saved by you (not shown)"));
             }
         }
         return 0;
