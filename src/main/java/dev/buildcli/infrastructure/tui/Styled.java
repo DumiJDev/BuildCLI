@@ -66,10 +66,17 @@ final class Styled {
         int block = 0;
         List<Style[]> coloured = null;
         int codeLine = 0;
+        int blockStart = -1;
         for (String raw : text.replace("\t", "    ").split("\n", -1)) {
             String trimmed = raw.strip();
             if (trimmed.startsWith("```")) {
                 fenced = !fenced;
+                if (!fenced) {
+                    padBlock(out, blockStart, code);
+                    blockStart = -1;
+                } else {
+                    blockStart = out.size();
+                }
                 if (fenced) {
                     String body = block < blocks.size() ? blocks.get(block) : "";
                     block++;
@@ -121,10 +128,29 @@ final class Styled {
                 out.add(slice(plain, styles, seg.start(), stripEnd(plain, seg.start(), seg.end())));
             }
         }
+        if (blockStart >= 0) {
+            padBlock(out, blockStart, code); // a block still streaming
+        }
         if (out.isEmpty()) {
             out.add(List.of());
         }
         return out;
+    }
+
+    /** Lines of a code block get the same width, so its background is a rectangle and not a ragged edge. */
+    private static void padBlock(List<List<Span>> out, int from, Style code) {
+        int widest = 0;
+        for (int i = from; i < out.size(); i++) {
+            widest = Math.max(widest, width(out.get(i)));
+        }
+        for (int i = from; i < out.size(); i++) {
+            int missing = widest - width(out.get(i));
+            if (missing > 0) {
+                List<Span> padded = new ArrayList<>(out.get(i));
+                padded.add(new Span(" ".repeat(missing), code));
+                out.set(i, padded);
+            }
+        }
     }
 
     private static int stripEnd(String s, int start, int end) {

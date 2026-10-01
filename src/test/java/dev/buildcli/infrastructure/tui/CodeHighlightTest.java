@@ -34,11 +34,25 @@ class CodeHighlightTest {
     }
 
     @Test
+    void everyLineOfABlockIsAsWideAsItsWidestSoTheBackgroundIsARectangle() {
+        for (String text : new String[] {"```java\nclass A {\n    int n;\n}\n```", "```java\nclass A {\n    int n;\n", "```cobol\nMOVE 1 TO X\nGO\n```"}) {
+            var lines = lines(text);
+            int[] widths = lines.stream().skip(1).filter(l -> !l.isEmpty()).mapToInt(Styled::width).toArray();
+            assertTrue(widths.length >= 2, text);
+            assertTrue(java.util.Arrays.stream(widths).distinct().count() == 1, text + " -> " + java.util.Arrays.toString(widths));
+            assertEquals(Theme.CODE, lines.get(lines.size() - 1).get(lines.get(lines.size() - 1).size() - 1).style().bg().orElse(null));
+        }
+        var around = lines("before\n```sh\nls\n```\nafter").stream().map(Styled::width).toList();
+        assertEquals(6, around.get(0), "text outside a block is not padded");
+    }
+
+    @Test
     void aBlockCommentSpanningLinesIsColouredOnEveryLine() {
         var lines = lines("```java\n/* one\n   two */\n```");
         Style comment = lines.get(1).get(0).style();
         assertNotEquals(CODE.fg().orElse(null), comment.fg().orElse(null));
-        assertEquals(comment.fg(), lines.get(2).get(lines.get(2).size() - 1).style().fg(), "the second line is still a comment");
+        var two = lines.get(2).stream().filter(sp -> sp.text().contains("two")).findFirst().orElseThrow();
+        assertEquals(comment.fg(), two.style().fg(), "the second line is still a comment");
     }
 
     @Test
@@ -46,7 +60,7 @@ class CodeHighlightTest {
         for (String fence : new String[] {"```cobol", "```", "```brainfuck"}) {
             var lines = lines(fence + "\nMOVE 1 TO X\n```");
             var code = lines.get(lines.size() - 1);
-            assertEquals(1, code.size(), fence);
+            assertEquals("MOVE 1 TO X", code.get(0).text(), fence);
             assertEquals(CODE, code.get(0).style(), fence);
         }
     }
