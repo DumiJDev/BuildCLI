@@ -68,7 +68,7 @@ final class TaskCommand implements Callable<Integer> {
                 List<List<String>> rows = new ArrayList<>();
                 for (Task t : tasks) {
                     rows.add(List.of("  ".repeat(depth(t, tasks)) + "#" + t.id, t.status.name(), t.from + " -> " + t.to,
-                            String.valueOf(t.tokens), Tables.cut(t.objective, 60)));
+                            String.valueOf(t.tokens()), Tables.cut(t.objective, 60)));
                 }
                 Tables.print(ctx.out, List.of("TASK", "STATUS", "FROM -> TO", "TOKENS", "OBJECTIVE"), rows);
             }
@@ -120,7 +120,7 @@ final class TaskCommand implements Callable<Integer> {
                 }
                 ctx.out.println("Task #" + t.id + " of run " + r.id() + "  " + t.status + (t.parentId == null ? "" : "  (handoff from #" + t.parentId + ")"));
                 ctx.out.println("  from:      " + t.from + " -> " + t.to);
-                ctx.out.println("  attempts:  " + t.attempts + "   tokens: " + t.tokens);
+                ctx.out.println("  attempts:  " + t.attempts() + "   tokens: " + t.tokens());
                 ctx.out.println("  objective: " + t.objective);
                 if (!t.brief.isBlank()) {
                     ctx.out.println("  brief:     " + t.brief);

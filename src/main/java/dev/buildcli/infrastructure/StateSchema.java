@@ -1,10 +1,12 @@
 package dev.buildcli.infrastructure;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
+import java.util.stream.IntStream;
 
 /** The tables of the state database and how an older database is brought up to date, for SQLite and H2. */
 final class StateSchema {
@@ -56,12 +58,18 @@ final class StateSchema {
         }
     }
 
+    private static final List<String> SET_USER_VERSION = IntStream.rangeClosed(0, VERSION).mapToObj(v -> "PRAGMA user_version=" + v).toList();
+
     private static void writeVersion(Statement st, boolean h2, int version) throws SQLException {
         if (h2) {
             st.execute("DELETE FROM buildcli_schema");
-            st.execute("INSERT INTO buildcli_schema (version) VALUES (" + version + ")");
+            try (PreparedStatement insert = st.getConnection().prepareStatement("INSERT INTO buildcli_schema (version) VALUES (?)")) {
+                insert.setInt(1, version);
+                insert.executeUpdate();
+            }
         } else {
-            st.execute("PRAGMA user_version=" + version);
+            // PRAGMA takes no parameters: one fixed statement per known version, picked by index, never built from input
+            st.execute(SET_USER_VERSION.get(version));
         }
     }
 

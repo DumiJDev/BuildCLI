@@ -385,8 +385,8 @@ final class ChatCommands {
                 parent = up == null ? null : up.parentId;
                 depth++;
             }
-            out.add("  ".repeat(depth) + "#" + t.id + "  " + t.status + "  " + t.from + " → " + t.to + "   " + I18n.t("{0} tokens", t.tokens)
-                    + (t.attempts > 1 ? ", " + I18n.t("attempt {0}", t.attempts) : ""));
+            out.add("  ".repeat(depth) + "#" + t.id + "  " + t.status + "  " + t.from + " → " + t.to + "   " + I18n.t("{0} tokens", t.tokens())
+                    + (t.attempts() > 1 ? ", " + I18n.t("attempt {0}", t.attempts()) : ""));
             out.add("  ".repeat(depth) + "    " + t.objective.replace('\n', ' '));
         }
         return out;

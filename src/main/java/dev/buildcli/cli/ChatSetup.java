@@ -34,7 +34,7 @@ final class ChatSetup {
     }
 
     static String groupId(String name) {
-        return "#" + name.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("^-|-$", "");
+        return "#" + name.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("(?:^-)|(?:-$)", "");
     }
 
     /** The groups saved for this project. */
