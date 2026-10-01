@@ -48,6 +48,18 @@ final class Draw {
         return put(buf, x, y, x >= limit || text.isEmpty() ? text : TerminalText.sanitize(text), style, limit);
     }
 
+    /** Draws styled pieces side by side; a piece with an action becomes clickable through {@code hit}. */
+    static void spans(Buffer buf, int x, int y, java.util.List<Styled.Span> spans, int limit, java.util.function.BiConsumer<Rect, Runnable> hit) {
+        int cx = x;
+        for (Styled.Span s : spans) {
+            int w = put(buf, cx, y, s.text(), s.style(), limit);
+            if (s.action() != null && w > 0) {
+                hit.accept(new Rect(cx, y, w, 1), s.action());
+            }
+            cx += w;
+        }
+    }
+
     static Style st(Color fg, Color bg) {
         return Theme.on(fg, bg);
     }

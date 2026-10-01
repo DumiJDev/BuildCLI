@@ -7,17 +7,14 @@ import static dev.buildcli.infrastructure.tui.Draw.putFit;
 import static dev.buildcli.infrastructure.tui.Draw.st;
 import dev.buildcli.application.ChatSession;
 import dev.buildcli.application.ChatSession.Message;
-import dev.buildcli.application.ChatSession.State;
 import dev.buildcli.domain.Agent;
 import dev.buildcli.domain.Attachment;
 import dev.buildcli.infrastructure.tui.Styled.Span;
-import dev.buildcli.ports.EscalationChoice;
 import dev.tamboui.buffer.Buffer;
 import dev.tamboui.layout.Rect;
 import dev.tamboui.style.Color;
 import dev.tamboui.style.Style;
 import dev.tamboui.terminal.Frame;
-import dev.tamboui.text.CharWidth;
 import dev.tamboui.toolkit.element.Element;
 import dev.tamboui.toolkit.element.RenderContext;
 import dev.tamboui.toolkit.element.Size;
@@ -46,13 +43,6 @@ final class ChatScreen implements Element {
 
     private record Hit(Rect rect, Runnable action) {}
 
-    /** What the full-screen viewer shows. */
-    private record View(String title, List<String> lines, boolean diff, boolean numbered, long changes, boolean confirmUndo) {
-        View(String title, List<String> lines, boolean diff, boolean numbered) {
-            this(title, lines, diff, numbered, -1, false);
-        }
-    }
-
 
     private static final int SIDEBAR_WIDTH = 34;
     private static final int SIDEBAR_MIN_TOTAL = 96;
@@ -65,10 +55,7 @@ final class ChatScreen implements Element {
     private final Path cwd;
     private final Runnable quit;
     private final InputEditor input = new InputEditor();
-    /** The question an agent is asking you, which option is highlighted, and whether you are typing your own answer instead. */
-    private ChatSession.Pending.Question asked;
-    private int choice;
-    private boolean typingAnswer;
+    private final PendingDialog pending;
     private final List<Attachment> attachments = new ArrayList<>();
     private final List<Hit> hits = new ArrayList<>();
 
@@ -80,9 +67,7 @@ final class ChatScreen implements Element {
     private int scrollOff;
     private int lastTotal;
     private int scrollMax;
-    private View view;
-    private int viewScroll;
-    private int viewHeight = 10;
+    private final ViewerPane viewer;
     private int menuIndex;
     private String menuDismissedFor;
     private Rect area = Rect.ZERO;
@@ -123,6 +108,8 @@ final class ChatScreen implements Element {
 
     ChatScreen(ChatSession session, Map<String, String> models, Path cwd, Runnable quit, SettingsServices services) {
         this.session = session;
+        this.pending = new PendingDialog(session, input, (rect, action) -> hits.add(new Hit(rect, action)), this::pendingChatTitle);
+        this.viewer = new ViewerPane(session, (rect, action) -> hits.add(new Hit(rect, action)), this::reviewChanges);
         // what you sent in earlier runs is still there to walk back through with Up
         for (var m : session.messages()) {
             if (m.kind() == ChatSession.Kind.USER) {
@@ -175,7 +162,7 @@ final class ChatScreen implements Element {
 
             @Override
             public void openView(ChatCommands.ViewSpec v) {
-                open(new View(v.title(), v.lines(), v.diff(), v.numbered()));
+                viewer.open(new ViewerPane.View(v.title(), v.lines(), v.diff(), v.numbered()));
             }
 
             @Override
@@ -339,7 +326,7 @@ final class ChatScreen implements Element {
     private void openConnect(String why) {
         settingsOpen = false;
         infoOpen = false;
-        view = null;
+        viewer.close();
         connectView.open(why);
         connectOpen = true;
     }
@@ -475,14 +462,14 @@ final class ChatScreen implements Element {
         } else if (infoOpen) {
             infoView.render(buf, pane);
             frame.clearCursor();
-        } else if (view != null) {
-            drawViewer(buf, pane);
+        } else if (viewer.isOpen()) {
+            viewer.draw(buf, pane);
             frame.clearCursor();
         } else {
             drawPane(frame, buf, pane, all);
         }
         if (session.pending() != null) {
-            drawDialog(buf, rect);
+            pending.draw(buf, rect);
             frame.clearCursor();
         }
     }
@@ -509,21 +496,9 @@ final class ChatScreen implements Element {
 
     // ---- drawing primitives ----
 
-
-
     private void drawSpans(Buffer buf, int x, int y, List<Span> spans, int limit) {
-        int cx = x;
-        for (Span s : spans) {
-            int w = put(buf, cx, y, s.text(), s.style(), limit);
-            if (s.action() != null && w > 0) {
-                hits.add(new Hit(new Rect(cx, y, w, 1), s.action()));
-            }
-            cx += w;
-        }
+        Draw.spans(buf, x, y, spans, limit, (rect, action) -> hits.add(new Hit(rect, action)));
     }
-
-
-
 
     // ---- chat list (left) ----
 
@@ -853,7 +828,7 @@ final class ChatScreen implements Element {
                     n.agents().get(0), n.path(), n.existed(), n.before(), n.after()))).lines().toList());
         }
         String who = files.get(0).agent();
-        open(new View(undo ? "Undo " + who + "'s changes?" : who + "'s changes", lines, true, false, id, undo));
+        viewer.open(new ViewerPane.View(undo ? "Undo " + who + "'s changes?" : who + "'s changes", lines, true, false, id, undo));
     }
 
     private void undoLast() {
@@ -928,7 +903,7 @@ final class ChatScreen implements Element {
         put(buf, sx, r.y() + visibleRows, " ➤ ", canSend ? st(Theme.BG, Theme.ACCENT).bold() : st(Theme.DIM, Theme.PANEL), r.right());
         hits.add(new Hit(new Rect(sx, r.y() + visibleRows, 3, 1), this::submit));
         inputTextArea = new Rect(tx, r.y() + 1, inputWidth, visibleRows);
-        if (session.pending() == null || session.pending() instanceof ChatSession.Pending.Question && typingOwnAnswer()) {
+        if (session.pending() == null || session.pending() instanceof ChatSession.Pending.Question && pending.typingOwnAnswer()) {
             frame.setCursorPosition(tx + Math.min(cur[1], inputWidth), r.y() + 1 + (cur[0] - inputFirstRow));
         }
     }
@@ -1047,304 +1022,8 @@ final class ChatScreen implements Element {
         menuDismissedFor = null;
     }
 
-    // ---- the viewer (diff, file, tasks, help) ----
-
-    private void open(View v) {
-        view = v;
-        viewScroll = 0;
-    }
-
-    private void drawViewer(Buffer buf, Rect r) {
-        Style base = st(Theme.TEXT, Theme.BG);
-        Style bar = st(Theme.TEXT, Theme.SIDEBAR);
-        fill(buf, new Rect(r.x(), r.y(), r.width(), 1), bar);
-        put(buf, r.x() + 2, r.y(), clean(view.title()), bar.bold(), r.right() - 12);
-        String close = " ✕ Esc ";
-        int cx = r.right() - Wrap.width(close) - 1;
-        put(buf, cx, r.y(), close, st(Theme.DIM, Theme.SIDEBAR), r.right());
-        hits.add(new Hit(new Rect(cx, r.y(), Wrap.width(close), 1), () -> view = null));
-        viewHeight = Math.max(1, r.height() - 2);
-        List<String> lines = view.lines();
-        int max = Math.max(0, lines.size() - viewHeight);
-        viewScroll = Math.max(0, Math.min(viewScroll, max));
-        int gutter = view.numbered() ? Integer.toString(lines.size()).length() + 2 : 0;
-        for (int i = 0; i < viewHeight && viewScroll + i < lines.size(); i++) {
-            int n = viewScroll + i;
-            String l = clean(lines.get(n)).replace("\t", "    ");
-            int y = r.y() + 1 + i;
-            int x = r.x() + 2;
-            if (view.numbered()) {
-                String num = String.format("%" + (gutter - 1) + "d ", n + 1);
-                put(buf, x, y, num, st(Theme.FAINT, Theme.BG), r.right());
-                x += gutter;
-            }
-            Style s = base;
-            if (view.diff()) {
-                if (l.startsWith("diff --git")) {
-                    fill(buf, new Rect(r.x(), y, r.width(), 1), st(Theme.TEXT, Theme.ME));
-                    s = st(Theme.TEXT, Theme.ME).bold();
-                } else if (l.startsWith("+++") || l.startsWith("---") || l.startsWith("index ")) {
-                    s = st(Theme.DIM, Theme.BG);
-                } else if (l.startsWith("@@")) {
-                    s = st(Theme.BLUE, Theme.BG);
-                } else if (l.startsWith("+")) {
-                    fill(buf, new Rect(r.x(), y, r.width(), 1), st(Theme.TEXT, Theme.ADD_BG));
-                    s = st(Theme.ADD_FG, Theme.ADD_BG);
-                } else if (l.startsWith("-")) {
-                    fill(buf, new Rect(r.x(), y, r.width(), 1), st(Theme.TEXT, Theme.DEL_BG));
-                    s = st(Theme.DEL_FG, Theme.DEL_BG);
-                }
-            }
-            put(buf, x, y, l, s, r.right() - 1);
-        }
-        String foot = lines.isEmpty() ? "empty" : (viewScroll + 1) + "–" + Math.min(lines.size(), viewScroll + viewHeight) + " of " + lines.size()
-                + "   ↑↓ PgUp PgDn scroll" + (view.diff() ? " · [ ] previous/next file" : "") + " · Esc close";
-        fill(buf, new Rect(r.x(), r.bottom() - 1, r.width(), 1), bar);
-        put(buf, r.x() + 2, r.bottom() - 1, foot, st(Theme.DIM, Theme.SIDEBAR), r.right());
-        if (view.changes() >= 0) {
-            long id = view.changes();
-            Rect b = new Rect(r.x(), r.bottom() - 2, r.width(), 1);
-            fill(buf, b, st(Theme.TEXT, Theme.PANEL));
-            int x = r.x() + 2;
-            if (view.confirmUndo()) {
-                x += put(buf, x, b.y(), "Files you or another agent changed since are left alone.  ", st(Theme.DIM, Theme.PANEL), r.right());
-                x += put(buf, x, b.y(), " Undo  Y ", st(Theme.TEXT, Theme.DANGER).bold(), r.right());
-                hits.add(new Hit(new Rect(x - 9, b.y(), 9, 1), () -> undoChanges(id)));
-                x += put(buf, x + 1, b.y(), " Cancel  N ", st(Theme.TEXT, Theme.FIELD), r.right()) + 1;
-                hits.add(new Hit(new Rect(x - 11, b.y(), 11, 1), () -> view = null));
-            } else if (session.canUndo() && !undone(id)) {
-                int w = put(buf, x, b.y(), " Undo these changes  U ", st(Theme.TEXT, Theme.FIELD), r.right());
-                hits.add(new Hit(new Rect(x, b.y(), w, 1), () -> reviewChanges(id, true)));
-            }
-            viewHeight = Math.max(1, viewHeight - 1);
-        }
-    }
-
-    private boolean undone(long id) {
-        return session.messages().stream().anyMatch(m -> m.id() == id && m.state() == State.UNDONE);
-    }
-
-    private void undoChanges(long id) {
-        view = null;
-        session.undo(id);
-    }
-
-    private EventResult viewerKey(KeyEvent key) {
-        KeyCode code = key.code();
-        char ch = code == KeyCode.CHAR ? key.character() : 0;
-        if (view.changes() >= 0 && code == KeyCode.CHAR && !key.hasCtrl()) {
-            char c = Character.toLowerCase(ch);
-            if (view.confirmUndo() && c == 'y') {
-                undoChanges(view.changes());
-                return EventResult.HANDLED;
-            }
-            if (view.confirmUndo() && c == 'n') {
-                view = null;
-                return EventResult.HANDLED;
-            }
-            if (!view.confirmUndo() && c == 'u' && session.canUndo() && !undone(view.changes())) {
-                reviewChanges(view.changes(), true);
-                return EventResult.HANDLED;
-            }
-        }
-        switch (code) {
-            case ESCAPE -> view = null;
-            case UP -> viewScroll--;
-            case DOWN -> viewScroll++;
-            case PAGE_UP -> viewScroll -= viewHeight - 1;
-            case PAGE_DOWN -> viewScroll += viewHeight - 1;
-            case HOME -> viewScroll = 0;
-            case END -> viewScroll = Integer.MAX_VALUE / 2;
-            case CHAR -> {
-                switch (ch) {
-                    case 'q' -> view = null;
-                    case ' ', 'j' -> viewScroll += ch == ' ' ? viewHeight - 1 : 1;
-                    case 'k' -> viewScroll--;
-                    case ']' -> jumpFile(1);
-                    case '[' -> jumpFile(-1);
-                    default -> { }
-                }
-            }
-            default -> { }
-        }
-        return EventResult.HANDLED;
-    }
-
-    private void jumpFile(int dir) {
-        List<String> lines = view.lines();
-        for (int i = viewScroll + dir; i >= 0 && i < lines.size(); i += dir) {
-            if (lines.get(i).startsWith("diff --git")) {
-                viewScroll = i;
-                return;
-            }
-        }
-    }
-
-    // ---- dialogs ----
-
-    private void drawDialog(Buffer buf, Rect r) {
-        ChatSession.Pending p = session.pending();
-        int w = Math.min(r.width() - 4, 100);
-        Style base = st(Theme.TEXT, Theme.DIALOG);
-        List<List<Span>> body = new ArrayList<>();
-        String title;
-        List<String[]> buttons = new ArrayList<>();
-        List<Runnable> actions = new ArrayList<>();
-        List<Integer> questionRows = new ArrayList<>();
-        if (p instanceof ChatSession.Pending.Approval a) {
-            title = clean(a.request().agent()) + " asks for approval" + where(p);
-            body.add(List.of(new Span(clean(a.request().summary()), base.bold())));
-            body.add(List.of());
-            int limit = Math.max(3, r.height() - 12);
-            List<String> lines = clean(a.request().detail()).lines().toList();
-            for (int i = 0; i < Math.min(limit, lines.size()); i++) {
-                String l = lines.get(i);
-                Color c = l.startsWith("+++") || l.startsWith("---") ? Theme.DIM : l.startsWith("@@") ? Theme.BLUE
-                        : l.startsWith("+") ? Theme.ADD_FG : l.startsWith("-") ? Theme.DEL_FG : Theme.TEXT;
-                body.add(List.of(new Span(CharWidth.substringByWidth(l.replace("\t", "    "), w - 4), st(c, Theme.DIALOG))));
-            }
-            if (lines.size() > limit) {
-                body.add(List.of(new Span("… " + (lines.size() - limit) + " more lines", st(Theme.DIM, Theme.DIALOG))));
-            }
-            buttons.add(new String[] {" Approve  Y ", "primary"});
-            actions.add(() -> a.answer().complete(true));
-            if (a.request().grantKey() != null) {
-                buttons.add(new String[] {" Always here  A ", "plain"});
-                actions.add(() -> session.approveAlways(a));
-                body.add(List.of());
-                for (String line : Wrap.lines("A: " + clean(a.request().grantLabel()) + ". Until you close BuildCLI; /revoke takes it back.", w - 4)) {
-                    body.add(List.of(new Span(line, st(Theme.DIM, Theme.DIALOG))));
-                }
-            }
-            buttons.add(new String[] {" Deny  N ", "plain"});
-            actions.add(() -> a.answer().complete(false));
-        } else if (p instanceof ChatSession.Pending.Question q) {
-            title = clean(q.agent()) + " asks you" + where(p);
-            body.addAll(Styled.lines(clean(q.question()), w - 4, base, base.bold(), base));
-            body.add(List.of());
-            if (!q.options().isEmpty() && !typingAnswer) {
-                for (int i = 0; i <= q.options().size(); i++) {
-                    boolean other = i == q.options().size();
-                    String label = other ? "Something else…" : clean(q.options().get(i));
-                    Style os = i == choice ? st(Theme.BG, Theme.TEXT).bold() : other ? st(Theme.DIM, Theme.DIALOG) : base;
-                    int row = body.size();
-                    questionRows.add(row);
-                    body.add(List.of(new Span((i == choice ? " ❯ " : "   ") + (i + 1) + ". " + label + " ", os)));
-                }
-                body.add(List.of());
-                body.add(List.of(new Span("↑↓ or a number to choose · Enter confirms · Esc skips", st(Theme.DIM, Theme.DIALOG))));
-            } else {
-                body.add(List.of(new Span(typingAnswer && !q.options().isEmpty() ? "Type your answer below · Enter sends · Esc goes back"
-                        : "Type your answer below · Enter sends · Esc skips", st(Theme.DIM, Theme.DIALOG))));
-            }
-        } else {
-            var e = (ChatSession.Pending.Escalation) p;
-            title = clean(e.agent()) + " is stuck (task #" + e.taskId() + ")" + where(p);
-            body.addAll(Styled.lines(clean(e.objective()), w - 4, base, base.bold(), base));
-            body.add(List.of());
-            body.addAll(Styled.lines("It failed after the automatic retries: " + clean(e.reason()), w - 4, st(Theme.RED, Theme.DIALOG),
-                    st(Theme.RED, Theme.DIALOG).bold(), base));
-            buttons.add(new String[] {" Retry  R ", "primary"});
-            actions.add(() -> e.answer().complete(EscalationChoice.RETRY));
-            buttons.add(new String[] {" Skip task  S ", "plain"});
-            actions.add(() -> e.answer().complete(EscalationChoice.SKIP));
-            buttons.add(new String[] {" Stop everything  A ", "danger"});
-            actions.add(() -> e.answer().complete(EscalationChoice.ABORT));
-        }
-        int h = body.size() + (buttons.isEmpty() ? 3 : 5);
-        int x = r.x() + (r.width() - w) / 2;
-        int y = r.y() + Math.max(1, (r.height() - h) / 2);
-        fill(buf, new Rect(x, y, w, h), base);
-        Style border = st(Theme.FAINT, Theme.DIALOG);
-        put(buf, x, y, "╭" + "─".repeat(w - 2) + "╮", border, x + w);
-        for (int i = 1; i < h - 1; i++) {
-            put(buf, x, y + i, "│", border, x + w);
-            put(buf, x + w - 1, y + i, "│", border, x + w);
-        }
-        put(buf, x, y + h - 1, "╰" + "─".repeat(w - 2) + "╯", border, x + w);
-        put(buf, x + 2, y, " " + title + " ", base.bold(), x + w - 2);
-        for (int i = 0; i < body.size(); i++) {
-            drawSpans(buf, x + 2, y + 1 + i, body.get(i), x + w - 2);
-        }
-        for (int i = 0; i < questionRows.size(); i++) {
-            int index = i;
-            hits.add(new Hit(new Rect(x + 2, y + 1 + questionRows.get(i), w - 4, 1), () -> chooseAnswer(index)));
-        }
-        int bx = x + 2;
-        for (int i = 0; i < buttons.size(); i++) {
-            Style bs = switch (buttons.get(i)[1]) {
-                case "primary" -> st(Theme.BG, Theme.TEXT).bold();
-                case "danger" -> st(Theme.TEXT, Theme.DANGER).bold();
-                default -> st(Theme.TEXT, Theme.FIELD);
-            };
-            int bw = put(buf, bx, y + h - 2, buttons.get(i)[0], bs, x + w - 1);
-            hits.add(new Hit(new Rect(bx, y + h - 2, bw, 1), actions.get(i)));
-            bx += bw + 2;
-        }
-    }
-
-    private boolean typingOwnAnswer() {
-        return session.pending() instanceof ChatSession.Pending.Question q && (typingAnswer || q.options().isEmpty());
-    }
-
-    /** The keys while an agent asks you something; null lets the key edit the answer in the input box. */
-    private EventResult questionKey(ChatSession.Pending.Question q, KeyEvent key) {
-        KeyCode code = key.code();
-        if (key.hasCtrl()) {
-            return null;
-        }
-        if (typingAnswer || q.options().isEmpty()) {
-            if (code == KeyCode.ENTER && !key.hasShift() && !key.hasAlt()) {
-                String text = input.text().strip();
-                if (!text.isEmpty()) {
-                    input.clear();
-                    q.answer().complete(text);
-                }
-                return EventResult.HANDLED;
-            }
-            if (code == KeyCode.ESCAPE) {
-                if (q.options().isEmpty()) {
-                    q.answer().complete("");
-                } else {
-                    typingAnswer = false;
-                }
-                return EventResult.HANDLED;
-            }
-            return null;
-        }
-        int n = q.options().size() + 1;
-        switch (code) {
-            case UP -> choice = (choice - 1 + n) % n;
-            case DOWN, TAB -> choice = (choice + 1) % n;
-            case ENTER -> chooseAnswer(choice);
-            case ESCAPE -> q.answer().complete("");
-            case CHAR -> {
-                int d = key.character() - '1';
-                if (d >= 0 && d < n) {
-                    chooseAnswer(d);
-                }
-            }
-            default -> { }
-        }
-        return EventResult.HANDLED;
-    }
-
-    private void chooseAnswer(int index) {
-        if (!(session.pending() instanceof ChatSession.Pending.Question q)) {
-            return;
-        }
-        if (index >= q.options().size()) {
-            typingAnswer = true;
-            input.clear();
-        } else {
-            q.answer().complete(q.options().get(index));
-        }
-    }
-
-    private String where(ChatSession.Pending p) {
-        String chat = p.thread().equals(ChatSession.EVERYWHERE) ? chatList.title(ChatSession.MAIN) : chatList.title(p.thread());
-        int n = session.pendingCount();
-        return " · " + chat + " chat" + (n > 1 ? " · 1 of " + n : "");
+    private String pendingChatTitle(String thread) {
+        return thread.equals(ChatSession.EVERYWHERE) ? chatList.title(ChatSession.MAIN) : chatList.title(thread);
     }
 
     // ---- keyboard ----
@@ -1390,8 +1069,8 @@ final class ChatScreen implements Element {
                 chatList.closeSearch();
             } else if (searching) {
                 searching = false;
-            } else if (view != null) {
-                view = null;
+            } else if (viewer.isOpen()) {
+                viewer.close();
             } else if (!input.isEmpty()) {
                 input.clear();
             } else {
@@ -1403,49 +1082,23 @@ final class ChatScreen implements Element {
             session.stop(selected);
             return EventResult.HANDLED;
         }
-        if (ctrl && ch == 'k' && view == null) {
+        if (ctrl && ch == 'k' && !viewer.isOpen()) {
             chatList.openSearch("");
             return EventResult.HANDLED;
         }
-        if (chatList.isSearching() && view == null && session.pending() == null) {
+        if (chatList.isSearching() && !viewer.isOpen() && session.pending() == null) {
             return chatList.searchKey(key);
         }
-        if (ctrl && ch == 'f' && view == null) {
+        if (ctrl && ch == 'f' && !viewer.isOpen()) {
             openSearch(searching ? findInput.text() : "");
             return EventResult.HANDLED;
         }
-        if (searching && view == null && session.pending() == null) {
+        if (searching && !viewer.isOpen() && session.pending() == null) {
             return searchKey(key);
         }
-        ChatSession.Pending p = session.pending();
-        if (p instanceof ChatSession.Pending.Question q) {
-            if (q != asked) {
-                asked = q;
-                choice = 0;
-                typingAnswer = false;
-            }
-            EventResult answered = questionKey(q, key);
-            if (answered != null) {
-                return answered;
-            }
-        }
-        if (p != null && !(p instanceof ChatSession.Pending.Question) && code == KeyCode.CHAR && (input.isEmpty() || ctrl)) {
-            if (p instanceof ChatSession.Pending.Approval a && (ch == 'y' || ch == 'n')) {
-                a.answer().complete(ch == 'y');
-                return EventResult.HANDLED;
-            }
-            if (p instanceof ChatSession.Pending.Approval a && ch == 'a' && a.request().grantKey() != null) {
-                session.approveAlways(a);
-                return EventResult.HANDLED;
-            }
-            if (p instanceof ChatSession.Pending.Escalation e && "rsa".indexOf(ch) >= 0) {
-                e.answer().complete(ch == 'r' ? EscalationChoice.RETRY : ch == 's' ? EscalationChoice.SKIP : EscalationChoice.ABORT);
-                return EventResult.HANDLED;
-            }
-            if (input.isEmpty() && !ctrl && !alt) {
-                // a letter that answers nothing must not start a message: it would make Y and N stop working
-                return EventResult.HANDLED;
-            }
+        EventResult pendingKey = pending.key(key);
+        if (pendingKey != null) {
+            return pendingKey;
         }
         if (ctrl && code == KeyCode.CHAR) {
             switch (ch) {
@@ -1454,7 +1107,7 @@ final class ChatScreen implements Element {
                     return EventResult.HANDLED;
                 }
                 case 'o' -> {
-                    view = null;
+                    viewer.close();
                     input.set("/open ");
                     return EventResult.HANDLED;
                 }
@@ -1473,8 +1126,8 @@ final class ChatScreen implements Element {
                 default -> { }
             }
         }
-        if (view != null) {
-            return viewerKey(key);
+        if (viewer.isOpen()) {
+            return viewer.key(key);
         }
         if (switchChat(key)) {
             return EventResult.HANDLED;
@@ -1723,8 +1376,8 @@ final class ChatScreen implements Element {
             int d = kind == MouseEventKind.SCROLL_UP ? 3 : -3;
             if (!inPane) {
                 chatList.scrollBy(-d / 3);
-            } else if (view != null) {
-                viewScroll -= d;
+            } else if (viewer.isOpen()) {
+                viewer.wheel(d);
             } else {
                 scroll(d);
             }
@@ -1734,7 +1387,7 @@ final class ChatScreen implements Element {
             draggingScrollbar = false;
             return EventResult.HANDLED;
         }
-        boolean onTrack = view == null && scrollTrack.width() > 0 && scrollTrack.contains(m.x(), m.y());
+        boolean onTrack = !viewer.isOpen() && scrollTrack.width() > 0 && scrollTrack.contains(m.x(), m.y());
         if ((kind == MouseEventKind.PRESS && m.isLeftButton() && onTrack) || (kind == MouseEventKind.DRAG && draggingScrollbar)) {
             draggingScrollbar = true;
             int rel = Math.max(0, Math.min(scrollTrack.height() - 1, m.y() - scrollTrack.y()));
@@ -1749,7 +1402,7 @@ final class ChatScreen implements Element {
                     return EventResult.HANDLED;
                 }
             }
-            if (view == null && session.pending() == null && inputTextArea.contains(m.x(), m.y())) {
+            if (!viewer.isOpen() && session.pending() == null && inputTextArea.contains(m.x(), m.y())) {
                 input.moveTo(inputWidth, inputFirstRow + m.y() - inputTextArea.y(), m.x() - inputTextArea.x());
             }
         }
@@ -1796,6 +1449,6 @@ final class ChatScreen implements Element {
     }
 
     boolean viewerOpenForTest() {
-        return view != null;
+        return viewer.isOpen();
     }
 }
