@@ -305,4 +305,27 @@ class HistoryAndTabScreenTest {
                 && m.text().contains("ok")), "the forwarded text went to the chosen chat");
         assertFalse(ChatScreenTest.render(screen, 130, 40).contains("selected"));
     }
+
+    @Test
+    void theScreenSpeaksPortugueseWhenTheLanguageSettingSaysSo() throws Exception {
+        var session = new ChatSession(ChatScreenTest.ROSTER, (team, request, ui, cancelled, dispatcher) -> {
+            Task t = new Task(1, null, "user", "ana", request.text(), "");
+            t.status = TaskStatus.DONE;
+            t.result = "ok";
+            return t;
+        });
+        var services = ChatScreen.basicServices(session, Map.of("ana", "m"));
+        var screen = new ChatScreen(session, Map.of("ana", "m"), dir, () -> { }, services);
+        try {
+            services.settings().set(dev.buildcli.ports.SettingsStore.Scope.GLOBAL, dev.buildcli.application.Settings.LANGUAGE, "pt");
+            String out = ChatScreenTest.render(screen, 130, 40);
+            assertTrue(out.contains("Escreve uma mensagem") && out.contains("Procurar chats") && out.contains("Ajuda") && out.contains("Tu (notas)"), out);
+            ChatScreenTest.type(screen, "/mod");
+            assertTrue(ChatScreenTest.render(screen, 130, 40).contains("Comandos"), "the command menu too");
+            services.settings().set(dev.buildcli.ports.SettingsStore.Scope.GLOBAL, dev.buildcli.application.Settings.LANGUAGE, "en");
+            assertTrue(ChatScreenTest.render(screen, 130, 40).contains("Search chats"), "and back to English at once");
+        } finally {
+            dev.buildcli.application.I18n.use("en");
+        }
+    }
 }

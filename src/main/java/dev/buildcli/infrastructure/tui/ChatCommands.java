@@ -1,5 +1,7 @@
 package dev.buildcli.infrastructure.tui;
 
+import static dev.buildcli.application.I18n.t;
+import dev.buildcli.application.I18n;
 import dev.buildcli.domain.Attachment;
 import dev.buildcli.domain.Task;
 import java.io.IOException;
@@ -33,14 +35,14 @@ final class ChatCommands {
             String name = settings.get(dev.buildcli.application.Settings.PROFILE_NAME);
             String about = settings.get(dev.buildcli.application.Settings.PROFILE_ABOUT);
             String style = settings.get(dev.buildcli.application.Settings.PROFILE_STYLE);
-            session.system("What your agents know about you (on this computer only):\n"
-                    + "name: " + (name.isBlank() ? "(not set)" : name) + "\nabout you: " + (about.isBlank() ? "(not set)" : about)
-                    + "\nhow to deal with you: " + (style.isBlank() ? "(not set)" : style)
-                    + "\n/me name <your name> · /me about <text> · /me style <text>; leave the text empty to clear one.");
+            session.system(t("What your agents know about you (on this computer only):") + "\n"
+                    + t("name: {0}", name.isBlank() ? t("(not set)") : name) + "\n" + t("about you: {0}", about.isBlank() ? t("(not set)") : about)
+                    + "\n" + t("how to deal with you: {0}", style.isBlank() ? t("(not set)") : style)
+                    + "\n" + t("/me name <your name> · /me about <text> · /me style <text>; leave the text empty to clear one."));
             return;
         }
         dev.buildcli.application.UserProfile.set(settings, key, text);
-        session.system(text.isEmpty() ? "Cleared." : "Saved. Your agents will use it from their next message.");
+        session.system(text.isEmpty() ? t("Cleared.") : t("Saved. Your agents will use it from their next message."));
     }
 
     /** /context: what the agents of the open group are told about the work, besides what you say in the chat. */
@@ -48,7 +50,7 @@ final class ChatCommands {
         String id = host.selected();
         var g = session.group(id);
         if (g == null) {
-            session.error("Open a group first: context belongs to a group.");
+            session.error(t("Open a group first: context belongs to a group."));
             return;
         }
         String[] parts = arg.strip().split("\\s+", 2);
@@ -57,24 +59,23 @@ final class ChatCommands {
         java.util.List<String> files = new java.util.ArrayList<>(g.files());
         if (arg.isBlank()) {
             if (!g.hasContext()) {
-                session.system("No context for " + g.name() + " yet. /context <text> sets it; /context attach <file> adds a file. "
-                        + "The agents of the group read it before they answer.");
+                session.system(t("No context for {0} yet. /context <text> sets it; /context attach <file> adds a file. The agents of the group read it before they answer.", g.name()));
             } else {
-                session.system("Context of " + g.name() + ": " + (g.context().isEmpty() ? "(no text)" : g.context())
-                        + (files.isEmpty() ? "" : "\nFiles: " + String.join(", ", files.stream().map(f -> Path.of(f).getFileName().toString()).toList())));
+                session.system(t("Context of {0}: {1}", g.name(), g.context().isEmpty() ? t("(no text)") : g.context())
+                        + (files.isEmpty() ? "" : "\n" + t("Files: {0}", String.join(", ", files.stream().map(f -> Path.of(f).getFileName().toString()).toList()))));
             }
             return;
         }
         switch (word) {
             case "clear" -> {
                 session.setGroupContext(id, "", java.util.List.of());
-                session.system("Context of " + g.name() + " cleared.");
+                session.system(t("Context of {0} cleared.", g.name()));
             }
             case "attach" -> {
                 try {
                     Path file = resolve(cwd, rest);
                     if (!Files.isRegularFile(file)) {
-                        session.error("There is no file " + rest + ".");
+                        session.error(t("There is no file {0}.", rest));
                         return;
                     }
                     String abs = file.toAbsolutePath().normalize().toString();
@@ -82,8 +83,7 @@ final class ChatCommands {
                         files.add(abs);
                     }
                     session.setGroupContext(id, g.context(), files);
-                    session.system(file.getFileName() + " added to the context of " + g.name() + ". Only text files are read, up to "
-                            + dev.buildcli.domain.Chat.MAX_CONTEXT / 1000 + " KB of text and 20 KB per file.");
+                    session.system(t("{0} added to the context of {1}. Only text files are read, up to {2} KB of text and 20 KB per file.", file.getFileName(), g.name(), dev.buildcli.domain.Chat.MAX_CONTEXT / 1000));
                 } catch (IllegalArgumentException e) {
                     session.error(e.getMessage());
                 }
@@ -92,14 +92,14 @@ final class ChatCommands {
                 boolean removed = files.removeIf(f -> Path.of(f).getFileName().toString().equalsIgnoreCase(rest));
                 if (removed) {
                     session.setGroupContext(id, g.context(), files);
-                    session.system(rest + " removed from the context of " + g.name() + ".");
+                    session.system(t("{0} removed from the context of {1}.", rest, g.name()));
                 } else {
-                    session.error("No attached file called " + rest + ". /context lists them.");
+                    session.error(t("No attached file called {0}. /context lists them.", rest));
                 }
             }
             default -> {
                 session.setGroupContext(id, arg.strip(), files);
-                session.system("Context of " + g.name() + " set. Its agents read it before they answer.");
+                session.system(t("Context of {0} set. Its agents read it before they answer.", g.name()));
             }
         }
     }
@@ -107,7 +107,7 @@ final class ChatCommands {
     /** Changes how much the agents may do before asking, and says so in the chat. */
     void setMode(dev.buildcli.application.ApprovalMode mode) {
         session.approvalMode(mode);
-        session.system("Mode: " + mode.label() + ", " + mode.description() + ".");
+        session.system(t("Mode: {0}, {1}.", t(mode.label()), t(mode.description())));
     }
 
     interface Host {
@@ -230,9 +230,9 @@ final class ChatCommands {
                 case "diff" -> {
                     List<String> lines = LocalViews.diff(cwd, arg);
                     if (lines.isEmpty()) {
-                        session.system("No " + (arg.contains("--staged") ? "staged " : "") + "changes.");
+                        session.system(arg.contains("--staged") ? t("No staged changes.") : t("No changes."));
                     } else {
-                        host.openView(new ViewSpec("Changes" + (arg.isEmpty() ? "" : "  " + arg), lines, true, false));
+                        host.openView(new ViewSpec(t("Changes") + (arg.isEmpty() ? "" : "  " + arg), lines, true, false));
                     }
                 }
                 case "copy" -> host.copyLast(arg.equalsIgnoreCase("message"));
@@ -240,7 +240,7 @@ final class ChatCommands {
                 case "review" -> {
                     long id = session.lastChanges(host.selected());
                     if (id < 0) {
-                        session.system("No files changed by agents in this chat yet.");
+                        session.system(t("No files changed by agents in this chat yet."));
                     } else {
                         host.review(id);
                     }
@@ -249,9 +249,9 @@ final class ChatCommands {
                 case "mode" -> {
                     if (arg.isEmpty()) {
                         var m = session.approvalMode();
-                        session.system("Mode: " + m.label() + ", " + m.description() + ". /mode manual, /mode edits or /mode auto changes it.");
+                        session.system(t("Mode: {0}, {1}. /mode manual, /mode edits or /mode auto changes it.", t(m.label()), t(m.description())));
                     } else if (java.util.Arrays.stream(dev.buildcli.application.ApprovalMode.values()).noneMatch(m -> m.label().equalsIgnoreCase(arg))) {
-                        session.system("There is no mode '" + arg + "'. Use manual, edits or auto.");
+                        session.system(t("There is no mode '{0}'. Use manual, edits or auto.", arg));
                     } else {
                         setMode(dev.buildcli.application.ApprovalMode.parse(arg));
                     }
@@ -259,10 +259,10 @@ final class ChatCommands {
                 case "revoke" -> {
                     List<String> was = session.grants(host.selected());
                     if (was.isEmpty()) {
-                        session.system("Nothing is approved automatically in this chat.");
+                        session.system(t("Nothing is approved automatically in this chat."));
                     } else {
                         session.revokeGrants(host.selected());
-                        session.system("Asking again from now on. Was allowed: " + String.join("; ", was) + ".");
+                        session.system(t("Asking again from now on. Was allowed: {0}.", String.join("; ", was)));
                     }
                 }
                 case "status" -> host.openView(new ViewSpec("git status", LocalViews.status(cwd), false, false));
@@ -287,14 +287,14 @@ final class ChatCommands {
                 case "retry" -> {
                     long id = session.lastFailedMessage();
                     if (id < 0 || !session.retry(id)) {
-                        session.system("Nothing to retry.");
+                        session.system(t("Nothing to retry."));
                     }
                 }
                 case "queue" -> {
                     if (arg.equals("clear")) {
                         session.clearQueue();
                     } else {
-                        session.system(session.queued() == 0 ? "No messages are waiting." : session.queued() + " message(s) waiting their turn.");
+                        session.system(session.queued() == 0 ? t("No messages are waiting.") : t("{0} message(s) waiting their turn.", session.queued()));
                     }
                 }
                 case "sidebar" -> host.toggleSidebar();
@@ -328,7 +328,7 @@ final class ChatCommands {
                 }
                 case "add", "remove", "admin", "dismiss" -> {
                     if (session.group(host.selected()) == null) {
-                        session.error("Open a group first: this is a direct chat.");
+                        session.error(t("Open a group first: this is a direct chat."));
                         return true;
                     }
                     List<String> who = session.mentioned(arg);
@@ -357,11 +357,10 @@ final class ChatCommands {
                     } else {
                         clearArmedFor = host.selected();
                         long n = session.messages().stream().filter(m -> m.thread().equals(host.selected())).count();
-                        session.system("This deletes the " + n + " message(s) of " + host.titleOf(host.selected()) + ", also from the saved history. "
-                                + "Type /clear again to confirm.");
+                        session.system(t("This deletes the {0} message(s) of {1}, also from the saved history. Type /clear again to confirm.", n, host.titleOf(host.selected())));
                     }
                 }
-                case "help" -> host.openView(new ViewSpec("Help", help(), false, false));
+                case "help" -> host.openView(new ViewSpec(t("Help"), help(), false, false));
                 case "quit" -> host.quit();
                 default -> { }
             }
@@ -375,7 +374,7 @@ final class ChatCommands {
         List<String> out = new ArrayList<>();
         List<Task> tasks = session.tasks(host.selected());
         if (tasks.isEmpty()) {
-            out.add("No tasks yet. Each message becomes a task; a handoff becomes a child task.");
+            out.add(t("No tasks yet. Each message becomes a task; a handoff becomes a child task."));
         }
         for (Task t : tasks) {
             int depth = 0;
@@ -386,8 +385,8 @@ final class ChatCommands {
                 parent = up == null ? null : up.parentId;
                 depth++;
             }
-            out.add("  ".repeat(depth) + "#" + t.id + "  " + t.status + "  " + t.from + " → " + t.to + "   " + t.tokens + " tokens"
-                    + (t.attempts > 1 ? ", attempt " + t.attempts : ""));
+            out.add("  ".repeat(depth) + "#" + t.id + "  " + t.status + "  " + t.from + " → " + t.to + "   " + I18n.t("{0} tokens", t.tokens)
+                    + (t.attempts > 1 ? ", " + I18n.t("attempt {0}", t.attempts) : ""));
             out.add("  ".repeat(depth) + "    " + t.objective.replace('\n', ' '));
         }
         return out;
@@ -395,26 +394,28 @@ final class ChatCommands {
 
     private static List<String> help() {
         List<String> out = new ArrayList<>();
-        out.add("Talk to your agents like in a chat. Press Enter to send; you can keep typing while they work,");
-        out.add("messages wait their turn. @name sends a message straight to one agent.");
+        out.add(t("Talk to your agents like in a chat. Press Enter to send; you can keep typing while they work,"));
+        out.add(t("messages wait their turn. @name sends a message straight to one agent."));
         out.add("");
-        out.add("Commands (type / to see the menu)");
+        out.add(t("Commands (type / to see the menu)"));
         for (Command c : LIST) {
-            out.add(String.format("  /%-24s %-52s %s", c.name() + (c.arg().isEmpty() ? "" : " " + c.arg()), c.description(), c.shortcut()));
+            out.add("  /" + c.name() + (c.arg().isEmpty() ? "" : " " + c.arg()) + (c.shortcut().isEmpty() ? "" : "   (" + c.shortcut() + ")"));
+            out.add("      " + t(c.description()));
         }
         out.add("");
-        out.add("Keys");
-        out.add("  Enter send · Shift+Enter, Alt+Enter, Ctrl+J or a trailing \\ new line · ↑ previous message");
-        out.add("  PgUp/PgDn or the mouse wheel scroll · Esc jump to the latest · Ctrl+W delete word · Ctrl+U clear");
-        out.add("  Ctrl+F find in this chat (↑ older, ↓ newer, Esc close) · Ctrl+K search your chats and agents · /copy copies the last code block");
+        out.add(t("Keys"));
+        out.add("  " + t("Enter send · Shift+Enter, Alt+Enter, Ctrl+J or a trailing \\ new line · ↑ previous message"));
+        out.add("  " + t("PgUp/PgDn or the mouse wheel scroll · Esc jump to the latest · Ctrl+W delete word · Ctrl+U clear"));
+        out.add("  " + t("Ctrl+F find in this chat (↑ older, ↓ newer, Esc close) · Ctrl+K search your chats and agents · /copy copies the last code block"));
+        out.add("  " + t("Shift+Tab changes the mode (manual, edits, auto) · Alt+M marks the newest message, then C copy, F forward, D delete"));
         out.add("");
-        out.add("Mouse");
-        out.add("  Click agents to mention them, menu items, buttons, ⧉ copy on a code block and the ✕ on attachments.");
-        out.add("  Drag the scrollbar. To select text for copying, hold Shift (Option on macOS) while dragging.");
+        out.add(t("Mouse"));
+        out.add("  " + t("Click agents to mention them, menu items, buttons, ⧉ copy on a code block and the ✕ on attachments."));
+        out.add("  " + t("Right-click a message to mark it. Drag the scrollbar. To select text for copying, hold Shift (Option on macOS) while dragging."));
         out.add("");
-        out.add("Attachments");
-        out.add("  Drop or paste the path of an image (png, jpg, gif, webp) or audio file (wav, mp3, m4a, ogg, flac),");
-        out.add("  or use /attach <file>. The model must support images or audio for it to be understood.");
+        out.add(t("Attachments"));
+        out.add("  " + t("Drop or paste the path of an image (png, jpg, gif, webp) or audio file (wav, mp3, m4a, ogg, flac),"));
+        out.add("  " + t("or use /attach <file>. The model must support images or audio for it to be understood."));
         return out;
     }
 
@@ -499,11 +500,11 @@ final class ChatCommands {
         boolean on = lower.endsWith(" on");
         if (names.size() == 2 && (on || off)) {
             session.setReach(names.get(0), names.get(1), on);
-            session.system(names.get(0) + (on ? " can" : " can no longer") + " contact " + names.get(1) + ".");
+            session.system(on ? t("{0} can contact {1}.", names.get(0), names.get(1)) : t("{0} can no longer contact {1}.", names.get(0), names.get(1)));
             return;
         }
         List<String> pairs = session.blockedPairs();
-        session.system((pairs.isEmpty() ? "Every agent can contact every other." : "Cannot contact: " + String.join(", ", pairs) + ".")
-                + " Change it with /reach @bruno @ana off (or on).");
+        session.system((pairs.isEmpty() ? t("Every agent can contact every other.") : t("Cannot contact: {0}.", String.join(", ", pairs)))
+                + " " + t("Change it with /reach @bruno @ana off (or on)."));
     }
 }

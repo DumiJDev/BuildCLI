@@ -1,11 +1,13 @@
 package dev.buildcli.infrastructure.tui;
 
+import static dev.buildcli.application.I18n.t;
 import static dev.buildcli.infrastructure.tui.Draw.DAY;
 import static dev.buildcli.infrastructure.tui.Draw.TIME;
 import static dev.buildcli.infrastructure.tui.Draw.clean;
 import static dev.buildcli.infrastructure.tui.Draw.st;
 
 import dev.buildcli.application.ChatSession;
+import dev.buildcli.application.I18n;
 import dev.buildcli.application.ChatSession.Message;
 import dev.buildcli.application.ChatSession.State;
 import dev.buildcli.domain.Attachment;
@@ -100,7 +102,7 @@ final class ConversationRows {
             java.time.LocalDate d = m.at().atZone(ZoneId.systemDefault()).toLocalDate();
             if (!d.equals(day)) {
                 day = d;
-                String label = d.equals(java.time.LocalDate.now()) ? "TODAY" : d.equals(java.time.LocalDate.now().minusDays(1)) ? "YESTERDAY"
+                String label = d.equals(java.time.LocalDate.now()) ? t("TODAY") : d.equals(java.time.LocalDate.now().minusDays(1)) ? t("YESTERDAY")
                         : DAY.format(d).toUpperCase(Locale.ROOT);
                 centred(rows, width, " " + label + " ", st(Theme.DIM, Theme.PILL));
                 rows.add(new Row(0, List.of()));
@@ -173,12 +175,12 @@ final class ConversationRows {
         rows.add(new Row(Math.max(0, (width - w) / 2), List.of(new Span(" " + shown, pill),
                 new Span(stat + " ", st(undone ? Theme.DIM : Theme.ACCENT, Theme.PILL)))));
         List<Span> buttons = new ArrayList<>();
-        buttons.add(new Span(" Review ", st(Theme.TEXT, Theme.FIELD), () -> host.review(m.id(), false)));
+        buttons.add(new Span(" " + t("Review") + " ", st(Theme.TEXT, Theme.FIELD), () -> host.review(m.id(), false)));
         if (undone) {
-            buttons.add(new Span("  undone", st(Theme.DIM, Theme.BG).italic()));
+            buttons.add(new Span("  " + t("undone"), st(Theme.DIM, Theme.BG).italic()));
         } else if (session.canUndo()) {
             buttons.add(new Span(" ", st(Theme.TEXT, Theme.BG)));
-            buttons.add(new Span(" Undo ", st(Theme.TEXT, Theme.FIELD), () -> host.review(m.id(), true)));
+            buttons.add(new Span(" " + t("Undo") + " ", st(Theme.TEXT, Theme.FIELD), () -> host.review(m.id(), true)));
         }
         int bw = Styled.width(buttons);
         rows.add(new Row(Math.max(0, (width - bw) / 2), buttons));
@@ -205,23 +207,23 @@ final class ConversationRows {
         }
         spans.add(new Span(dots.toString(), st(Theme.DIM, Theme.THEM)));
         if (state.startsWith("waiting") || state.equals("reading") || state.equals("working")) {
-            spans.add(new Span(state + " ", st(Theme.DIM, Theme.THEM).italic()));
+            spans.add(new Span(I18n.state(state) + " ", st(Theme.DIM, Theme.THEM).italic()));
         }
         rows.add(new Row(2, spans));
     }
 
     /** No agents yet: BuildCLI is about agents, so the first thing to do is create one. */
     private void onboarding(List<Row> rows, int width) {
-        centred(rows, width, "No agents yet", st(Theme.TEXT, Theme.BG).bold());
+        centred(rows, width, t("No agents yet"), st(Theme.TEXT, Theme.BG).bold());
         rows.add(new Row(0, List.of()));
-        centred(rows, width, "Agents are the people you chat with: each has a role and a model, and does only what you allow.",
+        centred(rows, width, t("Agents are the people you chat with: each has a role and a model, and does only what you allow."),
                 st(Theme.DIM, Theme.BG));
         rows.add(new Row(0, List.of()));
         rows.add(new Row(0, List.of()));
         int boxW = Math.min(width - 4, 56);
         int x = Math.max(0, (width - boxW) / 2);
-        String[][] actions = {{"Add the sample agents: wheslley, breno, matheus and dumildes", "samples"}, {"Create your own agent", "agent"},
-            {"Talk to AgentFather: it creates agents for you", "father"}, {"Connect a model and provider", "connect"}};
+        String[][] actions = {{t("Add a ready-made team: software, writing or office"), "samples"}, {t("Create your own agent"), "agent"},
+            {t("Talk to AgentFather: it creates agents for you"), "father"}, {t("Connect a model and provider"), "connect"}};
         for (String[] a : actions) {
             Runnable act = switch (a[1]) {
                 case "samples" -> host::addSampleAgents;
@@ -239,48 +241,47 @@ final class ConversationRows {
             rows.add(new Row(x, List.of(new Span(label + " ".repeat(Math.max(1, boxW - Wrap.width(label) - 2)) + "› ", st(Theme.TEXT, Theme.PANEL), act))));
             rows.add(new Row(0, List.of()));
         }
-        centred(rows, width, "The sample agents: wheslley plans and leads, matheus does the coding, breno looks after the build and CI, dumildes brings ideas. "
-                + "Every write asks you first, and you can undo it.", st(Theme.FAINT, Theme.BG));
+        centred(rows, width, t("The sample teams are only a start: you can change them, or make your own. Every write asks you first, and you can undo it."), st(Theme.FAINT, Theme.BG));
     }
 
     private void welcome(List<Row> rows, int width) {
         if (chatList.isSpecial(host.selected())) {
             boolean notes = ChatSession.NOTES.equals(host.selected());
-            centred(rows, width, notes ? "Notes to yourself" : "Nothing here yet", st(Theme.TEXT, Theme.BG).bold());
+            centred(rows, width, notes ? t("Notes to yourself") : t("Nothing here yet"), st(Theme.TEXT, Theme.BG).bold());
             rows.add(new Row(0, List.of()));
-            centred(rows, width, notes ? "Write anything you want to keep. Only you can read this chat: no agent sees it."
-                    : "Agents write here when you ask one of them to write to the other. You can read it, but not write in it.",
+            centred(rows, width, notes ? t("Write anything you want to keep. Only you can read this chat: no agent sees it.")
+                    : t("Agents write here when you ask one of them to write to the other. You can read it, but not write in it."),
                     st(Theme.DIM, Theme.BG));
             return;
         }
         var g = session.group(host.selected());
         boolean isGroup = g != null;
         String who = isGroup ? clean(g.name()) : clean(host.selected());
-        centred(rows, width, "Start a conversation with " + who, st(Theme.TEXT, Theme.BG).bold());
+        centred(rows, width, t("Start a conversation with {0}", who), st(Theme.TEXT, Theme.BG).bold());
         rows.add(new Row(0, List.of()));
-        String sub = isGroup ? (g.admins().isEmpty() ? "No admin yet" : clean(String.join(", ", g.admins())) + " (admin) answers messages that "
-                + "mention nobody") + ". Type @ to talk to someone, or mention two people to ask both."
-                : clean(chatList.roleOf(host.selected())) + ". Messages here go straight to " + clean(host.selected()) + ".";
+        String sub = isGroup ? (g.admins().isEmpty() ? t("No admin yet. Type @ to talk to someone, or mention two people to ask both.")
+                : t("{0} (admin) answers messages that mention nobody. Type @ to talk to someone, or mention two people to ask both.", clean(String.join(", ", g.admins()))))
+                : t("{0}. Messages here go straight to {1}.", clean(chatList.roleOf(host.selected())), clean(host.selected()));
         centred(rows, width, sub, st(Theme.DIM, Theme.BG));
         rows.add(new Row(0, List.of()));
         rows.add(new Row(0, List.of()));
         String[][] ideas;
         if (host.codeFolder()) {
             ideas = isGroup
-                    ? new String[][] {{"Review my uncommitted changes", "Review my uncommitted changes and point out risks."},
-                        {"Explain this project", "Explain how this project is organised and where to start."},
-                        {"Add missing tests", "Find important code without tests and add unit tests for it."},
-                        {"Show my changes", "/diff"}}
-                    : new String[][] {{"What can you do?", "What can you do for me here, with your tools and permissions?"},
-                        {"Look at my changes", "Look at my uncommitted changes and tell me what you think."}};
+                    ? new String[][] {{t("Review my uncommitted changes"), t("Review my uncommitted changes and point out risks.")},
+                        {t("Explain this project"), t("Explain how this project is organised and where to start.")},
+                        {t("Add missing tests"), t("Find important code without tests and add unit tests for it.")},
+                        {t("Show my changes"), "/diff"}}
+                    : new String[][] {{t("What can you do?"), t("What can you do for me here, with your tools and permissions?")},
+                        {t("Look at my changes"), t("Look at my uncommitted changes and tell me what you think.")}};
         } else {
             ideas = isGroup
-                    ? new String[][] {{"Summarize what is in this folder", "Look at the files in this folder and summarize what each one is about."},
-                        {"Draft a document from my notes", "Read my notes in this folder and draft a clear document from them."},
-                        {"Find mistakes and unclear parts", "Read the documents in this folder and point out mistakes and unclear parts."},
-                        {"Plan next steps", "Read what is in this folder and propose a short list of next steps."}}
-                    : new String[][] {{"What can you do?", "What can you do for me here, with your tools and permissions?"},
-                        {"Summarize this folder", "Look at the files in this folder and summarize what each one is about."}};
+                    ? new String[][] {{t("Summarize what is in this folder"), t("Look at the files in this folder and summarize what each one is about.")},
+                        {t("Draft a document from my notes"), t("Read my notes in this folder and draft a clear document from them.")},
+                        {t("Find mistakes and unclear parts"), t("Read the documents in this folder and point out mistakes and unclear parts.")},
+                        {t("Plan next steps"), t("Read what is in this folder and propose a short list of next steps.")}}
+                    : new String[][] {{t("What can you do?"), t("What can you do for me here, with your tools and permissions?")},
+                        {t("Summarize this folder"), t("Look at the files in this folder and summarize what each one is about.")}};
         }
         int boxW = Math.min(width - 4, 56);
         int x = Math.max(0, (width - boxW) / 2);
