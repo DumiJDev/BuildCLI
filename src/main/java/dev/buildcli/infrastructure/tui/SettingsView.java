@@ -533,6 +533,11 @@ final class SettingsView {
         newAgent();
     }
 
+    /** Opens the Models section: the default model and the model of each agent. */
+    void showModels() {
+        select(Section.MODELS);
+    }
+
     private void select(Section s) {
         section = s;
         index = 0;
