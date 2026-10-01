@@ -17,13 +17,16 @@ import java.util.Map;
 /** {@code chats.yaml} in the project's state directory. A broken file means no saved groups, never a crash. */
 public final class FileChatStore implements ChatStore {
     public static final String FILE_NAME = "chats.yaml";
+    public static final String REACH_FILE_NAME = "reach.yaml";
     private static final ObjectMapper YAML = new ObjectMapper(new YAMLFactory());
     /** How the team's own group (whose id is empty) is written in the file. */
     private static final String TEAM_KEY = "~team";
     private final Path file;
+    private final Path reachFile;
 
     public FileChatStore(Path projectStateDir) {
         this.file = projectStateDir.resolve(FILE_NAME);
+        this.reachFile = projectStateDir.resolve(REACH_FILE_NAME);
     }
 
     @Override
@@ -67,6 +70,37 @@ public final class FileChatStore implements ChatStore {
             YAML.writeValue(file.toFile(), Map.of("schema", 1, "groups", list));
         } catch (IOException e) {
             throw new UncheckedIOException("cannot save " + file + ": " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public Map<String, List<String>> loadBlocked() {
+        Map<String, List<String>> out = new LinkedHashMap<>();
+        try {
+            if (!Files.isRegularFile(reachFile) || Files.size(reachFile) > 64 * 1024) {
+                return out;
+            }
+            JsonNode root = YAML.readTree(reachFile.toFile());
+            root.path("cannot_contact").fields().forEachRemaining(e -> {
+                List<String> names = new ArrayList<>();
+                e.getValue().forEach(n -> names.add(n.asText()));
+                if (!names.isEmpty()) {
+                    out.put(e.getKey(), names);
+                }
+            });
+        } catch (IOException | RuntimeException e) {
+            return new LinkedHashMap<>();
+        }
+        return out;
+    }
+
+    @Override
+    public void saveBlocked(Map<String, List<String>> blocked) {
+        try {
+            Files.createDirectories(reachFile.getParent());
+            YAML.writeValue(reachFile.toFile(), Map.of("schema", 1, "cannot_contact", blocked));
+        } catch (IOException e) {
+            throw new UncheckedIOException("cannot save " + reachFile + ": " + e.getMessage(), e);
         }
     }
 }

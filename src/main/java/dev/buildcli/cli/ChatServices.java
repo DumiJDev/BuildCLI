@@ -189,7 +189,7 @@ final class ChatServices implements SettingsServices {
             throw new IllegalArgumentException("the sample agents are already here");
         }
         if (s != null && s.group("#" + SampleTeam.GROUP) == null) {
-            s.createGroup(SampleTeam.GROUP, SampleTeam.NAMES); // the first member, ana, becomes its admin
+            s.createGroup(SampleTeam.GROUP, SampleTeam.NAMES); // the first member, wheslley, becomes its admin
         }
         return added;
     }

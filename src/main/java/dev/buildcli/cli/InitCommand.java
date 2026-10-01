@@ -34,9 +34,9 @@ final class InitCommand implements Callable<Integer> {
         // the group and the model are this machine's choices for this project: kept in its state directory, not the repo
         var groups = new dev.buildcli.infrastructure.FileChatStore(ctx.projectStateDir());
         if (groups.load().isEmpty()) {
-            groups.save(java.util.List.of(new dev.buildcli.domain.Chat("#backend", "backend", true, java.util.List.of("ana", "bruno", "carla"),
-                    java.util.List.of("ana"))));
-            ctx.out.println("created  group 'backend' with ana (admin), bruno and carla");
+            groups.save(java.util.List.of(new dev.buildcli.domain.Chat("#" + SampleTeam.GROUP, SampleTeam.GROUP, true, SampleTeam.NAMES,
+                    java.util.List.of(SampleTeam.NAMES.get(0)))));
+            ctx.out.println("created  group '" + SampleTeam.GROUP + "' with " + String.join(", ", SampleTeam.NAMES) + " (" + SampleTeam.NAMES.get(0) + " is admin)");
         }
         var settings = new dev.buildcli.application.Settings(new dev.buildcli.infrastructure.FileSettingsStore(ctx.globalDir(), ctx.projectStateDir()));
         if (settings.stored(dev.buildcli.ports.SettingsStore.Scope.PROJECT, dev.buildcli.application.Settings.DEFAULT_MODEL) == null) {

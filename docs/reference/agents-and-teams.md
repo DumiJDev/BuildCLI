@@ -51,7 +51,7 @@ Prefer small, focused changes.
 | `permissions` | no | `filesystem.read`, `filesystem.write` (glob lists), `command.allow`, `command.timeout`. |
 | `description`, `personality`, `memory` | no | Accepted; `personality` is style only, `memory` arrives in 1.1. |
 
-**Capabilities**: `filesystem.read`, `filesystem.write`, `search`, `git.read`, `git.commit`, `command.execute`, `agent.handoff` (see [tools](tools.md)).
+**Capabilities**: `filesystem.read`, `filesystem.write`, `search`, `git.read`, `git.commit`, `command.execute`, `agent.handoff`, `chat.post` (see [tools](tools.md)).
 An agent asks for capabilities, never for tool names; the runtime resolves the tool.
 
 Notes on permissions:
