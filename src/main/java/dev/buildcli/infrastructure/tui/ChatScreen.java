@@ -129,6 +129,11 @@ final class ChatScreen implements Element {
             }
 
             @Override
+            public String draft(String thread) {
+                return thread.equals(selected) ? input.text() : drafts.getOrDefault(thread, "");
+            }
+
+            @Override
             public void select(String thread) {
                 ChatScreen.this.select(thread);
             }
@@ -526,6 +531,10 @@ final class ChatScreen implements Element {
             input.set(drafts.getOrDefault(thread, ""));
         }
         selected = thread;
+        // choosing a chat from the list leaves whatever screen was over the conversation (settings, connect, the chat's info)
+        settingsOpen = false;
+        infoOpen = false;
+        connectOpen = false;
         searching = false;
         chatList.closeSearch();
         if (ChatSession.FATHER.equals(thread)) {
