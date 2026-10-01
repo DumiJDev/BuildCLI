@@ -276,8 +276,21 @@ public final class ChatSession implements UserInterface {
         return version.get();
     }
 
+    private final java.util.List<Runnable> listeners = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /**
+     * Calls {@code listener} whenever anything visible changes, on whatever thread changed it. Keep it cheap: it runs
+     * inside the change (a message arriving, an agent starting to type).
+     */
+    public void onChange(Runnable listener) {
+        listeners.add(listener);
+    }
+
     private void touch() {
         version.incrementAndGet();
+        for (Runnable l : listeners) {
+            l.run();
+        }
     }
 
     // ---- what the user does ----
