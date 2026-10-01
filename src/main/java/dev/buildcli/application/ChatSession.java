@@ -1230,6 +1230,16 @@ public final class ChatSession implements UserInterface {
         }
     }
 
+    /**
+     * The chat an agent is working for right now. Streaming callbacks arrive on the HTTP client's threads, where
+     * {@link #RUN} is not set, so they ask by agent: an agent handles one job at a time, which makes this exact.
+     */
+    private String threadOf(String agent) {
+        Actor a = actors.get(agent);
+        Job j = a == null ? null : a.current;
+        return j != null ? j.run().thread : threadNow();
+    }
+
     private String threadNow() {
         Run r = RUN.get();
         return r == null ? EVERYWHERE : r.thread;
@@ -1335,7 +1345,7 @@ public final class ChatSession implements UserInterface {
         touch();
         synchronized (live) {
             live.computeIfAbsent(agent, k -> new StringBuilder()).append(delta);
-            liveThread.put(agent, threadNow());
+            liveThread.put(agent, threadOf(agent));
         }
         state.put(agent, "typing");
     }
@@ -1451,7 +1461,7 @@ public final class ChatSession implements UserInterface {
     }
 
     private void activity(String agent, String text) {
-        add(new Message(ids.incrementAndGet(), Kind.ACTIVITY, agent, text, Instant.now(), State.RUNNING, List.of(), threadNow()));
+        add(new Message(ids.incrementAndGet(), Kind.ACTIVITY, agent, text, Instant.now(), State.RUNNING, List.of(), threadOf(agent)));
     }
 
     private void completeActivity(String agent, String payload) {

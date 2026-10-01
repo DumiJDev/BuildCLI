@@ -2313,6 +2313,11 @@ final class ChatScreen implements Element {
         return connectOpen;
     }
 
+    void openNewAgentForTest() {
+        settingsOpen = true;
+        settingsView.startNewAgent();
+    }
+
     boolean settingsOpenForTest() {
         return settingsOpen;
     }
