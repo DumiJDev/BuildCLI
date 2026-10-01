@@ -13,7 +13,7 @@ import dev.buildcli.domain.RunInfo;
 import dev.buildcli.domain.Task;
 import dev.buildcli.domain.TaskStatus;
 import dev.buildcli.domain.Team;
-import dev.buildcli.infrastructure.SqliteRunStore;
+import dev.buildcli.infrastructure.StateStore;
 import dev.buildcli.ports.ChatStore;
 import java.nio.file.Path;
 import java.sql.DriverManager;
@@ -42,7 +42,7 @@ class ChatHistoryTest {
         return t;
     }
 
-    ChatSession open(SqliteRunStore db, ChatSession.Executor executor) {
+    ChatSession open(StateStore db, ChatSession.Executor executor) {
         return new ChatSession(TEAM, TEAM.agents(), executor, ChatStore.NONE, () -> 6, db);
     }
 
@@ -63,7 +63,7 @@ class ChatHistoryTest {
     void messagesAreThereAgainAfterARestartAndAgentsRememberThem() throws Exception {
         Path file = dir.resolve("state.db");
         List<String> seen;
-        try (SqliteRunStore db = SqliteRunStore.open(file)) {
+        try (StateStore db = StateStore.open(file)) {
             ChatSession s = open(db, answering());
             s.submit("hello team");
             s.submit("hi bruno", List.of(), "bruno");
@@ -71,7 +71,7 @@ class ChatHistoryTest {
             seen = s.messages().stream().map(m -> m.thread() + "|" + m.kind() + "|" + m.text() + "|" + m.state()).toList();
             s.close();
         }
-        try (SqliteRunStore db = SqliteRunStore.open(file)) {
+        try (StateStore db = StateStore.open(file)) {
             ChatSession s = open(db, answering());
             var texts = s.messages().stream().map(m -> m.thread() + "|" + m.kind() + "|" + m.text() + "|" + m.state()).toList();
             assertEquals(seen, texts, "the chat reopens exactly as it was left");
@@ -90,7 +90,7 @@ class ChatHistoryTest {
     void workInterruptedByClosingComesBackAsNotSentAndCanBeRetried() throws Exception {
         Path file = dir.resolve("state.db");
         CountDownLatch never = new CountDownLatch(1);
-        try (SqliteRunStore db = SqliteRunStore.open(file)) {
+        try (StateStore db = StateStore.open(file)) {
             ChatSession s = open(db, (team, request, ui, cancelled, d) -> {
                 never.await(3, TimeUnit.SECONDS);
                 throw new InterruptedException("closed");
@@ -99,7 +99,7 @@ class ChatHistoryTest {
             Thread.sleep(150);
             s.close();
         }
-        try (SqliteRunStore db = SqliteRunStore.open(file)) {
+        try (StateStore db = StateStore.open(file)) {
             ChatSession s = open(db, answering());
             var m = s.messages().get(0);
             assertEquals(ChatSession.State.FAILED, m.state());
@@ -114,7 +114,7 @@ class ChatHistoryTest {
     @Test
     void secretsAreScrubbedOnDiskButShownAsTypedOnScreen() throws Exception {
         Path file = dir.resolve("state.db");
-        try (SqliteRunStore db = SqliteRunStore.open(file)) {
+        try (StateStore db = StateStore.open(file)) {
             ChatSession s = open(db, answering());
             s.submit("use api_key = sk-live-abcdef1234567890 please");
             awaitIdle(s);
@@ -128,7 +128,7 @@ class ChatHistoryTest {
     @Test
     void clearingAChatDeletesOnlyThatChat() throws Exception {
         Path file = dir.resolve("state.db");
-        try (SqliteRunStore db = SqliteRunStore.open(file)) {
+        try (StateStore db = StateStore.open(file)) {
             ChatSession s = open(db, answering());
             s.submit("team message");
             s.submit("direct message", List.of(), "bruno");
@@ -154,9 +154,9 @@ class ChatHistoryTest {
             st.execute("INSERT INTO runs VALUES ('r1', 'backend', 'old request', '2026-09-01T10:00:00Z', null, 'DONE', null)");
             st.execute("PRAGMA user_version=1");
         }
-        try (SqliteRunStore db = SqliteRunStore.open(file)) {
-            assertEquals(SqliteRunStore.SCHEMA_VERSION, db.schemaVersion());
-            assertEquals(3, SqliteRunStore.SCHEMA_VERSION, "a version-1 database goes through every later migration");
+        try (StateStore db = StateStore.open(file)) {
+            assertEquals(StateStore.SCHEMA_VERSION, db.schemaVersion());
+            assertEquals(3, StateStore.SCHEMA_VERSION, "a version-1 database goes through every later migration");
             assertEquals("old request", db.listRuns(10).get(0).request());
             assertTrue(db.recent(10).isEmpty());
             assertTrue(db.changes(1).isEmpty(), "the file_changes table exists after the upgrade");

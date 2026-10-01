@@ -21,7 +21,8 @@ final class ConfigCommand implements Callable<Integer> {
         ctx.out.println("project directory : " + ctx.cwd);
         ctx.out.println("project config    : " + ctx.cwd.resolve(".buildcli") + "  (agents/, teams/), and AGENTS.md");
         ctx.out.println("global directory  : " + ctx.globalDir() + "  (override with BUILDCLI_HOME)");
-        ctx.out.println("state database    : " + ctx.stateDb());
+        ctx.out.println("state database    : " + ctx.storageBackend().name().toLowerCase(java.util.Locale.ROOT) + " ("
+                + (ctx.storageBackend() == dev.buildcli.infrastructure.StateStore.Backend.MEMORY ? "nothing kept after BuildCLI closes" : ctx.stateDb()) + ")");
         ctx.out.println("trust file        : " + ctx.trustFile());
         ctx.out.println("saved API keys    : " + ctx.credentials.file() + "  (only if you saved any: 'buildcli provider login <provider>')");
         ctx.out.println();

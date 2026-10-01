@@ -17,7 +17,7 @@ import dev.buildcli.infrastructure.ConsoleUi;
 import dev.buildcli.infrastructure.FileTrustStore;
 import dev.buildcli.infrastructure.ProviderSettings;
 import dev.buildcli.infrastructure.RoutingGateway;
-import dev.buildcli.infrastructure.SqliteRunStore;
+import dev.buildcli.infrastructure.StateStore;
 import dev.buildcli.ports.ConfigRepository;
 import dev.buildcli.ports.UserInterface;
 import java.security.SecureRandom;
@@ -137,10 +137,10 @@ final class RunCommand implements Callable<Integer> {
         var workspaceLock = new dev.buildcli.application.tools.WorkspaceLock();
         ChatServices services = new ChatServices(ctx, config, setup);
         // the conversation history lives in the project's state database, next to runs and events
-        try (SqliteRunStore history = SqliteRunStore.open(ctx.stateDb())) {
+        try (StateStore history = ctx.openState()) {
             ChatSession session = new ChatSession(config.agents(), setup.groups(), setup.limits(),
                     (chatTeam, req, ui, cancelled, dispatcher) -> runOnce(chatTeam, config, gateways.get(), req, ui, cancelled, dispatcher,
-                            workspaceLock),
+                            workspaceLock, history),
                     setup.store, () -> setup.settings.number(dev.buildcli.application.Settings.AGENT_HOPS, 6), history);
             services.attach(session);
             session.workspace(ctx.cwd, workspaceLock);
@@ -196,10 +196,11 @@ final class RunCommand implements Callable<Integer> {
     /** One request, start to finish: trust check, a fresh run id and store, the orchestrator. Throws if it cannot run. */
     private Task runOnce(Team team, ConfigRepository config, RoutingGateway gateway, Orchestrator.Request request, UserInterface ui,
             java.util.function.BooleanSupplier cancelled, Orchestrator.Dispatcher dispatcher,
-            dev.buildcli.application.tools.WorkspaceLock workspaceLock) throws Exception {
+            dev.buildcli.application.tools.WorkspaceLock workspaceLock, StateStore shared) throws Exception {
         String runId = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + "-"
                 + HexFormat.of().formatHex(randomBytes());
-        try (SqliteRunStore store = SqliteRunStore.open(ctx.stateDb())) {
+        StateStore store = shared != null ? shared : ctx.openState();
+        try {
             if (!TrustGate.ensureTrusted(team, config, new FileTrustStore(ctx.trustFile()), ctx.projectKey(), ui)) {
                 throw new IllegalStateException("the project's agent definitions were not trusted, so nothing was run");
             }
@@ -212,6 +213,10 @@ final class RunCommand implements Callable<Integer> {
             lastRunId = runId;
             lastUsage = store.usage(runId);
             return root;
+        } finally {
+            if (shared == null) {
+                store.close();
+            }
         }
     }
 
@@ -222,7 +227,7 @@ final class RunCommand implements Callable<Integer> {
     private void execute(Team team, ConfigRepository config, RoutingGateway gateway, String requestText, UserInterface ui) {
         try {
             Task root = runOnce(team, config, gateway, new Orchestrator.Request(requestText), ui, () -> false,
-                    Orchestrator.Dispatcher.INLINE, new dev.buildcli.application.tools.WorkspaceLock());
+                    Orchestrator.Dispatcher.INLINE, new dev.buildcli.application.tools.WorkspaceLock(), null);
             exit.set(root.status == TaskStatus.DONE ? 0 : 1);
             summarize(root, lastRunId, lastUsage);
         } catch (RunAborted e) {
