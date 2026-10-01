@@ -324,7 +324,14 @@ final class ChatScreen implements Element {
         this.settingsView = new SettingsView(services, () -> settingsOpen = false, file -> {
             settingsOpen = false;
             runCommand("/open " + file);
-        }, () -> openConnect(null));
+        }, () -> openConnect(null), key -> {
+            if (dev.buildcli.application.Settings.APPROVAL_MODE.equals(key)) {
+                var mode = dev.buildcli.application.ApprovalMode.parse(settings().get(key));
+                if (mode != session.approvalMode()) {
+                    commands.setMode(mode);
+                }
+            }
+        });
         this.infoView = new ChatInfoView(session, () -> selected, this::select, () -> infoOpen = false, this::modelLabel);
         this.connectView = new ConnectView(services, message -> {
             connectOpen = false;

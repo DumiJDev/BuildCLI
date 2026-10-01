@@ -48,9 +48,9 @@ public final class Settings {
             new Definition(AGENT_HOPS, "General", "Agent-to-agent messages", "How many messages agents may send each other before "
                     + "they pause and wait for you", Type.NUMBER, List.of(), "6"),
             new Definition(LANGUAGE, "General", "Language", "What BuildCLI's screens are written in: auto (your computer's language), en or pt. The agents answer in the language you write in", Type.CHOICE, List.of("auto", "en", "pt"), "auto"),
-            new Definition(APPROVAL_MODE, "General", "Approval mode at start", "manual: ask before every write, command and commit. edits: "
+            new Definition(APPROVAL_MODE, "General", "Approval mode", "manual: ask before every write, command and commit. edits: "
                     + "write files without asking (you can undo), still ask for commands. auto: ask for nothing; use it where nothing can be "
-                    + "lost. Change it while chatting with Shift+Tab or /mode", Type.CHOICE, List.of("manual", "edits", "auto"), "manual"),
+                    + "lost. Applies at once; you can also change it while chatting with Shift+Tab or /mode", Type.CHOICE, List.of("manual", "edits", "auto"), "manual"),
             new Definition(STORAGE, "General", "State database", "Where runs, events and chat history are kept. sqlite: a file, readable "
                     + "from several terminals. h2: a file, several times faster, one BuildCLI at a time. memory: fastest, forgotten when "
                     + "BuildCLI closes. Each keeps its own history (takes effect on the next start; BUILDCLI_STORAGE overrides it)",

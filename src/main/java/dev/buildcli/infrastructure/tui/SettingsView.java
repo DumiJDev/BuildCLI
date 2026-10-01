@@ -56,7 +56,11 @@ final class SettingsView {
     private String status = "";
     private Color statusColor = Theme.DIM;
 
-    SettingsView(SettingsServices services, Runnable close, Consumer<String> open, Runnable connect) {
+    /** Told the key of every setting that was saved, so what applies while running (the approval mode) does not wait for a restart. */
+    private final Consumer<String> changed;
+
+    SettingsView(SettingsServices services, Runnable close, Consumer<String> open, Runnable connect, Consumer<String> changed) {
+        this.changed = changed;
         this.services = services;
         this.close = close;
         this.open = open;
@@ -187,6 +191,7 @@ final class SettingsView {
     private void save(Scope where, String key, String value) {
         try {
             services.settings().set(where, key, value);
+            changed.accept(key);
             ok(value == null ? t("Reset {0}", scopeLabel()) : t("Saved {0}", scopeLabel()));
         } catch (RuntimeException e) {
             fail(e.getMessage());
