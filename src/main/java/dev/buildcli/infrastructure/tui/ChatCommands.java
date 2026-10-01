@@ -17,6 +17,32 @@ import java.util.Locale;
 final class ChatCommands {
 
     /** What a command may ask of the screen it runs in. */
+    /** /me: what the agents are told about you. Kept in your own settings, for all projects. */
+    private void aboutMe(String arg) {
+        var settings = services.settings();
+        String[] parts = arg.strip().split("\\s+", 2);
+        String word = parts[0].toLowerCase(Locale.ROOT);
+        String text = parts.length > 1 ? parts[1].strip() : "";
+        String key = switch (word) {
+            case "name" -> dev.buildcli.application.Settings.PROFILE_NAME;
+            case "about" -> dev.buildcli.application.Settings.PROFILE_ABOUT;
+            case "style" -> dev.buildcli.application.Settings.PROFILE_STYLE;
+            default -> null;
+        };
+        if (key == null) {
+            String name = settings.get(dev.buildcli.application.Settings.PROFILE_NAME);
+            String about = settings.get(dev.buildcli.application.Settings.PROFILE_ABOUT);
+            String style = settings.get(dev.buildcli.application.Settings.PROFILE_STYLE);
+            session.system("What your agents know about you (on this computer only):\n"
+                    + "name: " + (name.isBlank() ? "(not set)" : name) + "\nabout you: " + (about.isBlank() ? "(not set)" : about)
+                    + "\nhow to deal with you: " + (style.isBlank() ? "(not set)" : style)
+                    + "\n/me name <your name> · /me about <text> · /me style <text>; leave the text empty to clear one.");
+            return;
+        }
+        dev.buildcli.application.UserProfile.set(settings, key, text);
+        session.system(text.isEmpty() ? "Cleared." : "Saved. Your agents will use it from their next message.");
+    }
+
     /** /context: what the agents of the open group are told about the work, besides what you say in the chat. */
     private void groupContext(String arg) {
         String id = host.selected();
@@ -166,6 +192,7 @@ final class ChatCommands {
             new Command("review", "", "See the files agents changed in this chat", ""),
             new Command("undo", "", "Put back the files an agent changed last (shows them first)", ""),
             new Command("context", "[text | attach <file> | detach <file> | clear]", "Background for this group's agents: a text and files (optional)", ""),
+            new Command("me", "[name|about|style <text>]", "Tell the agents who you are and how to deal with you (stays on this computer)", ""),
             new Command("mode", "[manual|edits|auto]", "How much agents may do before asking you (Shift+Tab cycles it)", "Shift+Tab"),
             new Command("revoke", "", "Stop approving automatically in this chat (shows what was allowed)", ""),
             new Command("queue", "[clear]", "Show or drop messages waiting their turn", ""),
@@ -289,6 +316,7 @@ final class ChatCommands {
                     }
                 }
                 case "context" -> groupContext(arg);
+                case "me" -> aboutMe(arg);
                 case "newgroup" -> {
                     List<String> members = session.mentioned(arg);
                     String groupName = arg.replaceAll("@[A-Za-z][A-Za-z0-9_-]*", "").strip();

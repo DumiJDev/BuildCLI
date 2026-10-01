@@ -322,6 +322,7 @@ final class ChatScreen implements Element {
                 session.system(message);
             }
         });
+        session.profile(() -> dev.buildcli.application.UserProfile.describe(settings()));
         session.approvalMode(dev.buildcli.application.ApprovalMode.parse(settings().get(dev.buildcli.application.Settings.APPROVAL_MODE)));
         ensureSelection();
         if (services.canConnect() && !session.contacts().isEmpty() && noModelAnywhere()) {
