@@ -315,7 +315,7 @@ final class SettingsView {
 
     private void agentCapabilities(Draft d) {
         List<String> names = dev.buildcli.domain.Capability.KNOWN.stream().sorted().toList();
-        List<String> notes = names.stream().map(SettingsView::describe).toList();
+        List<String> notes = names.stream().map(CapabilityInfo::describe).toList();
         checklist = new Checklist("What " + d.a + " may do (3/4)", names, notes, d.caps, picked -> {
             d.caps = picked;
             agentHow(d);
@@ -332,21 +332,6 @@ final class SettingsView {
                 fail(e.getMessage());
             }
         }, () -> agentCapabilities(d));
-    }
-
-    /** What a capability lets an agent do, in the words of someone who has not read the docs. */
-    private static String describe(String capability) {
-        return switch (capability) {
-            case Capability.FILESYSTEM_READ -> "read files in the project";
-            case Capability.FILESYSTEM_WRITE -> "create and change files (you approve each write)";
-            case Capability.SEARCH -> "search the code";
-            case Capability.GIT_READ -> "read git status, log and diffs";
-            case Capability.GIT_COMMIT -> "commit to git (you approve)";
-            case Capability.COMMAND_EXECUTE -> "run commands, such as tests (you approve)";
-            case Capability.AGENT_HANDOFF -> "ask other agents for help";
-            case Capability.CHAT_POST -> "write in a group or to an agent when you ask";
-            default -> "";
-        };
     }
 
     private void addSamples() {

@@ -50,6 +50,10 @@ public final class ChatSession implements UserInterface {
     public static final String MAIN = "";
     /** Your own private chat: notes to yourself, which no agent reads. */
     public static final String NOTES = "~notes";
+    /** The chat with AgentFather, the built-in helper that creates and manages agents (see the front end for what it says). */
+    public static final String FATHER = "~father";
+    /** Who AgentFather's messages are from. */
+    public static final String FATHER_NAME = "agentfather";
     /** Local notes (command output, help) show in every thread. */
     public static final String EVERYWHERE = "*";
 
@@ -162,6 +166,7 @@ public final class ChatSession implements UserInterface {
     private final List<Run> runs = new CopyOnWriteArrayList<>();
     private final Approvals approvals;
     private final AgentFeed feed;
+    private volatile java.util.function.Consumer<String> father;
     private final ChangeCards changeCards;
     /** Goes up on every change a screen could show, so a front end redraws only when something changed. */
     private final AtomicLong version = new AtomicLong();
@@ -272,6 +277,15 @@ public final class ChatSession implements UserInterface {
         String clean = text == null ? "" : text.strip();
         if (clean.isEmpty() && attachments.isEmpty()) {
             return -1;
+        }
+        if (FATHER.equals(chat)) {
+            long id = transcript.nextId();
+            add(new Message(id, Kind.USER, "you", clean, Instant.now(), State.DONE, List.of(), FATHER));
+            java.util.function.Consumer<String> handler = father;
+            if (handler != null) {
+                handler.accept(clean);
+            }
+            return id;
         }
         if (NOTES.equals(chat)) {
             long id = transcript.nextId();
@@ -388,9 +402,19 @@ public final class ChatSession implements UserInterface {
         return out;
     }
 
+    /** What answers you in the chat with AgentFather: a front end gives it, since it lives next to the settings it changes. */
+    public void father(java.util.function.Consumer<String> handler) {
+        this.father = handler;
+    }
+
+    /** Writes a message in a chat as {@code author}, without an agent running (the helper in {@link #FATHER} uses it). */
+    public void post(String thread, String author, String text) {
+        add(new Message(transcript.nextId(), Kind.AGENT, author, text, Instant.now(), State.NONE, List.of(), thread));
+    }
+
     /** A private chat between two agents, started by one of them when the user asked it to write to the other. */
     public static boolean isAgentChat(String thread) {
-        return thread != null && thread.contains("~") && !thread.equals(NOTES);
+        return thread != null && thread.contains("~") && !thread.equals(NOTES) && !thread.equals(FATHER);
     }
 
     public static String agentChatId(String a, String b) {

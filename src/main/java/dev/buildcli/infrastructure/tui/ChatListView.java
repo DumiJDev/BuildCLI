@@ -64,7 +64,7 @@ final class ChatListView {
 
     /** Whether {@code thread} is a chat that can be opened: a group, an agent, your notes, or a chat between two agents. */
     boolean exists(String thread) {
-        return session.group(thread) != null || session.contact(thread) != null || isSpecial(thread);
+        return session.group(thread) != null || session.contact(thread) != null || isSpecial(thread) || ChatSession.FATHER.equals(thread);
     }
 
     /** Your notes and the private chats between agents: chats with no agent on the other side to answer you. */
@@ -72,8 +72,16 @@ final class ChatListView {
         return ChatSession.NOTES.equals(thread) || ChatSession.isAgentChat(thread);
     }
 
+    /** Chats that say what they are under their name instead of an agent's role and model. */
+    boolean hasDescription(String thread) {
+        return isSpecial(thread) || ChatSession.FATHER.equals(thread);
+    }
+
     /** The line under the name of a special chat. */
     String describe(String thread) {
+        if (ChatSession.FATHER.equals(thread)) {
+            return "built in · creates and manages your agents";
+        }
         return ChatSession.NOTES.equals(thread) ? "only you can read this · no agent sees it"
                 : "private chat between agents · you can read it, not write in it";
     }
@@ -97,6 +105,7 @@ final class ChatListView {
         List<String> out = new ArrayList<>();
         session.groups().forEach(g -> out.add(g.id()));
         out.add(ChatSession.NOTES);
+        out.add(ChatSession.FATHER);
         out.addAll(session.directChats());
         out.addAll(session.agentChats());
         return out;
@@ -105,6 +114,9 @@ final class ChatListView {
     String title(String thread) {
         if (thread.equals(ChatSession.NOTES)) {
             return "You (notes)";
+        }
+        if (thread.equals(ChatSession.FATHER)) {
+            return "AgentFather";
         }
         if (ChatSession.isAgentChat(thread)) {
             return String.join(" ↔ ", ChatSession.agentChatMembers(thread));
@@ -347,6 +359,9 @@ final class ChatListView {
 
 
     String roleOf(String agent) {
+        if (ChatSession.FATHER.equals(agent)) {
+            return "creates and manages agents";
+        }
         Agent a = session.contact(agent);
         return a == null ? "" : a.role();
     }
@@ -380,7 +395,7 @@ final class ChatListView {
     private void avatar(Buffer buf, int x, int y, String thread) {
         var g = session.group(thread);
         boolean isGroup = g != null;
-        String name = isGroup ? g.name() : thread;
+        String name = isGroup ? g.name() : thread.equals(ChatSession.FATHER) ? "AgentFather" : thread;
         String initial = name.isEmpty() ? "?" : name.substring(0, 1).toUpperCase(Locale.ROOT);
         Color c = isGroup ? Theme.ACCENT : Theme.agentColor(thread);
         put(buf, x, y, " " + initial + " ", st(Theme.ON_ACCENT, c).bold(), x + 3);

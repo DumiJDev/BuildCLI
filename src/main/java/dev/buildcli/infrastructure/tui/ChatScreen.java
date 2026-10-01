@@ -91,6 +91,7 @@ final class ChatScreen implements Element {
     private final ChatListView chatList;
     private final ChatCommands commands;
     private final ConversationRows conversation;
+    private final AgentFather father;
     private final SettingsView settingsView;
     private boolean settingsOpen;
     private ChatInfoView infoView;
@@ -268,6 +269,11 @@ final class ChatScreen implements Element {
             }
 
             @Override
+            public void openFather() {
+                select(ChatSession.FATHER);
+            }
+
+            @Override
             public void openConnect(String why) {
                 ChatScreen.this.openConnect(why);
             }
@@ -287,6 +293,8 @@ final class ChatScreen implements Element {
                 input.set(text);
             }
         });
+        this.father = new AgentFather(session, services);
+        session.father(father::handle);
         this.models = models;
         this.cwd = cwd;
         this.quit = quit;
@@ -524,6 +532,9 @@ final class ChatScreen implements Element {
         selected = thread;
         searching = false;
         chatList.closeSearch();
+        if (ChatSession.FATHER.equals(thread)) {
+            father.greet();
+        }
         scrollOff = 0;
         lastTotal = 0;
         menuDismissedFor = null;
@@ -603,7 +614,7 @@ final class ChatScreen implements Element {
             }
             sb.append(sb.isEmpty() ? "you" : ", you");
             sub = sb.toString() + "   · click for group info";
-        } else if (chatList.isSpecial(selected)) {
+        } else if (chatList.hasDescription(selected)) {
             sub = chatList.describe(selected);
         } else if (session.contact(selected) == null) {
             sub = "create an agent to start";
@@ -888,7 +899,8 @@ final class ChatScreen implements Element {
             int y = r.y() + 1 + i;
             Wrap.Segment s = segs.get(inputFirstRow + i);
             if (src.isEmpty()) {
-                String hint = ChatSession.isAgentChat(selected) ? "Read only: ask one of them, in their own chat, to write to the other"
+                String hint = ChatSession.FATHER.equals(selected) ? "Ask AgentFather: /newagent, /agents, /samples, /help"
+                        : ChatSession.isAgentChat(selected) ? "Read only: ask one of them, in their own chat, to write to the other"
                         : selected.equals(ChatSession.NOTES) ? "A note to yourself: no agent reads it"
                         : session.busy() ? "Type a message (it waits its turn)" : "Type a message";
                 put(buf, tx, y, hint, st(Theme.DIM, Theme.FIELD), tx + inputWidth);
@@ -920,7 +932,7 @@ final class ChatScreen implements Element {
         if (text.startsWith("/") && !text.contains(" ") && !text.contains("\n") && input.cursor() == text.length()) {
             key = text;
             String typed = text.substring(1).toLowerCase(Locale.ROOT);
-            for (ChatCommands.Command c : ChatCommands.LIST) {
+            for (ChatCommands.Command c : commandsHere()) {
                 if (c.name().startsWith(typed)) {
                     items.add(new MenuItem("/" + c.name() + (c.arg().isEmpty() ? "" : " " + c.arg()), c.description(), c.shortcut(),
                             () -> acceptCommand(c)));
@@ -954,10 +966,23 @@ final class ChatScreen implements Element {
         return key.equals(menuDismissedFor) ? List.of() : items;
     }
 
+    /** The commands the menu offers in the open chat: AgentFather's own, in its chat, and the ones every chat has. */
+    private List<ChatCommands.Command> commandsHere() {
+        if (!ChatSession.FATHER.equals(selected)) {
+            return ChatCommands.LIST;
+        }
+        List<ChatCommands.Command> all = new ArrayList<>(AgentFather.COMMANDS);
+        all.addAll(ChatCommands.LIST);
+        return all;
+    }
+
     private void acceptCommand(ChatCommands.Command c) {
         if (c.arg().isEmpty() || c.arg().startsWith("[")) {
             input.clear();
-            runCommand("/" + c.name());
+            if (!runCommand("/" + c.name())) {
+                // not one of the commands every chat has: the chat itself answers it (AgentFather's)
+                session.submit("/" + c.name(), List.of(), selected);
+            }
         } else {
             input.set("/" + c.name() + " ");
         }
