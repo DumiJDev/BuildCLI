@@ -182,4 +182,25 @@ class HistoryAndTabScreenTest {
         screen.handleKeyEvent(dev.tamboui.tui.event.KeyEvent.ofKey(KeyCode.DOWN, dev.tamboui.tui.event.KeyModifiers.ALT), true);
         assertEquals("something else", screen.inputForTest().text());
     }
+
+    @Test
+    void clickingAChatInTheListLeavesTheSettingsScreen() {
+        var screen = screen();
+        screen.handleKeyEvent(dev.tamboui.tui.event.KeyEvent.ofKey(KeyCode.F2), true);
+        assertTrue(screen.settingsOpenForTest());
+        ChatScreenTest.render(screen, 130, 40);
+        screen.handleMouseEvent(dev.tamboui.tui.event.MouseEvent.press(dev.tamboui.tui.event.MouseButton.LEFT, 5, 7));
+        assertFalse(screen.settingsOpenForTest(), "the chat is shown, no Esc needed");
+    }
+
+    @Test
+    void aChatWithUnsentTextShowsItAsADraftInTheList() {
+        var screen = screen();
+        ChatScreenTest.type(screen, "ask about the build");
+        screen.handleKeyEvent(dev.tamboui.tui.event.KeyEvent.ofKey(KeyCode.DOWN, dev.tamboui.tui.event.KeyModifiers.ALT), true);
+        String out = ChatScreenTest.render(screen, 130, 40);
+        assertTrue(out.contains("Draft: ask about the build"), out);
+        screen.handleKeyEvent(dev.tamboui.tui.event.KeyEvent.ofKey(KeyCode.UP, dev.tamboui.tui.event.KeyModifiers.ALT), true);
+        ChatScreenTest.key(screen, KeyCode.ENTER);
+    }
 }

@@ -41,6 +41,9 @@ final class ChatListView {
 
         String selected();
 
+        /** What was typed in this chat and not sent, or "". */
+        String draft(String thread);
+
         void select(String thread);
 
         void openSettings();
@@ -222,7 +225,14 @@ final class ChatListView {
             }
             int badge = unread(msgs, t);
             String b = badge > 0 ? " " + badge + " " : "";
-            putFit(buf, r.x() + 6, y + 1, preview.replace('\n', ' '), ps, limit - Wrap.width(b) - 1);
+            String draft = host.draft(t).strip().replaceAll("\\s+", " ");
+            if (!draft.isEmpty() && live == null && !session.isActive(t)) {
+                // like a messenger: "Draft:" in colour, then what you wrote
+                int label = putFit(buf, r.x() + 6, y + 1, "Draft: ", st(Theme.GREEN, bg), limit - Wrap.width(b) - 1);
+                putFit(buf, r.x() + 6 + label, y + 1, clean(draft), st(Theme.DIM, bg), limit - Wrap.width(b) - 1);
+            } else {
+                putFit(buf, r.x() + 6, y + 1, preview.replace('\n', ' '), ps, limit - Wrap.width(b) - 1);
+            }
             if (badge > 0) {
                 put(buf, limit - Wrap.width(b), y + 1, b, st(Theme.BG, Theme.GREEN).bold(), limit + 1);
             }
