@@ -8,10 +8,10 @@
 [`legacy`](../../tree/legacy) branch, tag `v0.14.0`). The design is in [`docs/rfc/0001-buildcli-1.0.md`](docs/rfc/0001-buildcli-1.0.md).
 Read [Known limitations](#known-limitations) before relying on it.
 
-![The BuildCLI chat: a group where ana delegates to bruno, who writes a file after you approve it, a command the policy denied, and a Review button](docs/images/chat.png)
+![AgentFather, the built-in helper, creating an agent called rita step by step; rita then appears in the chat list](docs/images/agentfather.png)
 
-*A scripted conversation (no model needed): the group on the left, ana delegating to bruno, a command
-the policy denied, and the changes with a Review button. Your own agents look the same.*
+*AgentFather creating an agent, step by step, with no model connected: it asks, shows what it is about to do, and only creates
+the agent after you say yes. The new agent shows up in the chat list.*
 
 ## The idea
 
@@ -58,7 +58,7 @@ buildcli               # opens the chat; on first run it offers to connect a mod
 
 Everything can be done **inside the app**: `/connect` picks a provider (OpenRouter, DeepSeek, Ollama, ...), asks for the
 API key (typed hidden, checked before it is saved, stored owner-only on your computer, or taken from the usual environment
-variable) and lets you choose a model; the empty chat has a button for the sample agents and one to create your own agent.
+variable) and lets you choose a model; the empty chat has buttons for the sample agents, to create your own agent, and to talk to [AgentFather](#agentfather).
 From the shell, the same setup is `buildcli init` (the sample agents and an `AGENTS.md`), `buildcli provider login <name>`
 and `buildcli doctor` (checks Java, git, your configuration and whether Ollama has the model).
 
@@ -80,6 +80,19 @@ buildcli usage         # tokens per agent
 (`ollama pull qwen2.5:7b`), use `/connect`, or point agents at any OpenAI-compatible endpoint. Every command is documented
 in the [CLI reference](docs/reference/cli.md); agent files in [agents](docs/reference/agents.md);
 ready-to-copy agents in [`examples/`](examples). New to the ideas? Read [concepts](docs/concepts.md); stuck? [troubleshooting](docs/troubleshooting.md).
+
+## AgentFather
+
+Like Telegram's BotFather, **AgentFather** is a contact that is always in your chat list and creates and manages agents by
+conversation. It is not a model: it follows a script, so it works before you have connected anything, and it never creates or
+deletes anything until you reply *yes*.
+
+- `/newagent [name]` asks for a name, a role, what the agent may do (a list to pick from) and one sentence on how it should
+  work, shows a summary, and creates it. `back` goes one question back, `cancel` stops.
+- `/agents` lists your agents with their model and capabilities; `/deleteagent <name>` deletes one (after a yes);
+  `/samples` adds the sample agents.
+- What it creates can read the whole project and has no folder to write in and no command allowed; to give it more, edit its
+  file (AgentFather says so). Every write and command still asks you first.
 
 ## In the chat
 

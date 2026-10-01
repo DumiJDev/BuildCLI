@@ -40,6 +40,8 @@ final class ConversationRows {
 
         void createAgent();
 
+        void openFather();
+
         void openConnect(String why);
 
         void openSettings();
@@ -202,11 +204,12 @@ final class ConversationRows {
         int boxW = Math.min(width - 4, 56);
         int x = Math.max(0, (width - boxW) / 2);
         String[][] actions = {{"Add the sample agents: wheslley, breno, matheus and dumildes", "samples"}, {"Create your own agent", "agent"},
-            {"Connect a model and provider", "connect"}};
+            {"Talk to AgentFather: it creates agents for you", "father"}, {"Connect a model and provider", "connect"}};
         for (String[] a : actions) {
             Runnable act = switch (a[1]) {
                 case "samples" -> host::addSampleAgents;
                 case "agent" -> host::createAgent;
+                case "father" -> host::openFather;
                 default -> () -> {
                     if (services.canConnect()) {
                         host.openConnect(null);

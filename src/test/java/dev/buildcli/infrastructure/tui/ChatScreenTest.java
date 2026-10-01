@@ -164,7 +164,7 @@ class ChatScreenTest {
         assertEquals("bruno", targets.get(0));
         out = render(screen, 120, 36);
         assertTrue(out.contains("reply to hi"), out);
-        assertTrue(out.lines().limit(12).anyMatch(l -> l.contains("bruno") && l.indexOf("bruno") < 20), "the direct chat is now in the list");
+        assertTrue(out.lines().limit(18).anyMatch(l -> l.contains("bruno") && l.indexOf("bruno") < 20), "the direct chat is now in the list");
     }
 
     @Test

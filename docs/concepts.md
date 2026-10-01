@@ -7,6 +7,7 @@ BuildCLI runs **agents** on your machine and you talk to them in a chat. This pa
 | Concept | What it is |
 |---|---|
 | **Agent** | An identity with a role, instructions, **capabilities** and **permissions**. Not tied to a model: "ana" is the agent, the model is configuration. Defined in a Markdown/YAML file ([reference](reference/agents.md)). |
+| **AgentFather** | A built-in contact, not an agent and not a model, that creates and manages agents by conversation (`/newagent`). It follows a script and acts only after you say yes. |
 | **Group** | A chat you put agents in, like a messaging group: members and **admins**. A message nobody is @mentioned in goes to an admin; an @mention goes to that member. Kept per project, outside the project tree. |
 | **Task** | The unit of execution: an objective, an owner, a status (`PENDING`, `RUNNING`, `WAITING_APPROVAL`, `ESCALATED`, `FAILED`, `DONE`) and a result. Persisted and traceable. |
 | **Handoff** | How agents collaborate: an agent creates a *child task* for a teammate with an objective and a short brief, and gets the result back. In a group they also talk by @mention, and when you ask they can write in a group or privately to each other (`send_message`); a hop limit stops them from talking forever. |
