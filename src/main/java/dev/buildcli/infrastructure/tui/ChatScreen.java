@@ -61,6 +61,8 @@ final class ChatScreen implements Element {
     private boolean autoSidebar = true;
     private int sideWidth;
     private String selected = ChatSession.MAIN;
+    /** Text typed in a chat and not sent, by chat. */
+    private final Map<String, String> drafts = new java.util.HashMap<>();
     private int scrollOff;
     private int lastTotal;
     private int scrollMax;
@@ -514,6 +516,15 @@ final class ChatScreen implements Element {
     }
 
     private void select(String thread) {
+        if (!thread.equals(selected)) {
+            // what you typed and did not send waits in its chat, like in any messenger
+            if (input.text().isEmpty()) {
+                drafts.remove(selected);
+            } else {
+                drafts.put(selected, input.text());
+            }
+            input.set(drafts.getOrDefault(thread, ""));
+        }
         selected = thread;
         searching = false;
         chatList.closeSearch();

@@ -167,4 +167,19 @@ class HistoryAndTabScreenTest {
         ChatScreenTest.idle(screen.sessionForTest());
         assertTrue(got.get().contains("chose not to answer"), got.get());
     }
+
+    @Test
+    void whatYouTypedAndDidNotSendWaitsInItsChat() {
+        var screen = screen();
+        String first = screen.selectedForTest();
+        ChatScreenTest.type(screen, "half a thought");
+        screen.handleKeyEvent(dev.tamboui.tui.event.KeyEvent.ofKey(KeyCode.DOWN, dev.tamboui.tui.event.KeyModifiers.ALT), true);
+        assertFalse(first.equals(screen.selectedForTest()));
+        assertEquals("", screen.inputForTest().text(), "the other chat starts empty");
+        ChatScreenTest.type(screen, "something else");
+        screen.handleKeyEvent(dev.tamboui.tui.event.KeyEvent.ofKey(KeyCode.UP, dev.tamboui.tui.event.KeyModifiers.ALT), true);
+        assertEquals("half a thought", screen.inputForTest().text());
+        screen.handleKeyEvent(dev.tamboui.tui.event.KeyEvent.ofKey(KeyCode.DOWN, dev.tamboui.tui.event.KeyModifiers.ALT), true);
+        assertEquals("something else", screen.inputForTest().text());
+    }
 }
