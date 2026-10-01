@@ -27,15 +27,53 @@ final class Styled {
         return w;
     }
 
-    /** Wraps {@code text} to {@code width} columns; each returned line is a list of spans. */
+    /** The text of each fenced code block, without its fences, in order. An unclosed block (still streaming) counts. */
+    static List<String> codeBlocks(String text) {
+        List<String> blocks = new ArrayList<>();
+        StringBuilder current = null;
+        for (String raw : text.replace("\t", "    ").split("\n", -1)) {
+            if (raw.strip().startsWith("```")) {
+                if (current == null) {
+                    current = new StringBuilder();
+                } else {
+                    blocks.add(current.toString());
+                    current = null;
+                }
+            } else if (current != null) {
+                current.append(current.isEmpty() ? "" : "\n").append(raw);
+            }
+        }
+        if (current != null) {
+            blocks.add(current.toString());
+        }
+        return blocks;
+    }
+
     static List<List<Span>> lines(String text, int width, Style base, Style bold, Style code) {
+        return lines(text, width, base, bold, code, null);
+    }
+
+    /**
+     * Wraps {@code text} to {@code width} columns; each returned line is a list of spans.
+     *
+     * @param onCopy when not null, every code block gets a header line with its language and a "copy" button that passes
+     *               the block's text to it
+     */
+    static List<List<Span>> lines(String text, int width, Style base, Style bold, Style code, java.util.function.Consumer<String> onCopy) {
         List<List<Span>> out = new ArrayList<>();
         boolean fenced = false;
+        List<String> blocks = onCopy == null ? List.of() : codeBlocks(text);
+        int block = 0;
         for (String raw : text.replace("\t", "    ").split("\n", -1)) {
             String trimmed = raw.strip();
             if (trimmed.startsWith("```")) {
                 fenced = !fenced;
-                if (fenced && trimmed.length() > 3) {
+                if (fenced && onCopy != null) {
+                    String label = trimmed.length() > 3 ? trimmed.substring(3).strip() : "code";
+                    String body = block < blocks.size() ? blocks.get(block) : "";
+                    block++;
+                    out.add(List.of(new Span(label + "  ", code), new Span(" ⧉ copy ", code.bold(), () -> onCopy.accept(body))));
+                } else if (fenced && trimmed.length() > 3) {
                     out.add(List.of(new Span(trimmed.substring(3).strip(), code)));
                 }
                 continue;

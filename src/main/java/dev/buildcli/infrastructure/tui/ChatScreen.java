@@ -69,6 +69,8 @@ final class ChatScreen implements Element {
             new Command("tasks", "", "Show what the team is doing: tasks and handoffs", "Ctrl+T"),
             new Command("stop", "", "Stop the team's current work", "Ctrl+X"),
             new Command("retry", "", "Send the last failed message again", ""),
+            new Command("copy", "[message]", "Copy the last code block (or the whole last answer)", ""),
+            new Command("find", "[text]", "Search this chat", "Ctrl+F"),
             new Command("review", "", "See the files agents changed in this chat", ""),
             new Command("undo", "", "Put back the files an agent changed last (shows them first)", ""),
             new Command("revoke", "", "Stop approving automatically in this chat (shows what was allowed)", ""),
@@ -134,6 +136,19 @@ final class ChatScreen implements Element {
     private boolean infoOpen;
     private final ConnectView connectView;
     private boolean connectOpen;
+    /** Writes straight to the terminal (OSC 52 copy); set by the app once the terminal is up. */
+    private volatile java.util.function.Consumer<String> rawOutput;
+    private java.util.function.Function<String, String> copier = text -> Clipboard.copy(text, rawOutput);
+    /** A short message at the bottom of the conversation ("Copied 12 lines"); it fades after a few seconds. */
+    private volatile String toast = "";
+    private volatile long toastUntil;
+    /** Find in this chat: the query, which match is current and whether to scroll to it on the next frame. */
+    private boolean searching;
+    private final InputEditor findInput = new InputEditor();
+    private List<Integer> findRows = List.of();
+    private int findIndex = -1;
+    private boolean findJump;
+    private boolean findDirty;
 
     ChatScreen(ChatSession session, Map<String, String> models, Path cwd, Runnable quit) {
         this(session, models, cwd, quit, basicServices(session, models));
@@ -235,10 +250,35 @@ final class ChatScreen implements Element {
 
     /** True while something on screen moves by itself: an agent working (spinner, dots) or a preview loading. */
     boolean animating() {
-        return session.busy() || loadingPreviews || connectOpen && connectView.animating();
+        return session.busy() || loadingPreviews || connectOpen && connectView.animating() || System.currentTimeMillis() < toastUntil;
     }
 
     private volatile boolean loadingPreviews;
+
+    /** For the app: how to write bytes straight to the terminal. */
+    void rawOutput(java.util.function.Consumer<String> writer) {
+        this.rawOutput = writer;
+    }
+
+    /** For tests: replaces the system clipboard. The function returns how it copied, or null when it could not. */
+    void copier(java.util.function.Function<String, String> copier) {
+        this.copier = copier;
+    }
+
+    private void say(String text) {
+        toast = text;
+        toastUntil = System.currentTimeMillis() + 3_000; // animating() asks for the redraws until it expires
+    }
+
+    /** Copies on another thread, because a clipboard tool can take a moment, and says how it went. */
+    private void copyText(String text) {
+        java.util.concurrent.CompletableFuture.runAsync(() -> {
+            String how = copier.apply(text);
+            long lines = text.lines().count();
+            say(how == null ? "Could not copy: no clipboard tool found (install xclip, xsel or wl-copy)"
+                    : "Copied " + lines + (lines == 1 ? " line" : " lines"));
+        });
+    }
 
     private String modelLabel(String agent) {
         String own = services.settings().modelFor(agent);
@@ -406,6 +446,7 @@ final class ChatScreen implements Element {
 
     private void select(String thread) {
         selected = thread;
+        searching = false;
         scrollOff = 0;
         lastTotal = 0;
         menuDismissedFor = null;
@@ -558,17 +599,24 @@ final class ChatScreen implements Element {
         int barH = visibleRows + 2;
         int barY = pane.bottom() - barH;
         int chipsY = attachments.isEmpty() ? barY : barY - 1;
-        Rect content = new Rect(pane.x(), pane.y() + 2, pane.width(), Math.max(1, chipsY - pane.y() - 2));
+        int findH = searching ? 1 : 0;
+        Rect content = new Rect(pane.x(), pane.y() + 2 + findH, pane.width(), Math.max(1, chipsY - pane.y() - 2 - findH));
         List<Message> msgs = inThread(all, selected);
         if (!msgs.isEmpty()) {
             seen.put(selected, msgs.get(msgs.size() - 1).id());
         }
         drawConversation(buf, content, msgs);
+        if (searching) {
+            drawFindBar(buf, new Rect(pane.x(), pane.y() + 2, pane.width(), 1));
+        }
         if (!attachments.isEmpty()) {
             drawChips(buf, new Rect(pane.x(), chipsY, pane.width(), 1));
         }
         Rect bar = new Rect(pane.x(), barY, pane.width(), barH);
         drawInputBar(frame, buf, bar, segs, visibleRows);
+        if (searching) {
+            frame.clearCursor(); // the cursor is in the search box
+        }
         if (session.pending() == null) {
             drawMenu(buf, new Rect(pane.x() + 4, barY, Math.min(pane.width() - 8, 90), barH));
         }
@@ -670,12 +718,36 @@ final class ChatScreen implements Element {
         }
         lastTotal = total;
         scrollOff = Math.max(0, Math.min(scrollOff, scrollMax));
+        String query = searching ? findInput.text().strip().toLowerCase(Locale.ROOT) : "";
+        if (searching) {
+            findRows = matchingRows(rows, query);
+            if (findDirty) {
+                findIndex = findRows.size() - 1; // start at the newest match
+                findJump = true;
+                findDirty = false;
+            }
+            findIndex = findRows.isEmpty() ? -1 : Math.max(0, Math.min(findIndex, findRows.size() - 1));
+            if (findJump && findIndex >= 0) {
+                int firstWanted = Math.max(0, Math.min(findRows.get(findIndex) - viewH / 2, Math.max(0, total - viewH)));
+                scrollOff = Math.max(0, Math.min(scrollMax, total - viewH - firstWanted));
+                findJump = false;
+            }
+        }
         int first = Math.max(0, total - viewH - scrollOff);
         boolean empty = msgs.isEmpty() && !session.isActive(selected);
         int yOff = total < viewH ? (empty ? Math.max(0, (viewH - total) / 3) : viewH - total) : 0;
         for (int i = 0; i < viewH && first + i < total; i++) {
             Row row = rows.get(first + i);
             drawSpans(buf, r.x() + row.x(), r.y() + yOff + i, row.spans(), r.x() + width);
+            if (!query.isEmpty()) {
+                boolean current = findIndex >= 0 && findRows.get(findIndex) == first + i;
+                highlight(buf, r.x() + row.x(), r.y() + yOff + i, row.spans(), query, current, r.x() + width);
+            }
+        }
+        if (System.currentTimeMillis() < toastUntil && !toast.isEmpty()) {
+            String t = " " + toast + " ";
+            int tw = Wrap.width(t);
+            put(buf, r.x() + Math.max(0, (width - tw) / 2), r.bottom() - 1, t, st(Theme.TEXT, Theme.PANEL).bold(), r.x() + width);
         }
         if (scrollMax > 0) {
             int trackX = r.right() - 1;
@@ -693,6 +765,116 @@ final class ChatScreen implements Element {
             put(buf, px, py, pill, st(Theme.DIM, Theme.PANEL).bold(), r.right());
             hits.add(new Hit(new Rect(px, py, 3, 1), () -> scrollOff = 0));
         }
+    }
+
+    // ---- find in this chat ----
+
+    private static String plainText(List<Span> spans) {
+        StringBuilder sb = new StringBuilder();
+        for (Span sp : spans) {
+            sb.append(sp.text());
+        }
+        return sb.toString();
+    }
+
+    /** The rows whose text contains the (lower-cased) query, top to bottom. A phrase split over two rows is not found. */
+    private static List<Integer> matchingRows(List<Row> rows, String query) {
+        if (query.isEmpty()) {
+            return List.of();
+        }
+        List<Integer> out = new ArrayList<>();
+        for (int i = 0; i < rows.size(); i++) {
+            if (plainText(rows.get(i).spans()).toLowerCase(Locale.ROOT).contains(query)) {
+                out.add(i);
+            }
+        }
+        return out;
+    }
+
+    /** Draws the matches of {@code query} in one row again, over the text, in the highlight colours. */
+    private void highlight(Buffer buf, int x, int y, List<Span> spans, String query, boolean current, int limit) {
+        String plain = plainText(spans);
+        String lower = plain.toLowerCase(Locale.ROOT);
+        if (lower.length() != plain.length()) {
+            return; // a letter that changes length when lower-cased would put the highlight in the wrong column
+        }
+        Style style = current ? st(Theme.BG, Theme.ACCENT).bold() : st(Theme.BG, Theme.AMBER);
+        for (int at = lower.indexOf(query); at >= 0; at = lower.indexOf(query, at + query.length())) {
+            put(buf, x + Wrap.width(plain.substring(0, at)), y, plain.substring(at, at + query.length()), style, limit);
+        }
+    }
+
+    private void openSearch(String text) {
+        searching = true;
+        findInput.set(text);
+        findIndex = -1;
+        findDirty = true;
+    }
+
+    private void drawFindBar(Buffer buf, Rect r) {
+        Style bar = st(Theme.TEXT, Theme.PANEL);
+        fill(buf, r, bar);
+        int x = r.x() + 2;
+        x += put(buf, x, r.y(), "Find in this chat: ", st(Theme.DIM, Theme.PANEL), r.right());
+        String text = findInput.text();
+        x += put(buf, x, r.y(), text.isEmpty() ? "type to search▏" : text + "▏", st(text.isEmpty() ? Theme.DIM : Theme.TEXT, Theme.FIELD), r.right() - 40);
+        String count = text.isBlank() ? "" : findRows.isEmpty() ? "no matches" : (findIndex + 1) + " of " + findRows.size();
+        String right = count + "   ↑ older  ↓ newer  Esc close ✕ ";
+        int rx = Math.max(x + 2, r.right() - Wrap.width(right));
+        put(buf, rx, r.y(), right, st(findRows.isEmpty() && !text.isBlank() ? Theme.RED : Theme.DIM, Theme.PANEL), r.right());
+        hits.add(new Hit(new Rect(r.right() - 3, r.y(), 3, 1), () -> searching = false));
+    }
+
+    private void findStep(int direction) {
+        if (findRows.isEmpty()) {
+            return;
+        }
+        findIndex = (Math.max(0, findIndex) + direction + findRows.size()) % findRows.size();
+        findJump = true;
+    }
+
+    private EventResult searchKey(KeyEvent key) {
+        KeyCode code = key.code();
+        switch (code) {
+            case ESCAPE -> searching = false;
+            case ENTER -> findStep(key.hasShift() ? -1 : 1);
+            case UP -> findStep(-1);
+            case DOWN -> findStep(1);
+            case PAGE_UP -> scroll(10);
+            case PAGE_DOWN -> scroll(-10);
+            case BACKSPACE -> {
+                findInput.backspace();
+                findDirty = true;
+            }
+            case LEFT -> findInput.left();
+            case RIGHT -> findInput.right();
+            case CHAR -> {
+                if (key.hasCtrl() && Character.toLowerCase(key.character()) == 'u') {
+                    findInput.clear();
+                    findDirty = true;
+                } else if (!key.hasCtrl() && !key.hasAlt() && key.character() >= ' ') {
+                    findInput.insert(key.string());
+                    findDirty = true;
+                }
+            }
+            default -> { }
+        }
+        return EventResult.HANDLED;
+    }
+
+    /** /copy: the last code block of the last answer, or with "message" (or when it has no code) the whole answer. */
+    private void copyLast(boolean wholeMessage) {
+        List<Message> msgs = inThread(session.messages(), selected);
+        for (int i = msgs.size() - 1; i >= 0; i--) {
+            Message m = msgs.get(i);
+            if (m.kind() != ChatSession.Kind.AGENT) {
+                continue;
+            }
+            List<String> blocks = Styled.codeBlocks(m.text());
+            copyText(wholeMessage || blocks.isEmpty() ? m.text() : blocks.get(blocks.size() - 1));
+            return;
+        }
+        say("Nothing to copy yet");
     }
 
     // ---- conversation rows ----
@@ -943,7 +1125,7 @@ final class ChatScreen implements Element {
     private void agentBubble(List<Row> rows, int width, String author, String text, String time, boolean live) {
         Style base = st(Theme.TEXT, Theme.THEM);
         Style code = st(Theme.CODE_TEXT, Theme.CODE);
-        List<List<Span>> body = Styled.lines(clean(text), maxBody(width), base, base.bold(), code);
+        List<List<Span>> body = Styled.lines(clean(text), maxBody(width), base, base.bold(), code, live ? null : this::copyText);
         List<Span> footer = time.isEmpty() ? List.of() : List.of(new Span(time, st(Theme.DIM, Theme.THEM)));
         bubble(rows, width, false, author, author == null ? null : Theme.agentColor(author), body, footer, base, code);
     }
@@ -1391,8 +1573,9 @@ final class ChatScreen implements Element {
                 buttons.add(new String[] {" Always here  A ", "plain"});
                 actions.add(() -> session.approveAlways(a));
                 body.add(List.of());
-                body.add(List.of(new Span("A: " + clean(a.request().grantLabel()) + ". Until you close BuildCLI; /revoke takes it back.",
-                        st(Theme.DIM, Theme.DIALOG))));
+                for (String line : Wrap.lines("A: " + clean(a.request().grantLabel()) + ". Until you close BuildCLI; /revoke takes it back.", w - 4)) {
+                    body.add(List.of(new Span(line, st(Theme.DIM, Theme.DIALOG))));
+                }
             }
             buttons.add(new String[] {" Deny  N ", "plain"});
             actions.add(() -> a.answer().complete(false));
@@ -1482,7 +1665,9 @@ final class ChatScreen implements Element {
             return EventResult.HANDLED;
         }
         if (ctrl && ch == 'c') {
-            if (view != null) {
+            if (searching) {
+                searching = false;
+            } else if (view != null) {
                 view = null;
             } else if (!input.isEmpty()) {
                 input.clear();
@@ -1494,6 +1679,13 @@ final class ChatScreen implements Element {
         if (ctrl && ch == 'x') {
             session.stop(selected);
             return EventResult.HANDLED;
+        }
+        if (ctrl && ch == 'f' && view == null) {
+            openSearch(searching ? findInput.text() : "");
+            return EventResult.HANDLED;
+        }
+        if (searching && view == null && session.pending() == null) {
+            return searchKey(key);
         }
         ChatSession.Pending p = session.pending();
         if (p != null && code == KeyCode.CHAR && (input.isEmpty() || ctrl)) {
@@ -1752,6 +1944,8 @@ final class ChatScreen implements Element {
                         open(new View("Changes" + (arg.isEmpty() ? "" : "  " + arg), lines, true, false));
                     }
                 }
+                case "copy" -> copyLast(arg.equalsIgnoreCase("message"));
+                case "find" -> openSearch(arg);
                 case "review" -> {
                     long id = session.lastChanges(selected);
                     if (id < 0) {
@@ -1904,9 +2098,10 @@ final class ChatScreen implements Element {
         out.add("Keys");
         out.add("  Enter send · Shift+Enter, Alt+Enter, Ctrl+J or a trailing \\ new line · ↑ previous message");
         out.add("  PgUp/PgDn or the mouse wheel scroll · Esc jump to the latest · Ctrl+W delete word · Ctrl+U clear");
+        out.add("  Ctrl+F find in this chat (↑ older, ↓ newer, Esc close) · /copy copies the last code block");
         out.add("");
         out.add("Mouse");
-        out.add("  Click teammates to mention them, menu items, buttons and the ✕ on attachments.");
+        out.add("  Click teammates to mention them, menu items, buttons, ⧉ copy on a code block and the ✕ on attachments.");
         out.add("  Drag the scrollbar. To select text for copying, hold Shift (Option on macOS) while dragging.");
         out.add("");
         out.add("Attachments");
@@ -2044,6 +2239,10 @@ final class ChatScreen implements Element {
 
     String selectedForTest() {
         return selected;
+    }
+
+    ChatSession sessionForTest() {
+        return session;
     }
 
     boolean connectOpenForTest() {

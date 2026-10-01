@@ -44,6 +44,15 @@ public final class ChatApp extends ToolkitApp {
     protected void onStart() {
         setWindowTitle("BuildCLI");
         runner().focusManager().setFocus("chat");
+        // OSC 52 copy: written on the thread that draws, like the title and the bell
+        screen.rawOutput(text -> runner().runOnRenderThread(() -> {
+            try {
+                runner().tuiRunner().backend().writeRaw(text);
+                runner().tuiRunner().backend().flush();
+            } catch (java.io.IOException e) {
+                // the copy then simply does not happen; the chat says so
+            }
+        }));
         // Check 12 times a second whether anything changed; draw only then, or while something moves (typing, spinner).
         // Idle, this costs almost nothing, unlike redrawing the whole screen on every tick.
         long[] seen = {-1};
