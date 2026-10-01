@@ -28,7 +28,7 @@ import java.util.function.Consumer;
  */
 final class SettingsView {
 
-    private enum Section { GENERAL("General"), APPEARANCE("Appearance"), MODELS("Models"), PROVIDERS("Providers"), AGENTS("Agents");
+    private enum Section { GENERAL("General"), APPEARANCE("Appearance"), MODELS("Models"), PROVIDERS("Providers"), AGENTS("Agents"), PROFILE("About you");
 
         final String label;
 
@@ -68,7 +68,7 @@ final class SettingsView {
         Settings s = services.settings();
         List<Item> out = new ArrayList<>();
         switch (section) {
-            case GENERAL, APPEARANCE -> {
+            case GENERAL, APPEARANCE, PROFILE -> {
                 for (Settings.Definition d : Settings.section(section.label)) {
                     out.add(settingItem(s, d));
                 }
@@ -133,33 +133,35 @@ final class SettingsView {
     }
 
     private Item settingItem(Settings s, Settings.Definition d) {
+        // what you tell the agents about yourself is yours, not the project's
+        Scope scope = d.section().equals("About you") ? Scope.GLOBAL : this.scope;
         String stored = s.stored(scope, d.key());
         String effective = s.get(d.key());
         String origin = stored != null ? scopeLabel() : s.stored(other(), d.key()) != null ? (other() == Scope.PROJECT ? "this project" : "all projects") : "default";
-        String help = d.help() + "   ·  " + origin + (stored != null ? " · Del to reset" : "");
-        Runnable reset = () -> save(d.key(), null);
+        String help = d.help() + "   ·  " + (d.section().equals("About you") ? "all projects" : origin) + (stored != null ? " · Del to reset" : "");
+        Runnable reset = () -> save(scope, d.key(), null);
         return switch (d.type()) {
             case BOOLEAN -> {
                 boolean on = Boolean.parseBoolean(effective);
-                Runnable toggle = () -> save(d.key(), Boolean.toString(!on));
+                Runnable toggle = () -> save(scope, d.key(), Boolean.toString(!on));
                 yield new Item(d.label(), on ? "● On" : "○ Off", on ? Theme.ACCENT : Theme.DIM, help, toggle, toggle, toggle, reset);
             }
             case CHOICE -> {
                 int i = Math.max(0, d.choices().indexOf(effective));
-                Runnable next = () -> save(d.key(), d.choices().get((i + 1) % d.choices().size()));
-                Runnable prev = () -> save(d.key(), d.choices().get((i - 1 + d.choices().size()) % d.choices().size()));
+                Runnable next = () -> save(scope, d.key(), d.choices().get((i + 1) % d.choices().size()));
+                Runnable prev = () -> save(scope, d.key(), d.choices().get((i - 1 + d.choices().size()) % d.choices().size()));
                 yield new Item(d.label(), "‹ " + effective + " ›", Theme.TEXT, help, next, prev, next, reset);
             }
             case MODEL -> new Item(d.label(), effective == null || effective.isBlank() ? "not set" : effective,
                     effective == null || effective.isBlank() ? Theme.DIM : Theme.TEXT, help,
-                    () -> pickModel(d.label(), m -> save(d.key(), m)), null, null, reset);
+                    () -> pickModel(d.label(), m -> save(scope, d.key(), m)), null, null, reset);
             default -> new Item(d.label(), effective == null ? "" : effective, Theme.TEXT, help,
                     () -> ask(d.label(), d.help(), effective == null ? "" : effective, v -> {
                         if (d.type() == Settings.Type.NUMBER && !v.isBlank() && !v.strip().matches("\\d{1,4}")) {
                             fail("A whole number, please");
                             return;
                         }
-                        save(d.key(), v);
+                        save(scope, d.key(), v);
                     }), null, null, reset);
         };
     }
@@ -178,8 +180,12 @@ final class SettingsView {
     }
 
     private void save(String key, String value) {
+        save(scope, key, value);
+    }
+
+    private void save(Scope where, String key, String value) {
         try {
-            services.settings().set(scope, key, value);
+            services.settings().set(where, key, value);
             ok(value == null ? "Reset " + scopeLabel() : "Saved " + scopeLabel());
         } catch (RuntimeException e) {
             fail(e.getMessage());
@@ -448,7 +454,7 @@ final class SettingsView {
                     toggleScope();
                 } else if (ch == 'q') {
                     close.run();
-                } else if (ch >= '1' && ch <= '5') {
+                } else if (ch >= '1' && ch <= '6') {
                     select(Section.values()[ch - '1']);
                 }
             }

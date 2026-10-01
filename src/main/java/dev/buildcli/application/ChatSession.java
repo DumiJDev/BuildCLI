@@ -155,6 +155,12 @@ public final class ChatSession implements UserInterface {
     private static final int MAX_RUNS = 50;
 
     private volatile ApprovalMode approvalMode = ApprovalMode.MANUAL;
+    private volatile java.util.function.Supplier<String> profile = () -> "";
+
+    /** Tells the agents who they work for: what {@link UserProfile#describe} says, read afresh for every message. */
+    public void profile(java.util.function.Supplier<String> about) {
+        profile = about == null ? () -> "" : about;
+    }
 
     /** How much the agents may do before asking you; manual until the front end says otherwise. */
     public ApprovalMode approvalMode() {
@@ -841,6 +847,12 @@ public final class ChatSession implements UserInterface {
     }
 
     private String chatContext(String thread, String me) {
+        String about = profile.get();
+        String core = chatContextCore(thread, me);
+        return about == null || about.isBlank() ? core : about.strip() + "\n\n" + core;
+    }
+
+    private String chatContextCore(String thread, String me) {
         Chat g = group(thread);
         if (isAgentChat(thread)) {
             String other = agentChatMembers(thread).stream().filter(n -> !n.equals(me)).findFirst().orElse("a teammate");

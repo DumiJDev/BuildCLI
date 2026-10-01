@@ -23,6 +23,7 @@ class AgentFatherTest {
     final List<String> created = new ArrayList<>();
     final List<String> deleted = new ArrayList<>();
     final List<String> edited = new ArrayList<>();
+    final List<String> sampled = new ArrayList<>();
 
     SettingsServices services(ChatSession session) {
         return new SettingsServices() {
@@ -66,6 +67,17 @@ class AgentFatherTest {
             @Override
             public void deleteAgent(String name) {
                 deleted.add(name);
+            }
+
+            @Override
+            public List<String> sampleTeams() {
+                return List.of("dev: Software team (...)", "writing: Writing desk (...)");
+            }
+
+            @Override
+            public List<String> createSampleAgents(String team) {
+                sampled.add(team);
+                return List.of("writer", "editor");
             }
 
             @Override
@@ -233,29 +245,15 @@ class AgentFatherTest {
 
     @Test
     void samplesOffersTheTeamsAndAddsTheOneYouName() {
-        var asked = new ArrayList<String>();
-        var session = session();
-        var screen = new ChatScreen(session, Map.of(), Path.of(System.getProperty("java.io.tmpdir")), () -> { }, new SettingsServices() {
-            @Override public Settings settings() { return settings; }
-            @Override public List<Provider> providers() { return List.of(); }
-            @Override public void addProvider(String n, String u, String k) { }
-            @Override public void removeProvider(String n) { }
-            @Override public CompletableFuture<String> test(String m) { return CompletableFuture.completedFuture("ok"); }
-            @Override public CompletableFuture<ModelCatalog.Result> models(String p) { return CompletableFuture.completedFuture(new ModelCatalog.Result(List.of(), null)); }
-            @Override public List<AgentInfo> agents() { return List.of(); }
-            @Override public String createAgent(String n, String r, String i, List<String> c, boolean g) { return ""; }
-            @Override public void deleteAgent(String n) { }
-            @Override public List<String> sampleTeams() { return List.of("dev: Software team (...)", "writing: Writing desk (...)"); }
-            @Override public List<String> createSampleAgents(String team) { asked.add(team); return List.of("writer", "editor"); }
-        });
+        ChatScreen screen = screen(session());
         openFather(screen);
         say(screen, "/samples");
         String out = ChatScreenTest.render(screen, 130, 40);
         assertTrue(out.contains("Which team do you want?") && out.contains("writing: Writing desk"), out);
         say(screen, "writing");
-        assertEquals(List.of("writing"), asked);
+        assertEquals(List.of("writing"), sampled);
         assertTrue(ChatScreenTest.render(screen, 130, 40).contains("Added writer, editor"));
         say(screen, "/samples dev");
-        assertEquals(List.of("writing", "dev"), asked, "a team named with the command is added at once");
+        assertEquals(List.of("writing", "dev"), sampled, "a team named with the command is added at once");
     }
 }

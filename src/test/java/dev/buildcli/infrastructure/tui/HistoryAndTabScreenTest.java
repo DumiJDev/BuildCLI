@@ -232,4 +232,15 @@ class HistoryAndTabScreenTest {
         ChatScreenTest.key(screen, KeyCode.ENTER);
         assertFalse(session.group(screen.selectedForTest()).hasContext());
     }
+
+    @Test
+    void slashMeSetsWhatTheAgentsKnowAboutYou() {
+        var screen = screen();
+        ChatScreenTest.type(screen, "/me name Dumi");
+        ChatScreenTest.key(screen, KeyCode.ENTER);
+        ChatScreenTest.type(screen, "/me");
+        ChatScreenTest.key(screen, KeyCode.ENTER);
+        String out = ChatScreenTest.render(screen, 130, 40);
+        assertTrue(out.contains("name: Dumi"), out);
+    }
 }

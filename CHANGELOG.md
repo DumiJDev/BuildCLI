@@ -8,6 +8,7 @@ BuildCLI is rebuilt from scratch as a local runtime for teams of AI agents. The 
 `legacy` branch and the `v0.14.0` tag. Design: `docs/rfc/0001-buildcli-1.0.md`.
 
 ### Fixed
+- Choosing a chat from the list closes the settings / connect / info screen that was over it.
 - Tab on a command only fills it in (`/diff `); Enter runs it. The `/` menu says so.
 - An empty project opens on the welcome screen, not on "Connect a model" (there is no agent to connect one to).
 - **Tab did nothing**: the toolkit used it to move focus and never passed it on, so it did not complete the `/` and `@` menus. It does now.
@@ -29,6 +30,11 @@ BuildCLI is rebuilt from scratch as a local runtime for teams of AI agents. The 
 - The M0 spike: the hidden `bench` and `demo` commands, the `eval` package and its findings document (replaced by `docs/storage.md`).
 
 ### Added
+- **Modes** `manual` / `edits` / `auto` (Shift+Tab, `/mode`, the pill in the chat header; starting mode in Settings): which questions are answered for you. `trust` is never skipped.
+- **Drafts** like a messenger: unsent text waits in its chat and shows as "Draft: ..." in the chat list.
+- **Context for groups** (optional): a text and files the group's agents read (`/context`, group info screen).
+- **About you** (`/me`, Settings): your name, what the agents should know about you and how to deal with you; agents stop saying "the user".
+- **Sample teams for non-technical work**: writing desk (writer, editor, researcher) and office (assistant, analyst, planner) via `/samples`; neutral defaults and ideas when the folder is not a git repository.
 - **`/editagent`** in AgentFather: change an existing agent's role, capabilities, instructions, write folders and the commands it may
   run without asking, each after a yes. Folders outside the project, `.buildcli/` and `.git/` are refused.
 - The chat list scrolls (mouse wheel, and it follows the chat you pick) and says how many chats are hidden.
