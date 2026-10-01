@@ -5,7 +5,7 @@ then run `buildcli doctor`. The first run asks you to approve the project's agen
 
 | Example | What it shows |
 |---|---|
-| [`java-maven-backend`](java-maven-backend) | What `buildcli init` generates: an architect (lead) who delegates, a developer who can write `src/**` and run `mvn`, and a reviewer |
+| [`java-maven-backend`](java-maven-backend) | A three-agent backend team (`ana`, `bruno`, `carla`; what `buildcli init` generated before the maintainers' sample team): an architect (lead) who delegates, a developer who can write `src/**` and run `mvn`, and a reviewer. Its team file is imported as a group |
 | [`docs-team`](docs-team) | A writer limited to `docs/**` and a read-only editor; no agent can run commands |
 | [`solo-reviewer`](solo-reviewer) | A single read-only agent run directly (`buildcli run --agent reviewer ...`) against a hosted model |
 
