@@ -83,7 +83,7 @@ final class ConversationRows {
             welcome(rows, width);
             return rows;
         }
-        boolean group = session.group(host.selected()) != null;
+        boolean group = session.group(host.selected()) != null || ChatSession.isAgentChat(host.selected());
         long failed = session.lastFailedMessage();
         java.time.LocalDate day = null;
         Message prev = null;

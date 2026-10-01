@@ -108,6 +108,14 @@ final class ChatListView {
         out.add(ChatSession.FATHER);
         out.addAll(session.directChats());
         out.addAll(session.agentChats());
+        // newest conversation first, like any messenger; chats nobody wrote in yet keep their order below
+        java.util.Map<String, java.time.Instant> last = new java.util.HashMap<>();
+        for (Message m : session.messages()) {
+            if (!m.thread().equals(ChatSession.EVERYWHERE) && m.kind() != ChatSession.Kind.ACTIVITY) {
+                last.merge(m.thread(), m.at(), (a, b) -> a.isAfter(b) ? a : b);
+            }
+        }
+        out.sort(java.util.Comparator.comparing((String t) -> last.getOrDefault(t, java.time.Instant.MIN)).reversed());
         return out;
     }
 

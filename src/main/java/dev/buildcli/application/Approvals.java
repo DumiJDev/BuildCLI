@@ -74,6 +74,28 @@ final class Approvals {
         }
     }
 
+    /** Asks an open or multiple-choice question. @return what the user answered, or why there is no answer */
+    String ask(String agent, String question, List<String> options, String thread, boolean stopped) {
+        if (stopped) {
+            return "The user stopped this work, so there is no answer. Stop and report.";
+        }
+        var answer = new CompletableFuture<String>();
+        Pending p = new Pending.Question(agent, question, List.copyOf(options), answer, thread);
+        pending.add(p);
+        changed.run();
+        setState.accept(agent, "waiting for you");
+        try {
+            String text = answer.get();
+            return text == null || text.isBlank() ? "The user chose not to answer. Decide yourself, or report that you could not go on." : "The user answered: " + text;
+        } catch (Exception e) {
+            return "No answer (" + e.getClass().getSimpleName() + ").";
+        } finally {
+            pending.remove(p);
+            changed.run();
+            setState.accept(agent, "working");
+        }
+    }
+
     /** Answers yes to this request and to the same kind of request from this agent in this chat from now on. */
     void approveAlways(Pending.Approval a) {
         ApprovalRequest r = a.request();
@@ -127,6 +149,8 @@ final class Approvals {
                     a.answer().complete(false);
                 } else if (p instanceof Pending.Escalation e) {
                     e.answer().complete(EscalationChoice.ABORT);
+                } else if (p instanceof Pending.Question q) {
+                    q.answer().complete("");
                 }
             }
         }

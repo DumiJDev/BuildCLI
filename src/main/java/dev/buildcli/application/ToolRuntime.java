@@ -93,6 +93,12 @@ public final class ToolRuntime {
                     List.of(new Param("to", "A group name or a teammate's name", false, true),
                             new Param("text", "The message", false, true))));
         }
+        specs.add(new ToolSpec("ask_user",
+                "Ask the user a question and wait for the answer, when you need a decision you cannot reasonably make yourself. Offer 2 to 4 "
+                        + "short options when the answers are a known set (the user can always type something else); leave 'options' out for an "
+                        + "open question. Do not ask what you can find out by reading the project.",
+                List.of(new Param("question", "One clear question", false, true),
+                        new Param("options", "The likely answers", true, false))));
         return specs;
     }
 
