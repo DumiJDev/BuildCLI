@@ -260,7 +260,7 @@ final class SettingsView {
     }
 
     private void agentRole(Draft d) {
-        ask("Role of " + d.a + " (2/4)", "e.g. reviewer, tester, writer", d.b.isEmpty() ? "developer" : d.b, role -> {
+        ask("Role of " + d.a + " (2/4)", "e.g. writer, researcher, reviewer", d.b.isEmpty() ? "assistant" : d.b, role -> {
             d.b = role.strip();
             agentCapabilities(d);
         }, () -> agentName(d));

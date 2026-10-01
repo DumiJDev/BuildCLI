@@ -21,13 +21,13 @@ final class AgentFather {
             new ChatCommands.Command("agents", "", "List your agents with their model and what they may do", ""),
             new ChatCommands.Command("editagent", "<name>", "Change an agent: role, what it may do, how it works, where it writes", ""),
             new ChatCommands.Command("deleteagent", "<name>", "Delete an agent (asks to confirm)", ""),
-            new ChatCommands.Command("samples", "", "Add the sample agents: wheslley, breno, matheus and dumildes", ""),
+            new ChatCommands.Command("samples", "[team]", "Add a ready-made team: software, writing desk or office assistants", ""),
             new ChatCommands.Command("cancel", "", "Stop what we were doing", ""),
             new ChatCommands.Command("back", "", "Go back one question", ""));
 
     private static final Pattern NAME = Pattern.compile("[a-z][a-z0-9_-]*");
 
-    private enum Step { IDLE, NAME, ROLE, CAPS, HOW, CONFIRM, DELETE, EDIT_PICK, EDIT_VALUE, EDIT_CONFIRM }
+    private enum Step { IDLE, NAME, ROLE, CAPS, HOW, CONFIRM, DELETE, SAMPLES, EDIT_PICK, EDIT_VALUE, EDIT_CONFIRM }
 
     private final ChatSession session;
     private final SettingsServices services;
@@ -55,7 +55,7 @@ final class AgentFather {
             return;
         }
         say("Hi, I'm AgentFather. I create and manage your agents. I am not a model, so I work even before you have connected one.\n"
-                + "/newagent creates an agent, step by step\n/agents lists them\n/editagent <name> changes one\n/deleteagent <name> deletes one\n/samples adds the sample agents\n"
+                + "/newagent creates an agent, step by step\n/agents lists them\n/editagent <name> changes one\n/deleteagent <name> deletes one\n/samples adds a ready-made team (software, writing or office)\n"
                 + "/connect picks a provider and a model\n/help shows everything.");
     }
 
@@ -113,7 +113,7 @@ final class AgentFather {
                 step = Step.DELETE;
                 say("Delete " + who + "? This removes its file, and it leaves its groups; what it already said stays in the chats.\nReply yes or no.");
             }
-            case "samples" -> samples();
+            case "samples" -> samples(arg);
             case "editagent" -> startEdit(arg.startsWith("@") ? arg.substring(1) : arg);
             case "help" -> say("/newagent [name]: create an agent, step by step\n/agents: list your agents\n/editagent <name>: change an agent\n"
                     + "/deleteagent <name>: delete one\n"
@@ -141,9 +141,17 @@ final class AgentFather {
         say(sb.toString().stripTrailing());
     }
 
-    private void samples() {
+    private void samples(String team) {
+        List<String> teams = services.sampleTeams();
+        if (team.isBlank() && !teams.isEmpty()) {
+            step = Step.SAMPLES;
+            say("Which team do you want? Reply with its name:\n" + teams.stream().map(t -> "• " + t).collect(java.util.stream.Collectors.joining("\n"))
+                    + "\nThey are only starting points: you can change them with /editagent, or make your own with /newagent.");
+            return;
+        }
+        step = Step.IDLE;
         try {
-            List<String> added = services.createSampleAgents();
+            List<String> added = team.isBlank() ? services.createSampleAgents() : services.createSampleAgents(team.strip());
             say("Added " + String.join(", ", added) + " and a group for them. Open the group and say something to start.");
         } catch (Exception e) {
             say("I could not add them: " + e.getMessage());
@@ -175,7 +183,7 @@ final class AgentFather {
 
     private void askRole() {
         step = Step.ROLE;
-        say("What is " + name + "'s role? For example reviewer, tester, writer. Say skip for developer.");
+        say("What is " + name + "'s role? For example writer, researcher, reviewer, analyst. Say skip for assistant.");
     }
 
     private void askCaps() {
@@ -205,7 +213,7 @@ final class AgentFather {
         switch (step) {
             case NAME -> acceptName(t);
             case ROLE -> {
-                role = t.equalsIgnoreCase("skip") || t.isBlank() ? "developer" : t.strip();
+                role = t.equalsIgnoreCase("skip") || t.isBlank() ? "assistant" : t.strip();
                 askCaps();
             }
             case CAPS -> {
@@ -231,6 +239,7 @@ final class AgentFather {
                     say("Reply yes to create it, back to change something, or cancel.");
                 }
             }
+            case SAMPLES -> samples(t.strip());
             case EDIT_PICK -> pickEdit(t);
             case EDIT_VALUE -> acceptEdit(t);
             case EDIT_CONFIRM -> {

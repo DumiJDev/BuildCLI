@@ -96,7 +96,7 @@ final class AgentCommand implements Callable<Integer> {
         @Parameters(index = "0", description = "Agent name (lowercase letters, digits, - and _)")
         String name;
 
-        @Option(names = "--role", description = "Role, e.g. developer (default: ${DEFAULT-VALUE})", defaultValue = "developer")
+        @Option(names = "--role", description = "Role, e.g. writer or developer (default: ${DEFAULT-VALUE})", defaultValue = "assistant")
         String role;
 
         @Option(names = "--capabilities", split = ",", description = "Comma-separated capabilities (default: filesystem.read,search)")
