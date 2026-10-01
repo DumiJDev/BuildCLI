@@ -1,6 +1,7 @@
 package dev.buildcli.ports;
 
 import dev.buildcli.domain.Event;
+import dev.buildcli.domain.FileChange;
 import dev.buildcli.domain.Task;
 
 public interface UserInterface {
@@ -17,4 +18,7 @@ public interface UserInterface {
 
     /** Live text of an agent that is still generating (streaming). Called from the orchestrator thread. */
     default void onText(int taskId, String agent, String delta) {}
+
+    /** An agent wrote a file. Called on the agent's thread, right after the write. */
+    default void fileChanged(FileChange change) {}
 }

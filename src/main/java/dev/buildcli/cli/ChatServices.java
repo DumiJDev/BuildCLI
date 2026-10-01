@@ -61,7 +61,8 @@ final class ChatServices implements SettingsServices {
         List<Provider> out = new ArrayList<>();
         for (ProviderSpec s : providerSettings().registry().all()) {
             boolean keySet = s.needsKey() && !ctx.env.getOrDefault(s.apiKeyEnv(), "").isBlank();
-            out.add(new Provider(s.name(), s.baseUrl(), s.apiKeyEnv(), keySet, mine.contains(s.name()) && !ProviderRegistry.isBuiltIn(s.name())));
+            out.add(new Provider(s.name(), s.baseUrl(), s.apiKeyEnv(), keySet, mine.contains(s.name()) && !ProviderRegistry.isBuiltIn(s.name()),
+                    s.description() == null ? "" : s.description()));
         }
         return out;
     }
@@ -102,6 +103,11 @@ final class ChatServices implements SettingsServices {
             catalog = c;
         }
         return c.models(provider);
+    }
+
+    @Override
+    public void refreshModels() {
+        catalog = null;
     }
 
     @Override

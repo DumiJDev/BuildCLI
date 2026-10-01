@@ -64,6 +64,21 @@ public final class ProviderRegistry {
         return m;
     }
 
+    /** Where to create a key for a built-in provider, or null. */
+    public static String keyPage(String provider) {
+        return switch (provider) {
+            case "openrouter" -> "https://openrouter.ai/keys";
+            case "deepseek" -> "https://platform.deepseek.com/api_keys";
+            case "kimi", "moonshot" -> "https://platform.moonshot.ai/console/api-keys";
+            case "openai" -> "https://platform.openai.com/api-keys";
+            case "groq" -> "https://console.groq.com/keys";
+            case "mistral" -> "https://console.mistral.ai/api-keys";
+            case "gemini" -> "https://aistudio.google.com/apikey";
+            case "together" -> "https://api.together.ai/settings/api-keys";
+            default -> null;
+        };
+    }
+
     private static void add(Map<String, ProviderSpec> m, String name, ProviderSpec.Kind kind, String url, String env, String description) {
         m.put(name, new ProviderSpec(name, kind, url, env, description));
     }

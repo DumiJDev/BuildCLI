@@ -24,6 +24,7 @@ public final class ToolContext {
     private final WorkspaceLock lock;
     private final String agent;
     private final java.util.function.Consumer<String> onWait;
+    private java.util.function.Consumer<dev.buildcli.domain.FileChange> onChange = c -> { };
 
     public ToolContext(Path workspace, Approval approval) {
         this(workspace, approval, new WorkspaceLock(), "agent", who -> { });
@@ -40,6 +41,16 @@ public final class ToolContext {
     /** Runs a change to the workspace while no other agent reads or changes it. Call it after any approval. */
     public <T> T exclusive(java.util.concurrent.Callable<T> work) throws Exception {
         return lock.exclusive(agent, onWait, work);
+    }
+
+    /** Where to report the files this call writes, so they can be reviewed and undone. */
+    public ToolContext onChange(java.util.function.Consumer<dev.buildcli.domain.FileChange> listener) {
+        this.onChange = listener;
+        return this;
+    }
+
+    public void changed(dev.buildcli.domain.FileChange change) {
+        onChange.accept(change);
     }
 
     public Path workspace() {
