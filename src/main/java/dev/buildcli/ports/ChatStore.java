@@ -9,6 +9,15 @@ public interface ChatStore {
 
     void save(List<Chat> groups);
 
+    /** Who may not contact whom: agent name -> the agents it cannot write to. Everyone else can. */
+    default java.util.Map<String, List<String>> loadBlocked() {
+        return java.util.Map.of();
+    }
+
+    default void saveBlocked(java.util.Map<String, List<String>> blocked) {
+        // nothing to keep
+    }
+
     ChatStore NONE = new ChatStore() {
         @Override
         public List<Chat> load() {

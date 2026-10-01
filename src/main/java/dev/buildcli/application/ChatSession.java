@@ -51,6 +51,8 @@ public final class ChatSession implements UserInterface {
 
     /** The thread of the team conversation; other threads are named after the agent they talk to. */
     public static final String TEAM = "";
+    /** Your own private chat: notes to yourself, which no agent reads. */
+    public static final String NOTES = "~notes";
     /** Local notes (command output, help) show in every thread. */
     public static final String EVERYWHERE = "*";
 
@@ -199,6 +201,8 @@ public final class ChatSession implements UserInterface {
     /** Groups by id; the team's own group has the id {@link #TEAM}. Guarded by {@code lock}. */
     private final Map<String, Chat> groups = new LinkedHashMap<>();
     private final java.util.Set<String> directs = new java.util.LinkedHashSet<>();
+    /** Agent -> the agents it may not contact, set by the user. Guarded by {@code lock}. */
+    private final Map<String, java.util.Set<String>> blocked = new LinkedHashMap<>();
     /** For a user message sent to several agents: how many have not finished, and whether one failed. */
     private final Map<Long, AtomicInteger> openRuns = new ConcurrentHashMap<>();
     private final java.util.Set<Long> failedMessages = ConcurrentHashMap.newKeySet();
@@ -261,6 +265,7 @@ public final class ChatSession implements UserInterface {
             List<String> admins = g.admins().stream().filter(members::contains).toList();
             this.groups.put(g.id(), new Chat(g.id(), g.name(), true, members, admins.isEmpty() && !members.isEmpty() ? List.of(members.get(0)) : admins));
         }
+        store.loadBlocked().forEach((from, tos) -> blocked.put(from, new java.util.LinkedHashSet<>(tos)));
         restore();
         this.writer = log == dev.buildcli.ports.ChatLog.NONE ? null : Thread.ofVirtual().name("chat-history").start(this::writeLoop);
     }
@@ -409,6 +414,16 @@ public final class ChatSession implements UserInterface {
         if (clean.isEmpty() && attachments.isEmpty()) {
             return -1;
         }
+        if (NOTES.equals(chat)) {
+            long id = ids.incrementAndGet();
+            add(new Message(id, Kind.USER, "you", clean, Instant.now(), State.DONE, List.copyOf(attachments), NOTES));
+            return id;
+        }
+        if (isAgentChat(chat)) {
+            system("This chat is between " + String.join(" and ", agentChatMembers(chat)) + ". You can read it, not write in it: ask one of "
+                    + "them in their own chat to write to the other.");
+            return -1;
+        }
         String thread = chat == null || (group(chat) == null && !contacts.containsKey(chat)) ? defaultChat() : chat;
         if (thread == null) {
             error("There is nobody to talk to yet. Create an agent in Settings (F2) > Agents, or run 'buildcli init'.");
@@ -538,6 +553,82 @@ public final class ChatSession implements UserInterface {
             }
         }
         return List.copyOf(out);
+    }
+
+    /** A private chat between two agents, started by one of them when the user asked it to write to the other. */
+    public static boolean isAgentChat(String thread) {
+        return thread != null && thread.contains("~") && !thread.equals(NOTES);
+    }
+
+    public static String agentChatId(String a, String b) {
+        return a.compareTo(b) < 0 ? a + "~" + b : b + "~" + a;
+    }
+
+    /** The two agents of a private chat between agents. */
+    public static List<String> agentChatMembers(String thread) {
+        int i = thread.indexOf('~');
+        return List.of(thread.substring(0, i), thread.substring(i + 1));
+    }
+
+    /** The private chats between agents that have messages, in the order they started. */
+    public List<String> agentChats() {
+        java.util.Set<String> out = new java.util.LinkedHashSet<>();
+        synchronized (lock) {
+            for (Message m : messages) {
+                if (isAgentChat(m.thread())) {
+                    out.add(m.thread());
+                }
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    // ---- who may contact whom ----
+
+    /** Whether {@code from} may write to {@code to}. Everyone may, until the user says otherwise. */
+    public boolean canReach(String from, String to) {
+        synchronized (lock) {
+            return !blocked.getOrDefault(from, java.util.Set.of()).contains(to);
+        }
+    }
+
+    public void setReach(String from, String to, boolean allowed) {
+        touch();
+        synchronized (lock) {
+            if (allowed) {
+                var set = blocked.get(from);
+                if (set != null) {
+                    set.remove(to);
+                    if (set.isEmpty()) {
+                        blocked.remove(from);
+                    }
+                }
+            } else {
+                blocked.computeIfAbsent(from, k -> new java.util.LinkedHashSet<>()).add(to);
+            }
+        }
+        saveBlocked();
+    }
+
+    /** Who cannot contact whom, as "bruno -> ana" lines. */
+    public List<String> blockedPairs() {
+        List<String> out = new ArrayList<>();
+        synchronized (lock) {
+            blocked.forEach((from, tos) -> tos.forEach(to -> out.add(from + " -> " + to)));
+        }
+        return out;
+    }
+
+    private void saveBlocked() {
+        Map<String, List<String>> copy = new LinkedHashMap<>();
+        synchronized (lock) {
+            blocked.forEach((k, v) -> copy.put(k, List.copyOf(v)));
+        }
+        try {
+            store.saveBlocked(copy);
+        } catch (RuntimeException e) {
+            error("Could not save who can contact whom: " + e.getMessage());
+        }
     }
 
     public void openDirect(String agent) {
@@ -1075,20 +1166,33 @@ public final class ChatSession implements UserInterface {
 
     /** When an agent @mentions a teammate in the group, the teammate reads it and answers, like a person would. */
     private void deliverMentions(Run run, String said) {
-        Chat g = group(run.thread);
-        if (g == null || said == null || said.isBlank()) {
+        deliverMentions(run, run.thread, said);
+    }
+
+    private void deliverMentions(Run run, String thread, String said) {
+        if (said == null || said.isBlank()) {
             return;
         }
-        for (String m : mentioned(said)) {
-            if (m.equals(run.me) || !g.has(m) || run.handedOffTo.contains(m)) {
+        List<String> to;
+        Chat g = group(thread);
+        if (g != null) {
+            to = mentioned(said).stream().filter(m -> !m.equals(run.me) && g.has(m) && !run.handedOffTo.contains(m)).toList();
+        } else if (isAgentChat(thread)) {
+            // in a private chat the other one reads what was said, until the agents have said enough to each other
+            to = agentChatMembers(thread).stream().filter(m -> !m.equals(run.me) && contacts.containsKey(m)).toList();
+        } else {
+            return;
+        }
+        for (String m : to) {
+            if (!canReach(run.me, m)) {
                 continue;
             }
             int limit = Math.max(0, agentHops.getAsInt());
             if (run.hops + 1 > limit) {
-                note(run.thread, "The agents paused after " + limit + " messages among themselves. Write to them to keep going.");
+                note(thread, "The agents paused after " + limit + " messages among themselves. Write to them to keep going.");
                 return;
             }
-            enqueue(new Run(-1, run.thread, m, run.hops + 1), said, List.of(), run.me);
+            enqueue(new Run(-1, thread, m, run.hops + 1), said, List.of(), run.me);
         }
     }
 
@@ -1108,8 +1212,15 @@ public final class ChatSession implements UserInterface {
 
     private String chatContext(String thread, String me) {
         Chat g = group(thread);
+        if (isAgentChat(thread)) {
+            String other = agentChatMembers(thread).stream().filter(n -> !n.equals(me)).findFirst().orElse("a teammate");
+            return "You are in a private chat with " + other + ", started because the user asked one of you to write to the other. The user can "
+                    + "read it but cannot write in it. Answer " + other + " directly, briefly, and stop when there is nothing more to settle.";
+        }
         if (g == null) {
-            return "You are in a direct chat with the user.";
+            List<String> mine = groups().stream().filter(c -> c.has(me)).map(c -> "'" + c.name() + "'").toList();
+            return "You are in a direct chat with the user."
+                    + (mine.isEmpty() ? "" : " You are a member of the group" + (mine.size() == 1 ? " " : "s ") + String.join(", ", mine) + ".");
         }
         List<String> others = new ArrayList<>();
         for (String m : g.members()) {
@@ -1171,7 +1282,20 @@ public final class ChatSession implements UserInterface {
 
     private final Orchestrator.Dispatcher dispatcher = new Orchestrator.Dispatcher() {
         @Override
+        public boolean sees(String from, String to) {
+            return canReach(from, to);
+        }
+
+        @Override
+        public String post(String from, String to, String text) {
+            return postAs(from, to, text);
+        }
+
+        @Override
         public String refusal(String from, String to) {
+            if (!canReach(from, to)) {
+                return "you cannot contact " + to + ": the user has not given you contact with them. Do not try another way; tell the user you cannot";
+            }
             synchronized (waitsFor) {
                 for (String at = to; at != null; at = waitsFor.get(at)) {
                     if (at.equals(from)) {
@@ -1219,6 +1343,49 @@ public final class ChatSession implements UserInterface {
             }
         }
     };
+
+    /** An agent writes, as itself, in a group it belongs to or in a private chat with a teammate. Runs on that agent's thread. */
+    private String postAs(String from, String to, String text) {
+        Run run = RUN.get();
+        Chat g = null;
+        synchronized (lock) {
+            for (Chat c : groups.values()) {
+                if (c.id().equalsIgnoreCase(to) || c.name().equalsIgnoreCase(to)) {
+                    g = c;
+                    break;
+                }
+            }
+        }
+        if (g != null) {
+            if (!g.has(from)) {
+                return "ERROR: you are not a member of the group '" + g.name() + "', so you cannot write there";
+            }
+            add(new Message(ids.incrementAndGet(), Kind.AGENT, from, text, Instant.now(), State.NONE, List.of(), g.id()));
+            if (run != null) {
+                deliverMentions(run, g.id(), text);
+            }
+            return "Posted in the group '" + g.name() + "'. Tell the user it is done; do not post it again.";
+        }
+        String other = contacts.keySet().stream().filter(n -> n.equalsIgnoreCase(to)).findFirst().orElse(null);
+        if (other == null) {
+            return "ERROR: there is no group or teammate called '" + to + "'";
+        }
+        if (other.equals(from)) {
+            return "ERROR: you cannot write to yourself";
+        }
+        if (!canReach(from, other)) {
+            return "ERROR: you cannot contact " + other + ": the user has not given you contact with them. Tell the user you cannot";
+        }
+        String thread = agentChatId(from, other);
+        add(new Message(ids.incrementAndGet(), Kind.AGENT, from, text, Instant.now(), State.NONE, List.of(), thread));
+        int limit = Math.max(0, agentHops.getAsInt());
+        int hops = run == null ? 0 : run.hops;
+        if (hops + 1 > limit) {
+            return "Sent to " + other + ", but the agents have already said as much to each other as allowed, so " + other + " will not answer now.";
+        }
+        enqueue(new Run(-1, thread, other, hops + 1), text, List.of(), from);
+        return "Sent to " + other + " in your private chat, which the user can read. " + other + " answers there; tell the user it was sent.";
+    }
 
     // ---- UserInterface: called by the orchestrator on the agents' threads ----
 
@@ -1446,6 +1613,10 @@ public final class ChatSession implements UserInterface {
         Matcher argv = ARGV_ARG.matcher(args);
         if (argv.find()) {
             return "ran " + argv.group(1).replace(",", "");
+        }
+        Matcher to = Pattern.compile("to=([^,}]+)").matcher(args);
+        if (name.equals("send_message") && to.find()) {
+            return "wrote to " + to.group(1).strip();
         }
         Matcher path = PATH_ARG.matcher(args);
         if (path.find()) {

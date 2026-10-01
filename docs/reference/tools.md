@@ -13,6 +13,7 @@ its capability, and a call to any other tool is refused.
 | `git.commit` | `git_commit` | Commits the named paths with a message | **Always approved by you**, shown with the diff; the agent must be able to read every path; repository hooks run |
 | `command.execute` | `run_command` | Runs an argv array in the workspace | Allow list by argv prefix, otherwise approval; timeout (default 30 s) kills the process tree; scrubbed environment; output capped |
 | `agent.handoff` | `handoff` | Delegates a task to a teammate | The runtime validates the target, depth (default 3) and count per attempt (default 3) |
+| `chat.post` | `send_message` | Writes as the agent in a group it belongs to, or privately to a teammate (a chat between the two agents that you can read but not write in) | Only because you asked; a teammate you took contact away from with `/reach` cannot be written to; replies between agents stop after the hop limit |
 
 Tool results are scrubbed of secrets. Results that carry outside content are delimited as `<tool-output tool="...">` data.
 Refusals are returned to the model as text beginning `DENIED` or `ERROR` so it can adapt. See the

@@ -1,6 +1,7 @@
 package dev.buildcli.application;
 
 import dev.buildcli.domain.Agent;
+import dev.buildcli.domain.Capability;
 import dev.buildcli.domain.Limits;
 import dev.buildcli.domain.Task;
 import dev.buildcli.domain.TaskStatus;
@@ -53,6 +54,16 @@ public final class Orchestrator {
         /** Why {@code from} cannot hand off to {@code to} right now (it would deadlock), or null. */
         default String refusal(String from, String to) {
             return null;
+        }
+
+        /** Whether {@code from} may contact {@code to}: the user can take that away from an agent. */
+        default boolean sees(String from, String to) {
+            return true;
+        }
+
+        /** Writes {@code text} as {@code from} to a group or a teammate. @return what happened, "ERROR: ..." when it could not */
+        default String post(String from, String to, String text) {
+            return "ERROR: there is no chat to write in here";
         }
 
         /** Runs {@code work} as {@code to} and waits for it. */
@@ -238,7 +249,8 @@ public final class Orchestrator {
                 return reply.text();
             }
             for (ToolCall call : reply.toolCalls()) {
-                String out = call.name().equals("handoff") ? handoff(agent, t, call, depth, handoffs) : tools.execute(agent, t, call);
+                String out = call.name().equals("handoff") ? handoff(agent, t, call, depth, handoffs)
+                        : call.name().equals("send_message") ? sendMessage(agent, t, call) : tools.execute(agent, t, call);
                 messages.add(new LlmMessage.ToolResult(call.id(), call.name(), out));
             }
         }
@@ -253,6 +265,23 @@ public final class Orchestrator {
             }
         }
         return t.getClass().getSimpleName() + " (no details; is the model provider running and reachable? try 'buildcli doctor')";
+    }
+
+    private String sendMessage(Agent from, Task t, ToolCall call) {
+        events.emit("ToolCalled", t.id, from.name(), "send_message " + call.args());
+        Object to = call.args().get("to");
+        Object text = call.args().get("text");
+        String result;
+        if (!from.can(Capability.CHAT_POST)) {
+            result = "DENIED: " + from.name() + " does not have capability " + Capability.CHAT_POST;
+        } else if (to == null || to.toString().isBlank() || text == null || text.toString().isBlank()) {
+            result = "ERROR: send_message needs 'to' and a non-empty 'text'";
+        } else {
+            result = dispatcher.post(from.name(), to.toString().strip(), text.toString().strip());
+        }
+        String status = result.startsWith("DENIED") ? "denied" : result.startsWith("ERROR") ? "error" : "ok";
+        events.emit("ToolCompleted", t.id, from.name(), status + ": " + ToolRuntime.abbreviate(result, 200));
+        return result;
     }
 
     /** The runtime validates the form and permissions of a handoff; it does not judge its quality. */
@@ -305,7 +334,7 @@ public final class Orchestrator {
     }
 
     private String roster(Agent self) {
-        return team.agents().stream().filter(a -> !a.name().equals(self.name()))
+        return team.agents().stream().filter(a -> !a.name().equals(self.name()) && dispatcher.sees(self.name(), a.name()))
                 .map(a -> a.name() + " (" + a.role() + ")").collect(Collectors.joining(", "));
     }
 

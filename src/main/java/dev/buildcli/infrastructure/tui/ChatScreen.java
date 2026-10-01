@@ -78,6 +78,7 @@ final class ChatScreen implements Element {
             new Command("settings", "", "Providers, models, agents, theme and more", "F2"),
             new Command("connect", "", "Connect a provider and choose the default model", ""),
             new Command("model", "[@agent] [provider:model]", "Show the models, or change the default (or one agent's) model", ""),
+            new Command("reach", "[@agent @other on|off]", "Show or set which agents may contact each other", ""),
             new Command("dm", "@agent", "Open a direct chat with an agent", ""),
             new Command("newgroup", "<name> [@agents]", "Create a group with some agents", ""),
             new Command("add", "@agent", "Add an agent to this group", ""),
@@ -412,11 +413,19 @@ final class ChatScreen implements Element {
     private List<String> threads() {
         List<String> out = new ArrayList<>();
         session.groups().forEach(g -> out.add(g.id()));
+        out.add(ChatSession.NOTES);
         out.addAll(session.directChats());
+        out.addAll(session.agentChats());
         return out;
     }
 
     private String title(String thread) {
+        if (thread.equals(ChatSession.NOTES)) {
+            return "You (notes)";
+        }
+        if (ChatSession.isAgentChat(thread)) {
+            return String.join(" ↔ ", ChatSession.agentChatMembers(thread));
+        }
         var g = session.group(thread);
         return g != null ? clean(g.name()) : clean(thread);
     }
@@ -1038,7 +1047,7 @@ final class ChatScreen implements Element {
         rows.add(new Row(0, List.of()));
         int boxW = Math.min(width - 4, 56);
         int x = Math.max(0, (width - boxW) / 2);
-        String[][] actions = {{"Add the sample team: ana, bruno and carla", "samples"}, {"Create your own agent", "agent"},
+        String[][] actions = {{"Add the sample team: wheslley, breno, matheus and dumildes", "samples"}, {"Create your own agent", "agent"},
             {"Connect a model and provider", "connect"}};
         for (String[] a : actions) {
             Runnable act = switch (a[1]) {
@@ -1059,7 +1068,7 @@ final class ChatScreen implements Element {
             rows.add(new Row(x, List.of(new Span(label + " ".repeat(Math.max(1, boxW - Wrap.width(label) - 2)) + "› ", st(Theme.TEXT, Theme.PANEL), act))));
             rows.add(new Row(0, List.of()));
         }
-        centred(rows, width, "The sample team: ana plans and leads, bruno writes under src/ and runs mvn, carla reviews. "
+        centred(rows, width, "The sample team: wheslley plans and leads, matheus does the coding, breno looks after the build and CI, dumildes brings ideas. "
                 + "Every write asks you first, and you can undo it.", st(Theme.FAINT, Theme.BG));
     }
 
@@ -1110,8 +1119,8 @@ final class ChatScreen implements Element {
     private void addSampleAgents() {
         try {
             List<String> added = services.createSampleAgents();
-            if (session.group("#backend") != null) {
-                select("#backend");
+            if (session.group("#maintainers") != null) {
+                select("#maintainers");
             }
             say("Added " + String.join(", ", added) + ". Say something in the group to start.");
         } catch (Exception e) {
@@ -1353,7 +1362,10 @@ final class ChatScreen implements Element {
             int y = r.y() + 1 + i;
             Wrap.Segment s = segs.get(inputFirstRow + i);
             if (src.isEmpty()) {
-                put(buf, tx, y, session.busy() ? "Type a message (it waits its turn)" : "Type a message", st(Theme.DIM, Theme.FIELD), tx + inputWidth);
+                String hint = ChatSession.isAgentChat(selected) ? "Read only: ask one of them, in their own chat, to write to the other"
+                        : selected.equals(ChatSession.NOTES) ? "A note to yourself: no agent reads it"
+                        : session.busy() ? "Type a message (it waits its turn)" : "Type a message";
+                put(buf, tx, y, hint, st(Theme.DIM, Theme.FIELD), tx + inputWidth);
             } else {
                 String line = src.substring(s.start(), s.end()).stripTrailing();
                 Style ls = line.startsWith("/") && i == 0 && inputFirstRow == 0 ? st(Theme.BLUE, Theme.FIELD) : field;
@@ -2063,6 +2075,7 @@ final class ChatScreen implements Element {
                 case "settings" -> settingsOpen = true;
                 case "connect" -> openConnect(null);
                 case "model" -> changeModel(arg);
+                case "reach" -> changeReach(arg);
                 case "info" -> openInfo(ChatInfoView.Mode.INFO);
                 case "dm" -> {
                     String who = firstMention(arg);
@@ -2311,6 +2324,22 @@ final class ChatScreen implements Element {
 
     boolean connectOpenForTest() {
         return connectOpen;
+    }
+
+    /** {@code /reach} lists who cannot contact whom; {@code /reach @bruno @ana off} stops bruno writing to ana, {@code on} lifts it. */
+    private void changeReach(String arg) {
+        List<String> names = session.mentioned(arg);
+        String lower = arg.toLowerCase(java.util.Locale.ROOT).strip();
+        boolean off = lower.endsWith(" off");
+        boolean on = lower.endsWith(" on");
+        if (names.size() == 2 && (on || off)) {
+            session.setReach(names.get(0), names.get(1), on);
+            session.system(names.get(0) + (on ? " can" : " can no longer") + " contact " + names.get(1) + ".");
+            return;
+        }
+        List<String> pairs = session.blockedPairs();
+        session.system((pairs.isEmpty() ? "Every agent can contact every other." : "Cannot contact: " + String.join(", ", pairs) + ".")
+                + " Change it with /reach @bruno @ana off (or on).");
     }
 
     void openNewAgentForTest() {

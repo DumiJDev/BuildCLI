@@ -344,6 +344,7 @@ final class SettingsView {
             case Capability.GIT_COMMIT -> "commit to git (you approve)";
             case Capability.COMMAND_EXECUTE -> "run commands, such as tests (you approve)";
             case Capability.AGENT_HANDOFF -> "ask other agents for help";
+            case Capability.CHAT_POST -> "write in a group or to an agent when you ask";
             default -> "";
         };
     }

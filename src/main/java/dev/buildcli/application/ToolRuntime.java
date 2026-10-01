@@ -86,6 +86,13 @@ public final class ToolRuntime {
                             new Param("objective", "What must be achieved", false, true),
                             new Param("brief", "Short context: decisions, constraints, relevant paths", false, false))));
         }
+        if (agent.can(Capability.CHAT_POST)) {
+            specs.add(new ToolSpec("send_message",
+                    "Write a message as yourself, only because the user asked you to. 'to' is a group's name (it appears in that group "
+                            + "for everyone) or a teammate's name (a private chat between you two, which the user can read).",
+                    List.of(new Param("to", "A group name or a teammate's name", false, true),
+                            new Param("text", "The message", false, true))));
+        }
         return specs;
     }
 
