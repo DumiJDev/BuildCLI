@@ -1,5 +1,6 @@
 package dev.buildcli.infrastructure.tui;
 
+import static dev.buildcli.application.I18n.t;
 import static dev.buildcli.infrastructure.tui.Draw.fill;
 import static dev.buildcli.infrastructure.tui.Draw.putSafe;
 import static dev.buildcli.infrastructure.tui.Draw.st;
@@ -181,7 +182,7 @@ final class ConnectView {
 
     /** The key was saved: look for the provider's models and move on to them. */
     private void keySaved(String name) {
-        notice = "Key saved. Looking for " + name + "'s models…";
+        notice = t("Key saved. Looking for {0}'s models…", name);
         advanceTo = name;
         recheck();
         for (int i = 0; i < providers.size(); i++) {
@@ -212,9 +213,9 @@ final class ConnectView {
 
     private void forgetKey(SettingsServices.Provider p) {
         try {
-            notice = services.forgetKey(p.name()) ? "Forgot the saved key for " + p.name() + "." : "There was no saved key to forget.";
+            notice = services.forgetKey(p.name()) ? t("Forgot the saved key for {0}.", p.name()) : t("There was no saved key to forget.");
         } catch (Exception e) {
-            notice = "Could not forget it: " + e.getMessage();
+            notice = t("Could not forget it: {0}", e.getMessage());
         }
         forgetArmed = null;
         recheck();
@@ -258,12 +259,12 @@ final class ConnectView {
                 own.add(a.name());
             }
         }
-        String msg = "Default model: " + model + (scope == Scope.PROJECT ? " (this project)." : " (all projects).");
+        String msg = t("Default model: {0}", model) + (scope == Scope.PROJECT ? " " + t("(this project).") : " " + t("(all projects)."));
         if (!own.isEmpty()) {
-            msg += " " + String.join(", ", own) + (own.size() == 1 ? " keeps its" : " keep their") + " own model (Settings › Models).";
+            msg += " " + (own.size() == 1 ? t("{0} keeps its own model (Settings › Models).", String.join(", ", own)) : t("{0} keep their own model (Settings › Models).", String.join(", ", own)));
         }
         if (services.agents().isEmpty()) {
-            msg += " Now create an agent: F2 › Agents.";
+            msg += " " + t("Now create an agent: F2 › Agents.");
         }
         finished.accept(msg);
     }
@@ -292,9 +293,9 @@ final class ConnectView {
         pollKey();
         fill(buf, r, st(Theme.TEXT, Theme.BG));
         fill(buf, new Rect(r.x(), r.y(), r.width(), 2), st(Theme.TEXT, Theme.PANEL));
-        putSafe(buf, r.x() + 2, r.y(), "Connect a model", st(Theme.TEXT, Theme.PANEL).bold(), r.right());
+        putSafe(buf, r.x() + 2, r.y(), t("Connect a model"), st(Theme.TEXT, Theme.PANEL).bold(), r.right());
         int x = r.x() + 2;
-        String[] names = {"1 Provider", "2 Model", "3 Test"};
+        String[] names = {"1 " + t("Provider"), "2 " + t("Model"), "3 " + t("Test")};
         for (int i = 0; i < names.length; i++) {
             boolean on = i == step.ordinal();
             boolean doneStep = i < step.ordinal();
@@ -315,11 +316,11 @@ final class ConnectView {
             }
             body = new Rect(body.x(), body.y() + 1, body.width(), body.height() - 1);
         }
-        String keys = keyEntry.active() ? "Enter save · Ctrl+U clear · Esc back" : switch (step) {
-            case PROVIDER -> "↑↓ choose · Enter next · K key · D forget key · R check again · Esc close";
-            case MODEL -> "type to search · ↑↓ choose · Enter test it · Esc back";
-            case TEST -> testPassed() ? "P this project · G all projects · B another model · Esc back"
-                    : test != null && test.isDone() ? "R try again · B another model · Esc back" : "Esc back";
+        String keys = keyEntry.active() ? t("Enter save · Ctrl+U clear · Esc back") : switch (step) {
+            case PROVIDER -> t("↑↓ choose · Enter next · K key · D forget key · R check again · Esc close");
+            case MODEL -> t("type to search · ↑↓ choose · Enter test it · Esc back");
+            case TEST -> testPassed() ? t("P this project · G all projects · B another model · Esc back")
+                    : test != null && test.isDone() ? t("R try again · B another model · Esc back") : t("Esc back");
         };
         if (keyEntry.active()) {
             keyEntry.draw(buf, body);
@@ -337,7 +338,7 @@ final class ConnectView {
 
     /** What is typed, hidden: dots, except the last four characters so a wrong paste can be told from a right one. */
     private void drawProviders(Buffer buf, Rect b) {
-        putSafe(buf, b.x(), b.y(), "Where should your agents' model come from?", st(Theme.TEXT, Theme.BG).bold(), b.right());
+        putSafe(buf, b.x(), b.y(), t("Where should your agents' model come from?"), st(Theme.TEXT, Theme.BG).bold(), b.right());
         int top = b.y() + 2;
         int rows = Math.max(3, Math.min(providers.size(), b.height() / 2 - 1));
         index = Math.max(0, Math.min(index, providers.size() - 1));
@@ -356,8 +357,8 @@ final class ConnectView {
             String mark = s.ready() ? "● " : "○ ";
             int w = putSafe(buf, row.x() + 1, row.y(), mark, st(s.ready() ? Theme.GREEN : Theme.FAINT, bg), row.right());
             w += putSafe(buf, row.x() + 1 + w, row.y(), p.name(), sel ? st(Theme.TEXT, bg).bold() : st(Theme.TEXT, bg), row.right());
-            putSafe(buf, row.x() + 16, row.y(), p.local() ? "on this machine" : "cloud", st(Theme.FAINT, bg), row.right());
-            String text = s.text().equals("checking…") ? SPINNER.charAt((int) (System.currentTimeMillis() / 80 % SPINNER.length())) + " checking" : s.text();
+            putSafe(buf, row.x() + 16, row.y(), p.local() ? t("on this machine") : t("cloud"), st(Theme.FAINT, bg), row.right());
+            String text = s.text().equals(t("checking…")) ? SPINNER.charAt((int) (System.currentTimeMillis() / 80 % SPINNER.length())) + " " + t("checking") : s.text();
             int tw = CharWidth.of(text);
             putSafe(buf, Math.max(row.x() + 34, row.right() - tw - 1), row.y(), text, st(s.color(), bg), row.right());
             int idx = i;
@@ -382,8 +383,8 @@ final class ConnectView {
             putSafe(buf, b.x(), y++, notice, st(Theme.GREEN, Theme.BG), b.right());
         }
         if (p.keyEnv() != null && p.keySet() && !p.keyFrom().isBlank()) {
-            String source = p.keyFrom().equals("saved") ? "Key: saved by you (K replace · D forget)"
-                    : "Key: from the environment variable " + p.keyEnv() + " (K saves a different one)";
+            String source = p.keyFrom().equals("saved") ? t("Key: saved by you (K replace · D forget)")
+                    : t("Key: from the environment variable {0} (K saves a different one)", p.keyEnv());
             putSafe(buf, b.x(), y++, source, st(Theme.DIM, Theme.BG), b.right());
         }
         for (String line : s.help()) {
@@ -396,20 +397,20 @@ final class ConnectView {
             }
         }
         if (p.keyEnv() != null && !p.keySet() && y + 1 < b.bottom()) {
-            button(buf, b.x(), y + 1, " Add your key  Enter ", st(Theme.ON_ACCENT, Theme.ACCENT).bold(), b.right(), () -> chooseProvider(index));
+            button(buf, b.x(), y + 1, " " + t("Add your key") + "  Enter ", st(Theme.ON_ACCENT, Theme.ACCENT).bold(), b.right(), () -> chooseProvider(index));
         } else if (s.ready() && y + 1 < b.bottom()) {
-            button(buf, b.x(), y + 1, " Choose a model  Enter ", st(Theme.ON_ACCENT, Theme.ACCENT).bold(), b.right(), () -> chooseProvider(index));
-        } else if (!s.ready() && !s.text().startsWith("needs") && result(p) != null && y + 1 < b.bottom()) {
-            button(buf, b.x(), y + 1, " Check again  R ", st(Theme.TEXT, Theme.FIELD), b.right(), this::recheck);
+            button(buf, b.x(), y + 1, " " + t("Choose a model") + "  Enter ", st(Theme.ON_ACCENT, Theme.ACCENT).bold(), b.right(), () -> chooseProvider(index));
+        } else if (!s.ready() && !s.text().equals(t("needs a key")) && result(p) != null && y + 1 < b.bottom()) {
+            button(buf, b.x(), y + 1, " " + t("Check again") + "  R ", st(Theme.TEXT, Theme.FIELD), b.right(), this::recheck);
         }
     }
 
     private void drawModels(Buffer buf, Rect b) {
-        putSafe(buf, b.x(), b.y(), "Which " + provider.name() + " model?", st(Theme.TEXT, Theme.BG).bold(), b.right());
+        putSafe(buf, b.x(), b.y(), t("Which {0} model?", provider.name()), st(Theme.TEXT, Theme.BG).bold(), b.right());
         Rect field = new Rect(b.x(), b.y() + 2, b.width(), 1);
         fill(buf, field, st(Theme.TEXT, Theme.FIELD));
         String f = filter.text();
-        putSafe(buf, field.x() + 1, field.y(), f.isEmpty() ? "Search, or type a model name and press Enter▏" : f + "▏",
+        putSafe(buf, field.x() + 1, field.y(), f.isEmpty() ? t("Search, or type a model name and press Enter") + "▏" : f + "▏",
                 st(f.isEmpty() ? Theme.DIM : Theme.TEXT, Theme.FIELD), field.right());
         List<ModelCatalog.Model> items = models();
         int rows = Math.max(1, b.height() - 6);
@@ -427,7 +428,7 @@ final class ConnectView {
             fill(buf, row, st(Theme.TEXT, bg));
             String name = m.ref().substring(m.ref().indexOf(':') + 1);
             int w = putSafe(buf, row.x() + 1, row.y(), name, st(m.tools() ? Theme.TEXT : Theme.DIM, bg), row.right() - 2);
-            putSafe(buf, row.x() + 3 + w, row.y(), m.note() + (m.tools() ? "" : " · no tools"), st(m.free() && !provider.local() ? Theme.ACCENT : Theme.DIM, bg),
+            putSafe(buf, row.x() + 3 + w, row.y(), m.note() + (m.tools() ? "" : " · " + t("no tools")), st(m.free() && !provider.local() ? Theme.ACCENT : Theme.DIM, bg),
                     row.right() - 1);
             int idx = modelFirst + i;
             hits.add(new Hit(row, () -> {
@@ -435,55 +436,55 @@ final class ConnectView {
                 chooseModel();
             }));
         }
-        String info = items.isEmpty() ? (f.isBlank() ? "No models listed." : "No match: Enter tests " + provider.name() + ":" + f.strip())
-                : items.size() + " models · models marked \"no tools\" can chat but cannot read or edit files";
+        String info = items.isEmpty() ? (f.isBlank() ? t("No models listed.") : t("No match: Enter tests {0}:{1}", provider.name(), f.strip()))
+                : t("{0} models · models marked \"no tools\" can chat but cannot read or edit files", items.size());
         putSafe(buf, b.x(), b.bottom() - 1, info, st(Theme.FAINT, Theme.BG), b.right());
     }
 
     private void drawTest(Buffer buf, Rect b) {
-        putSafe(buf, b.x(), b.y(), "Testing " + model, st(Theme.TEXT, Theme.BG).bold(), b.right());
+        putSafe(buf, b.x(), b.y(), t("Testing {0}", model), st(Theme.TEXT, Theme.BG).bold(), b.right());
         String r = test == null ? null : test.getNow(null);
         int y = b.y() + 2;
         if (r == null) {
             long secs = (System.nanoTime() - testStarted) / 1_000_000_000L;
-            putSafe(buf, b.x(), y, SPINNER.charAt((int) (System.currentTimeMillis() / 80 % SPINNER.length())) + " Sending a one-word message… " + secs + " s",
+            putSafe(buf, b.x(), y, SPINNER.charAt((int) (System.currentTimeMillis() / 80 % SPINNER.length())) + " " + t("Sending a one-word message… {0} s", secs),
                     st(Theme.DIM, Theme.BG), b.right());
             if (secs >= 10) {
-                putSafe(buf, b.x(), y + 2, "Free and local models can take a while the first time (loading the model).", st(Theme.FAINT, Theme.BG), b.right());
+                putSafe(buf, b.x(), y + 2, t("Free and local models can take a while the first time (loading the model)."), st(Theme.FAINT, Theme.BG), b.right());
             }
             return;
         }
         if (r.startsWith("ok")) {
             putSafe(buf, b.x(), y, "✓ " + answered(r), st(Theme.GREEN, Theme.BG), b.right());
-            putSafe(buf, b.x(), y + 2, "Use it for agents that have no model of their own:", st(Theme.TEXT, Theme.BG), b.right());
+            putSafe(buf, b.x(), y + 2, t("Use it for agents that have no model of their own:"), st(Theme.TEXT, Theme.BG), b.right());
             int x = b.x();
-            x += button(buf, x, y + 4, " This project  P ", st(Theme.ON_ACCENT, Theme.ACCENT).bold(), b.right(), () -> use(Scope.PROJECT)) + 2;
-            x += button(buf, x, y + 4, " All projects  G ", st(Theme.TEXT, Theme.FIELD), b.right(), () -> use(Scope.GLOBAL)) + 2;
-            button(buf, x, y + 4, " Another model  B ", st(Theme.DIM, Theme.FIELD), b.right(), () -> step = Step.MODEL);
+            x += button(buf, x, y + 4, " " + t("This project") + "  P ", st(Theme.ON_ACCENT, Theme.ACCENT).bold(), b.right(), () -> use(Scope.PROJECT)) + 2;
+            x += button(buf, x, y + 4, " " + t("All projects") + "  G ", st(Theme.TEXT, Theme.FIELD), b.right(), () -> use(Scope.GLOBAL)) + 2;
+            button(buf, x, y + 4, " " + t("Another model") + "  B ", st(Theme.DIM, Theme.FIELD), b.right(), () -> step = Step.MODEL);
             return;
         }
         for (String line : Wrap.lines("✗ " + r, b.width())) {
             putSafe(buf, b.x(), y++, line, st(Theme.RED, Theme.BG), b.right());
         }
         if (r.contains("401") || r.contains("403") || r.toLowerCase(Locale.ROOT).contains("api key") || r.toLowerCase(Locale.ROOT).contains("unauthorized")) {
-            putSafe(buf, b.x(), y++, "This looks like a key problem: press Esc until the provider list, select it and press K for a new key.",
+            putSafe(buf, b.x(), y++, t("This looks like a key problem: press Esc until the provider list, select it and press K for a new key."),
                     st(Theme.AMBER, Theme.BG), b.right());
         }
         int x = b.x();
-        x += button(buf, x, y + 1, " Try again  R ", st(Theme.TEXT, Theme.FIELD), b.right(), () -> startTest(model)) + 2;
-        button(buf, x, y + 1, " Another model  B ", st(Theme.TEXT, Theme.FIELD), b.right(), () -> step = Step.MODEL);
+        x += button(buf, x, y + 1, " " + t("Try again") + "  R ", st(Theme.TEXT, Theme.FIELD), b.right(), () -> startTest(model)) + 2;
+        button(buf, x, y + 1, " " + t("Another model") + "  B ", st(Theme.TEXT, Theme.FIELD), b.right(), () -> step = Step.MODEL);
     }
 
     /** "ok 17713 ms: pong" as "It answered "pong" in 17.7 s". */
     static String answered(String line) {
         java.util.regex.Matcher m = java.util.regex.Pattern.compile("ok (\\d+) ms: (.*)", java.util.regex.Pattern.DOTALL).matcher(line);
         if (!m.matches()) {
-            return "It answered.";
+            return t("It answered.");
         }
         long ms = Long.parseLong(m.group(1));
         String text = m.group(2).strip().replaceAll("\\s+", " ");
         text = text.length() > 40 ? text.substring(0, 40) + "…" : text;
-        return "It answered \"" + text + "\" in " + (ms < 1000 ? ms + " ms" : String.format(Locale.ROOT, "%.1f s", ms / 1000.0));
+        return t("It answered \"{0}\" in {1}", text, ms < 1000 ? ms + " ms" : String.format(Locale.ROOT, "%.1f s", ms / 1000.0));
     }
 
     // ---- input ----
@@ -560,13 +561,13 @@ final class ConnectView {
 
     private void askToForget(SettingsServices.Provider p) {
         if (!p.keyFrom().equals("saved")) {
-            notice = p.keyEnv() == null ? p.name() + " needs no key." : p.keyFrom().equals("environment")
-                    ? "That key comes from the environment variable " + p.keyEnv() + "; BuildCLI cannot remove it." : "No saved key for " + p.name() + ".";
+            notice = p.keyEnv() == null ? t("{0} needs no key.", p.name()) : p.keyFrom().equals("environment")
+                    ? t("That key comes from the environment variable {0}; BuildCLI cannot remove it.", p.keyEnv()) : t("No saved key for {0}.", p.name());
         } else if (p.name().equals(forgetArmed)) {
             forgetKey(p);
         } else {
             forgetArmed = p.name();
-            notice = "Press D again to forget the saved key for " + p.name() + ".";
+            notice = t("Press D again to forget the saved key for {0}.", p.name());
         }
     }
 

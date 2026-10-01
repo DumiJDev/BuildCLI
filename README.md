@@ -118,6 +118,8 @@ deletes anything until you reply *yes*.
   delete (the agents forget deleted messages too). Unsent text waits in its chat as a "Draft:" in the list.
 - **About you and your groups**: `/me name|about|style` tells every agent who you are and how to deal with you (kept on this
   computer). `/context` gives a group background to read: a text and text files.
+- **English and Portuguese**: Settings › General › Language (`auto` follows your computer). The screens, menus, commands, dialogs and
+  AgentFather are translated; some messages from providers and errors stay in English. Agents answer in the language you write in.
 - **Not only for code**: `/samples writing` and `/samples office` add teams for writing and office work (no commands, no git).
 
 ## Settings

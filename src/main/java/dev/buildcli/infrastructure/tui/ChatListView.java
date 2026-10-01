@@ -1,5 +1,6 @@
 package dev.buildcli.infrastructure.tui;
 
+import static dev.buildcli.application.I18n.t;
 import static dev.buildcli.infrastructure.tui.Draw.DAY;
 import static dev.buildcli.infrastructure.tui.Draw.TIME;
 import static dev.buildcli.infrastructure.tui.Draw.clean;
@@ -12,6 +13,7 @@ import static dev.buildcli.infrastructure.tui.Draw.tokens;
 import dev.buildcli.application.ChatSession;
 import dev.buildcli.application.ChatSession.Message;
 import dev.buildcli.application.ChatSession.State;
+import dev.buildcli.application.I18n;
 import dev.buildcli.domain.Agent;
 import dev.buildcli.domain.Attachment;
 import dev.tamboui.buffer.Buffer;
@@ -87,10 +89,10 @@ final class ChatListView {
     /** The line under the name of a special chat. */
     String describe(String thread) {
         if (ChatSession.FATHER.equals(thread)) {
-            return "built in · creates and manages your agents";
+            return t("built in · creates and manages your agents");
         }
-        return ChatSession.NOTES.equals(thread) ? "only you can read this · no agent sees it"
-                : "private chat between agents · you can read it, not write in it";
+        return ChatSession.NOTES.equals(thread) ? t("only you can read this · no agent sees it")
+                : t("private chat between agents · you can read it, not write in it");
     }
 
     boolean isSearching() {
@@ -128,7 +130,7 @@ final class ChatListView {
 
     String title(String thread) {
         if (thread.equals(ChatSession.NOTES)) {
-            return "You (notes)";
+            return t("You (notes)");
         }
         if (thread.equals(ChatSession.FATHER)) {
             return "AgentFather";
@@ -209,18 +211,18 @@ final class ChatListView {
             boolean isGroup = session.group(t) != null;
             String busyIn = isGroup ? null : session.agentThread(t);
             if (live != null) {
-                preview = (isGroup ? clean(live.agent()) + " is " : "") + "typing…";
+                preview = isGroup ? t("{0} is typing…", clean(live.agent())) : t("typing…");
                 ps = st(Theme.ACCENT, bg);
             } else if (session.isActive(t)) {
                 String who = busyAgentIn(t);
-                preview = isGroup && !who.isEmpty() ? clean(who) + " is " + session.agentState(who) + "…"
-                        : session.agentState(t) + "…";
+                preview = isGroup && !who.isEmpty() ? t("{0} is {1}…", clean(who), I18n.state(session.agentState(who)))
+                        : I18n.state(session.agentState(t)) + "…";
                 ps = st(Theme.ACCENT, bg);
             } else if (busyIn != null) {
-                preview = "busy in the " + title(busyIn) + " chat";
+                preview = t("busy in the {0} chat", title(busyIn));
                 ps = st(Theme.AMBER, bg);
             } else if (last == null) {
-                preview = isGroup ? session.group(t).members().size() + " agents and you" : clean(roleOf(t));
+                preview = isGroup ? t("{0} agents and you", session.group(t).members().size()) : clean(roleOf(t));
             } else {
                 preview = previewOf(last, isGroup);
             }
@@ -229,7 +231,7 @@ final class ChatListView {
             String draft = host.draft(t).strip().replaceAll("\\s+", " ");
             if (!draft.isEmpty() && live == null && !session.isActive(t)) {
                 // like a messenger: "Draft:" in colour, then what you wrote
-                int label = putFit(buf, r.x() + 6, y + 1, "Draft: ", st(Theme.ACCENT, bg).bold(), limit - Wrap.width(b) - 1);
+                int label = putFit(buf, r.x() + 6, y + 1, t("Draft:") + " ", st(Theme.ACCENT, bg).bold(), limit - Wrap.width(b) - 1);
                 putFit(buf, r.x() + 6 + label, y + 1, clean(draft), st(Theme.DIM, bg), limit - Wrap.width(b) - 1);
             } else {
                 putFit(buf, r.x() + 6, y + 1, preview.replace('\n', ' '), ps, limit - Wrap.width(b) - 1);
@@ -244,17 +246,17 @@ final class ChatListView {
         int above = scroll;
         int below = Math.max(0, threads.size() - scroll - capacity);
         if (above > 0 || below > 0) {
-            String more = (above > 0 ? "↑ " + above : "") + (above > 0 && below > 0 ? " · " : "") + (below > 0 ? "↓ " + below : "") + " more";
+            String more = (above > 0 ? "↑ " + above : "") + (above > 0 && below > 0 ? " · " : "") + (below > 0 ? "↓ " + below : "") + " " + t("more");
             put(buf, r.right() - 2 - Wrap.width(more), r.y() + 3, more, st(Theme.FAINT, Theme.SIDEBAR), r.right() - 1);
         }
         int q = session.queued();
-        String foot = (q > 0 ? q + " queued · " : "") + tokens(session.inputTokens() + (long) session.outputTokens()) + " tokens";
+        String foot = (q > 0 ? t("{0} queued", q) + " · " : "") + t("{0} tokens", tokens(session.inputTokens() + (long) session.outputTokens()));
         put(buf, r.x() + 2, r.bottom() - 1, foot, q > 0 ? st(Theme.AMBER, Theme.SIDEBAR) : st(Theme.FAINT, Theme.SIDEBAR), limit);
         List<String> idle = session.idleContacts();
         if (!idle.isEmpty()) {
-            String warn = "⚠ " + String.join(", ", idle) + (idle.size() == 1 ? " is" : " are") + " in no chat";
+            String warn = "⚠ " + (idle.size() == 1 ? t("{0} is in no chat", String.join(", ", idle)) : t("{0} are in no chat", String.join(", ", idle)));
             put(buf, r.x() + 2, r.bottom() - 3, warn, st(Theme.AMBER, Theme.SIDEBAR), limit);
-            put(buf, r.x() + 2, r.bottom() - 2, "loaded and idle · click to add", st(Theme.FAINT, Theme.SIDEBAR), limit);
+            put(buf, r.x() + 2, r.bottom() - 2, t("loaded and idle · click to add"), st(Theme.FAINT, Theme.SIDEBAR), limit);
             host.hit(new Rect(r.x(), r.bottom() - 3, r.width(), 2), () -> host.openNewChat());
         }
     }
@@ -317,7 +319,7 @@ final class ChatListView {
         out.addAll(byMessage);
         for (Agent a : session.contacts()) {
             if (!seen.contains(a.name()) && (a.name() + " " + a.role()).toLowerCase(Locale.ROOT).contains(q)) {
-                out.add(new Found(a.name(), "Start a chat with " + clean(a.name()), true));
+                out.add(new Found(a.name(), t("Start a chat with {0}", clean(a.name())), true));
             }
         }
         return out;
@@ -334,7 +336,7 @@ final class ChatListView {
         Style field = st(searching ? Theme.TEXT : Theme.DIM, Theme.FIELD);
         fill(buf, r, field);
         String text = query.text();
-        String shown = searching ? "⌕ " + text + "▏" : "⌕ Search chats  Ctrl+K";
+        String shown = searching ? "⌕ " + text + "▏" : "⌕ " + t("Search chats") + "  Ctrl+K";
         put(buf, r.x() + 1, r.y(), shown, field, r.right() - 1);
         host.hit(r, this::openSearch);
     }
@@ -358,7 +360,7 @@ final class ChatListView {
             put(buf, r.x() + 6, y, title(f.thread()), st(Theme.TEXT, bg).bold(), limit);
             String line = f.snippet().isEmpty() ? clean(roleOf(f.thread())) : f.snippet();
             if (line.isEmpty() && session.group(f.thread()) != null) {
-                line = session.group(f.thread()).members().size() + " agents and you";
+                line = t("{0} agents and you", session.group(f.thread()).members().size());
             }
             put(buf, r.x() + 6, y + 1, line, st(f.newChat() ? Theme.ACCENT : Theme.DIM, bg), limit);
             y += 2;
@@ -405,7 +407,7 @@ final class ChatListView {
 
     String roleOf(String agent) {
         if (ChatSession.FATHER.equals(agent)) {
-            return "creates and manages agents";
+            return t("creates and manages agents");
         }
         Agent a = session.contact(agent);
         return a == null ? "" : a.role();
@@ -413,7 +415,7 @@ final class ChatListView {
 
     private static String previewOf(Message m, boolean group) {
         String text = m.text().isEmpty() && !m.attachments().isEmpty()
-                ? (m.attachments().get(0).kind() == Attachment.Kind.IMAGE ? "▣ Photo" : "♪ Audio") : clean(Styled.plain(m.text()));
+                ? (m.attachments().get(0).kind() == Attachment.Kind.IMAGE ? "▣ " + t("Photo") : "♪ " + t("Audio")) : clean(Styled.plain(m.text()));
         return switch (m.kind()) {
             case USER -> (m.state() == State.DONE ? "✓✓ " : m.state() == State.FAILED ? "! " : "✓ ") + text;
             case AGENT -> (group ? clean(m.author()) + ": " : "") + text;
@@ -456,7 +458,7 @@ final class ChatListView {
         if (day.equals(today)) {
             return TIME.format(m.at());
         }
-        return day.equals(today.minusDays(1)) ? "Yesterday" : DAY.format(day);
+        return day.equals(today.minusDays(1)) ? t("Yesterday") : DAY.format(day);
     }
 
 

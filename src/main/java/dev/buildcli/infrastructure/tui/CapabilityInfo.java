@@ -8,9 +8,9 @@ final class CapabilityInfo {
 
     static String describe(String capability) {
         return switch (capability) {
-            case Capability.FILESYSTEM_READ -> "read files in the project";
+            case Capability.FILESYSTEM_READ -> "read the files in this folder";
             case Capability.FILESYSTEM_WRITE -> "create and change files (you approve each write)";
-            case Capability.SEARCH -> "search the code";
+            case Capability.SEARCH -> "search the files";
             case Capability.GIT_READ -> "read git status, log and diffs";
             case Capability.GIT_COMMIT -> "commit to git (you approve)";
             case Capability.COMMAND_EXECUTE -> "run commands, such as tests (you approve)";

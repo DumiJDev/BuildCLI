@@ -1,9 +1,11 @@
 package dev.buildcli.infrastructure.tui;
 
+import static dev.buildcli.application.I18n.t;
 import static dev.buildcli.infrastructure.tui.Draw.fill;
 import static dev.buildcli.infrastructure.tui.Draw.putSafe;
 import static dev.buildcli.infrastructure.tui.Draw.st;
 import dev.buildcli.application.ChatSession;
+import dev.buildcli.application.I18n;
 import dev.buildcli.domain.Agent;
 import dev.buildcli.domain.Chat;
 import dev.tamboui.buffer.Buffer;
@@ -77,10 +79,10 @@ final class ChatInfoView {
         String id = selected.get();
         Chat g = session.group(id);
         return switch (mode) {
-            case NEW_CHAT -> "New chat";
-            case ADD_MEMBER -> "Add to " + (g == null ? "group" : g.name());
-            case NEW_GROUP_MEMBERS -> "New group: " + newGroupName + " · choose members";
-            default -> g != null ? "Group info · " + g.name() : "Contact info · " + id;
+            case NEW_CHAT -> t("New chat");
+            case ADD_MEMBER -> t("Add to {0}", g == null ? t("group") : g.name());
+            case NEW_GROUP_MEMBERS -> t("New group: {0} · choose members", newGroupName);
+            default -> g != null ? t("Group info · {0}", g.name()) : t("Contact info · {0}", id);
         };
     }
 
@@ -91,8 +93,8 @@ final class ChatInfoView {
         switch (mode) {
             case NEW_CHAT -> {
                 out.add(new Row("+ New group", "choose a name and the members", Theme.ACCENT,
-                        List.of(new Action("Create", 'g', () -> ask("Name of the new group", "", name -> {
-                            newGroupName = name.isBlank() ? "New group" : name.strip();
+                        List.of(new Action("Create", 'g', () -> ask(t("Name of the new group"), "", name -> {
+                            newGroupName = name.isBlank() ? t("New group") : name.strip();
                             open(Mode.NEW_GROUP_MEMBERS);
                         })))));
                 for (Agent a : session.contacts()) {
@@ -109,7 +111,7 @@ final class ChatInfoView {
                         out.add(new Row(a.name(), a.role(), Theme.agentColor(a.name()), List.of(new Action("Add", 'a', () -> {
                             session.addMember(g.id(), a.name());
                             open(Mode.INFO);
-                            ok(a.name() + " joined " + g.name());
+                            ok(t("{0} joined {1}", a.name(), g.name()));
                         }))));
                     }
                 }
@@ -126,7 +128,7 @@ final class ChatInfoView {
                         }
                     }))));
                 }
-                out.add(new Row("Create the group", picked.isEmpty() ? "pick at least one member" : picked.size() + " member(s); the first is admin",
+                out.add(new Row("Create the group", picked.isEmpty() ? t("pick at least one member") : t("{0} member(s); the first is admin", picked.size()),
                         picked.isEmpty() ? Theme.DIM : Theme.ACCENT, picked.isEmpty() ? List.of() : List.of(new Action("Create", 'c', () -> {
                             String newId = session.createGroup(newGroupName, List.copyOf(picked));
                             select.accept(newId);
@@ -137,42 +139,42 @@ final class ChatInfoView {
                 if (g != null) {
                     for (String m : g.members()) {
                         List<Action> actions = new ArrayList<>();
-                        actions.add(g.isAdmin(m) ? new Action("Dismiss admin", 'd', () -> run(() -> session.setAdmin(g.id(), m, false), m + " is no longer admin"))
-                                : new Action("Make admin", 'a', () -> run(() -> session.setAdmin(g.id(), m, true), m + " is now admin")));
-                        actions.add(new Action("Remove", 'r', () -> run(() -> session.removeMember(g.id(), m), m + " was removed")));
+                        actions.add(g.isAdmin(m) ? new Action("Dismiss admin", 'd', () -> run(() -> session.setAdmin(g.id(), m, false), t("{0} is no longer admin", m)))
+                                : new Action("Make admin", 'a', () -> run(() -> session.setAdmin(g.id(), m, true), t("{0} is now admin", m))));
+                        actions.add(new Action("Remove", 'r', () -> run(() -> session.removeMember(g.id(), m), t("{0} was removed", m))));
                         actions.add(new Action("Message", 'm', () -> {
                             session.openDirect(m);
                             select.accept(m);
                             close.run();
                         }));
-                        out.add(new Row(m + (g.isAdmin(m) ? "  · admin" : ""), roleOf(m) + " · " + presence(m), Theme.agentColor(m), actions));
+                        out.add(new Row(m + (g.isAdmin(m) ? "  · " + t("admin") : ""), roleOf(m) + " · " + presence(m), Theme.agentColor(m), actions));
                     }
                     out.add(new Row("+ Add member", "", Theme.ACCENT, List.of(new Action("Add", 'a', () -> open(Mode.ADD_MEMBER)))));
-                    out.add(new Row("Context", g.context().isEmpty() ? "optional: background the agents read before answering" : g.context().replace('\n', ' '),
+                    out.add(new Row("Context", g.context().isEmpty() ? t("optional: background the agents read before answering") : g.context().replace('\n', ' '),
                             g.context().isEmpty() ? Theme.DIM : Theme.TEXT, List.of(new Action("Edit", 'c',
-                                    () -> ask("Context for " + g.name(), g.context(), text -> run(() -> session.setGroupContext(g.id(), text, g.files()),
-                                            "Context saved"))),
-                                    new Action("Add file", 'f', () -> ask("File to add to the context", "path to a text file", path -> run(() -> {
+                                    () -> ask(t("Context for {0}", g.name()), g.context(), text -> run(() -> session.setGroupContext(g.id(), text, g.files()),
+                                            t("Context saved")))),
+                                    new Action("Add file", 'f', () -> ask(t("File to add to the context"), t("path to a text file"), path -> run(() -> {
                                         java.nio.file.Path file = java.nio.file.Path.of(path.strip()).toAbsolutePath().normalize();
                                         if (!java.nio.file.Files.isRegularFile(file)) {
-                                            throw new IllegalArgumentException("there is no file " + path.strip());
+                                            throw new IllegalArgumentException(t("there is no file {0}", path.strip()));
                                         }
                                         List<String> now = new ArrayList<>(g.files());
                                         if (!now.contains(file.toString())) {
                                             now.add(file.toString());
                                         }
                                         session.setGroupContext(g.id(), g.context(), now);
-                                    }, "File added"))))));
+                                    }, t("File added")))))));
                     for (String f : g.files()) {
                         java.nio.file.Path fp = java.nio.file.Path.of(f);
                         out.add(new Row("  " + fp.getFileName(), fp.getParent() == null ? "" : fp.getParent().toString(), Theme.DIM, List.of(new Action("Remove", 'v',
                                 () -> run(() -> session.setGroupContext(g.id(), g.context(), g.files().stream().filter(x -> !x.equals(f)).toList()),
-                                        "File removed")))));
+                                        t("File removed"))))));
                     }
                     out.add(new Row("Rename group", g.name(), Theme.TEXT, List.of(new Action("Rename", 'n',
-                            () -> ask("New name", g.name(), name -> run(() -> session.renameGroup(g.id(), name), "Renamed"))))));
+                            () -> ask(t("New name"), g.name(), name -> run(() -> session.renameGroup(g.id(), name), t("Renamed")))))));
                     if (!g.id().equals(ChatSession.MAIN)) {
-                        out.add(new Row("Delete group", "the messages stay in memory until you quit", Theme.RED, List.of(new Action("Delete", 'x', () -> {
+                        out.add(new Row("Delete group", t("the messages stay in memory until you quit"), Theme.RED, List.of(new Action("Delete", 'x', () -> {
                             session.deleteGroup(g.id());
                             select.accept(ChatSession.MAIN);
                             close.run();
@@ -186,11 +188,11 @@ final class ChatInfoView {
                         out.add(new Row("Model", modelLabel.apply(id), Theme.TEXT, List.of()));
                         out.add(new Row("May", String.join(", ", a.capabilities().stream().sorted().toList()), Theme.DIM, List.of()));
                         List<String> in = session.groups().stream().filter(x -> x.has(id)).map(Chat::name).toList();
-                        out.add(new Row("Groups", in.isEmpty() ? "none" : String.join(", ", in), Theme.DIM, List.of()));
+                        out.add(new Row("Groups", in.isEmpty() ? t("none") : String.join(", ", in), Theme.DIM, List.of()));
                         for (Chat other : session.groups()) {
                             if (!other.has(id)) {
-                                out.add(new Row("Add to " + other.name(), "", Theme.ACCENT, List.of(new Action("Add", 'a',
-                                        () -> run(() -> session.addMember(other.id(), id), id + " joined " + other.name())))));
+                                out.add(new Row(t("Add to {0}", other.name()), "", Theme.ACCENT, List.of(new Action("Add", 'a',
+                                        () -> run(() -> session.addMember(other.id(), id), t("{0} joined {1}", id, other.name()))))));
                             }
                         }
                     }
@@ -209,10 +211,10 @@ final class ChatInfoView {
         String where = session.agentThread(agent);
         String state = session.agentState(agent);
         if (where == null) {
-            return "online";
+            return t("online");
         }
         Chat g = session.group(where);
-        return state + " in " + (g != null ? g.name() : "a direct chat");
+        return g != null ? t("{0} in {1}", I18n.state(state), g.name()) : t("{0} in a direct chat", I18n.state(state));
     }
 
     private void run(Runnable r, String done) {
@@ -247,7 +249,7 @@ final class ChatInfoView {
         fill(buf, r, st(Theme.TEXT, Theme.BG));
         fill(buf, new Rect(r.x(), r.y(), r.width(), 2), st(Theme.TEXT, Theme.PANEL));
         putSafe(buf, r.x() + 2, r.y(), title(), st(Theme.TEXT, Theme.PANEL).bold(), r.right() - 10);
-        putSafe(buf, r.x() + 2, r.y() + 1, mode == Mode.INFO ? "↑↓ choose · letters or click run the buttons · Esc back" : "↑↓ choose · Enter · Esc back",
+        putSafe(buf, r.x() + 2, r.y() + 1, mode == Mode.INFO ? t("↑↓ choose · letters or click run the buttons · Esc back") : t("↑↓ choose · Enter · Esc back"),
                 st(Theme.DIM, Theme.PANEL), r.right());
         String closeLabel = " ✕ Esc ";
         int cx = r.right() - CharWidth.of(closeLabel) - 1;
@@ -272,14 +274,14 @@ final class ChatInfoView {
             Color bg = sel ? Theme.SELECTED : Theme.BG;
             Rect line = new Rect(x0, y, w, 1);
             fill(buf, line, st(Theme.TEXT, bg));
-            int tw = putSafe(buf, x0 + 1, y, row.text(), st(row.color(), bg).bold(), x0 + w / 2);
-            putSafe(buf, x0 + 3 + tw, y, row.detail(), st(Theme.DIM, bg), x0 + w - 2);
+            int tw = putSafe(buf, x0 + 1, y, t(row.text()), st(row.color(), bg).bold(), x0 + w / 2);
+            putSafe(buf, x0 + 3 + tw, y, t(row.detail()), st(Theme.DIM, bg), x0 + w - 2);
             int idx = i;
             hits.add(new Hit(line, () -> index = idx));
             int bx = x0 + w - 1;
             for (int a = row.actions().size() - 1; a >= 0; a--) {
                 Action act = row.actions().get(a);
-                String label = " " + act.label() + (act.key() == ' ' ? "" : " " + Character.toUpperCase(act.key())) + " ";
+                String label = " " + t(act.label()) + (act.key() == ' ' ? "" : " " + Character.toUpperCase(act.key())) + " ";
                 bx -= CharWidth.of(label) + 1;
                 Color btn = act.label().startsWith("Delete") || act.label().equals("Remove") ? Theme.DANGER : act.label().equals("Message") ? Theme.FIELD : Theme.ACCENT;
                 putSafe(buf, bx, y, label, st(btn == Theme.ACCENT ? Theme.ON_ACCENT : Theme.TEXT, btn), x0 + w);
