@@ -94,8 +94,8 @@ final class AgentFeed {
         }
         Task copy = new Task(t.id, t.parentId, t.from, t.to, t.objective, t.brief);
         copy.status = t.status;
-        copy.tokens = t.tokens;
-        copy.attempts = t.attempts;
+        copy.tokens(t.tokens());
+        copy.attempts(t.attempts());
         synchronized (run.tasks) {
             run.tasks.put(t.id, copy);
         }
