@@ -4,6 +4,7 @@ import static dev.buildcli.application.I18n.t;
 import static dev.buildcli.infrastructure.tui.Draw.clean;
 import static dev.buildcli.infrastructure.tui.Draw.fill;
 import static dev.buildcli.infrastructure.tui.Draw.put;
+import static dev.buildcli.infrastructure.tui.Draw.putFit;
 import static dev.buildcli.infrastructure.tui.Draw.st;
 import dev.buildcli.application.ChatSession;
 import dev.buildcli.application.ChatSession.Message;
@@ -655,7 +656,7 @@ final class ChatScreen implements Element {
         } else {
             sub = t("online") + " · " + clean(chatList.roleOf(selected)) + " · " + clean(modelLabel(selected));
         }
-        put(buf, nx, r.y() + 1, sub, subStyle, r.right() - 30);
+        putFit(buf, nx, r.y() + 1, sub, subStyle, r.right() - 30);
         hits.add(new Hit(new Rect(x, r.y(), Math.max(1, r.right() - 32 - x), 2), () -> openInfo(ChatInfoView.Mode.INFO)));
         int bx = r.right() - 1;
         String[][] buttons = gitFolder ? new String[][] {{" " + t("Help") + " ", "help"}, {" " + t("Tasks") + " ", "tasks"}, {" " + t("Changes") + " ", "diff"}}

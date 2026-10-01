@@ -39,6 +39,7 @@ def width(ch):
 
 def parse(lines):
     rows = []
+    ends = []
     for line in lines:
         fg, bg, bold, rev = DEF_FG, None, False, False
         cells, i, col = [], 0, 0
@@ -96,15 +97,21 @@ def parse(lines):
             cells.append((col, ch, w, f, b, bold))
             col += w
         rows.append(cells)
-    return rows
+        ends.append((bg, col))
+    return rows, ends
 
 
 def main(src, dst):
     lines = open(src, encoding='utf-8').read().split('\n')
     while lines and not lines[-1].strip():
         lines.pop()
-    rows = parse(lines)
+    rows, ends = parse(lines)
     cols = max((c[0] + c[2] for r in rows for c in r), default=80)
+    # tmux drops the blanks at the end of a line, but they keep the background that was active: put them back
+    for r, (bg, col) in zip(rows, ends):
+        if bg is not None:
+            for x in range(col, cols):
+                r.append((x, ' ', 1, DEF_FG, bg, False))
     pad = 16
     img = Image.new('RGB', (cols * CW + 2 * pad, len(rows) * CH + 2 * pad), DEF_BG)
     d = ImageDraw.Draw(img)
