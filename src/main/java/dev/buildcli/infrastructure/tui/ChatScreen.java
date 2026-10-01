@@ -64,6 +64,10 @@ final class ChatScreen implements Element {
     private final Path cwd;
     private final Runnable quit;
     private final InputEditor input = new InputEditor();
+    /** The question an agent is asking you, which option is highlighted, and whether you are typing your own answer instead. */
+    private ChatSession.Pending.Question asked;
+    private int choice;
+    private boolean typingAnswer;
     private final List<Attachment> attachments = new ArrayList<>();
     private final List<Hit> hits = new ArrayList<>();
 
@@ -118,6 +122,8 @@ final class ChatScreen implements Element {
 
     ChatScreen(ChatSession session, Map<String, String> models, Path cwd, Runnable quit, SettingsServices services) {
         this.session = session;
+        // what you sent in earlier runs is still there to walk back through with Up
+        session.messages().stream().filter(m -> m.kind() == ChatSession.Kind.USER).forEach(m -> input.remember(m.text()));
         this.chatList = new ChatListView(session, new ChatListView.Host() {
             @Override
             public void hit(Rect rect, Runnable action) {
@@ -915,7 +921,7 @@ final class ChatScreen implements Element {
         put(buf, sx, r.y() + visibleRows, " ➤ ", canSend ? st(Theme.BG, Theme.ACCENT).bold() : st(Theme.DIM, Theme.PANEL), r.right());
         hits.add(new Hit(new Rect(sx, r.y() + visibleRows, 3, 1), this::submit));
         inputTextArea = new Rect(tx, r.y() + 1, inputWidth, visibleRows);
-        if (session.pending() == null) {
+        if (session.pending() == null || session.pending() instanceof ChatSession.Pending.Question && typingOwnAnswer()) {
             frame.setCursorPosition(tx + Math.min(cur[1], inputWidth), r.y() + 1 + (cur[0] - inputFirstRow));
         }
     }
@@ -1170,6 +1176,7 @@ final class ChatScreen implements Element {
         String title;
         List<String[]> buttons = new ArrayList<>();
         List<Runnable> actions = new ArrayList<>();
+        List<Integer> questionRows = new ArrayList<>();
         if (p instanceof ChatSession.Pending.Approval a) {
             title = clean(a.request().agent()) + " asks for approval" + where(p);
             body.add(List.of(new Span(clean(a.request().summary()), base.bold())));
@@ -1197,6 +1204,25 @@ final class ChatScreen implements Element {
             }
             buttons.add(new String[] {" Deny  N ", "plain"});
             actions.add(() -> a.answer().complete(false));
+        } else if (p instanceof ChatSession.Pending.Question q) {
+            title = clean(q.agent()) + " asks you" + where(p);
+            body.addAll(Styled.lines(clean(q.question()), w - 4, base, base.bold(), base));
+            body.add(List.of());
+            if (!q.options().isEmpty() && !typingAnswer) {
+                for (int i = 0; i <= q.options().size(); i++) {
+                    boolean other = i == q.options().size();
+                    String label = other ? "Something else…" : clean(q.options().get(i));
+                    Style os = i == choice ? st(Theme.BG, Theme.TEXT).bold() : other ? st(Theme.DIM, Theme.DIALOG) : base;
+                    int row = body.size();
+                    questionRows.add(row);
+                    body.add(List.of(new Span((i == choice ? " ❯ " : "   ") + (i + 1) + ". " + label + " ", os)));
+                }
+                body.add(List.of());
+                body.add(List.of(new Span("↑↓ or a number to choose · Enter confirms · Esc skips", st(Theme.DIM, Theme.DIALOG))));
+            } else {
+                body.add(List.of(new Span(typingAnswer && !q.options().isEmpty() ? "Type your answer below · Enter sends · Esc goes back"
+                        : "Type your answer below · Enter sends · Esc skips", st(Theme.DIM, Theme.DIALOG))));
+            }
         } else {
             var e = (ChatSession.Pending.Escalation) p;
             title = clean(e.agent()) + " is stuck (task #" + e.taskId() + ")" + where(p);
@@ -1211,7 +1237,7 @@ final class ChatScreen implements Element {
             buttons.add(new String[] {" Stop everything  A ", "danger"});
             actions.add(() -> e.answer().complete(EscalationChoice.ABORT));
         }
-        int h = body.size() + 5;
+        int h = body.size() + (buttons.isEmpty() ? 3 : 5);
         int x = r.x() + (r.width() - w) / 2;
         int y = r.y() + Math.max(1, (r.height() - h) / 2);
         fill(buf, new Rect(x, y, w, h), base);
@@ -1226,6 +1252,10 @@ final class ChatScreen implements Element {
         for (int i = 0; i < body.size(); i++) {
             drawSpans(buf, x + 2, y + 1 + i, body.get(i), x + w - 2);
         }
+        for (int i = 0; i < questionRows.size(); i++) {
+            int index = i;
+            hits.add(new Hit(new Rect(x + 2, y + 1 + questionRows.get(i), w - 4, 1), () -> chooseAnswer(index)));
+        }
         int bx = x + 2;
         for (int i = 0; i < buttons.size(); i++) {
             Style bs = switch (buttons.get(i)[1]) {
@@ -1236,6 +1266,64 @@ final class ChatScreen implements Element {
             int bw = put(buf, bx, y + h - 2, buttons.get(i)[0], bs, x + w - 1);
             hits.add(new Hit(new Rect(bx, y + h - 2, bw, 1), actions.get(i)));
             bx += bw + 2;
+        }
+    }
+
+    private boolean typingOwnAnswer() {
+        return session.pending() instanceof ChatSession.Pending.Question q && (typingAnswer || q.options().isEmpty());
+    }
+
+    /** The keys while an agent asks you something; null lets the key edit the answer in the input box. */
+    private EventResult questionKey(ChatSession.Pending.Question q, KeyEvent key) {
+        KeyCode code = key.code();
+        if (key.hasCtrl()) {
+            return null;
+        }
+        if (typingAnswer || q.options().isEmpty()) {
+            if (code == KeyCode.ENTER && !key.hasShift() && !key.hasAlt()) {
+                String text = input.text().strip();
+                if (!text.isEmpty()) {
+                    input.clear();
+                    q.answer().complete(text);
+                }
+                return EventResult.HANDLED;
+            }
+            if (code == KeyCode.ESCAPE) {
+                if (q.options().isEmpty()) {
+                    q.answer().complete("");
+                } else {
+                    typingAnswer = false;
+                }
+                return EventResult.HANDLED;
+            }
+            return null;
+        }
+        int n = q.options().size() + 1;
+        switch (code) {
+            case UP -> choice = (choice - 1 + n) % n;
+            case DOWN, TAB -> choice = (choice + 1) % n;
+            case ENTER -> chooseAnswer(choice);
+            case ESCAPE -> q.answer().complete("");
+            case CHAR -> {
+                int d = key.character() - '1';
+                if (d >= 0 && d < n) {
+                    chooseAnswer(d);
+                }
+            }
+            default -> { }
+        }
+        return EventResult.HANDLED;
+    }
+
+    private void chooseAnswer(int index) {
+        if (!(session.pending() instanceof ChatSession.Pending.Question q)) {
+            return;
+        }
+        if (index >= q.options().size()) {
+            typingAnswer = true;
+            input.clear();
+        } else {
+            q.answer().complete(q.options().get(index));
         }
     }
 
@@ -1315,7 +1403,18 @@ final class ChatScreen implements Element {
             return searchKey(key);
         }
         ChatSession.Pending p = session.pending();
-        if (p != null && code == KeyCode.CHAR && (input.isEmpty() || ctrl)) {
+        if (p instanceof ChatSession.Pending.Question q) {
+            if (q != asked) {
+                asked = q;
+                choice = 0;
+                typingAnswer = false;
+            }
+            EventResult answered = questionKey(q, key);
+            if (answered != null) {
+                return answered;
+            }
+        }
+        if (p != null && !(p instanceof ChatSession.Pending.Question) && code == KeyCode.CHAR && (input.isEmpty() || ctrl)) {
             if (p instanceof ChatSession.Pending.Approval a && (ch == 'y' || ch == 'n')) {
                 a.answer().complete(ch == 'y');
                 return EventResult.HANDLED;
@@ -1652,6 +1751,10 @@ final class ChatScreen implements Element {
 
     String selectedForTest() {
         return selected;
+    }
+
+    List<String> threadsForTest() {
+        return chatList.threads();
     }
 
     ChatSession sessionForTest() {

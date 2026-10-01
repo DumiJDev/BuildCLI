@@ -4,6 +4,8 @@ import dev.buildcli.application.ChatSession;
 import dev.tamboui.toolkit.app.ToolkitApp;
 import dev.tamboui.toolkit.element.Element;
 import dev.tamboui.tui.TuiConfig;
+import dev.tamboui.tui.bindings.Actions;
+import dev.tamboui.tui.bindings.BindingSets;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Map;
@@ -30,7 +32,9 @@ public final class ChatApp extends ToolkitApp {
     @Override
     protected TuiConfig configure() {
         // no fixed tick: the screen is drawn when you type or click, and when the chat changes (see onStart)
-        TuiConfig.Builder config = TuiConfig.builder().noTick().mouseCapture(mouse).bracketedPaste(true);
+        // Tab and Shift+Tab move focus in the toolkit and never reach the screen; there is one focusable here, and Tab completes / and @
+        TuiConfig.Builder config = TuiConfig.builder().noTick().mouseCapture(mouse).bracketedPaste(true)
+                .bindings(BindingSets.defaults().toBuilder().unbind(Actions.FOCUS_NEXT).unbind(Actions.FOCUS_PREVIOUS).build());
         if (WindowsBackend.isWindows()) {
             WindowsBackend backend = WindowsBackend.open(mouse);
             if (backend != null) {

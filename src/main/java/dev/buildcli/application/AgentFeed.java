@@ -204,6 +204,9 @@ final class AgentFeed {
         if (name.equals("send_message") && to.find()) {
             return "wrote to " + to.group(1).strip();
         }
+        if (name.equals("ask_user")) {
+            return "asked you a question";
+        }
         Matcher path = PATH_ARG.matcher(args);
         if (path.find()) {
             String verb = switch (name) {

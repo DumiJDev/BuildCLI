@@ -84,6 +84,10 @@ public final class ChatSession implements UserInterface {
             }
         }
 
+        /** An agent asks you something. {@code options} may be empty (an open question); you can always type your own answer. */
+        record Question(String agent, String question, List<String> options, CompletableFuture<String> answer, String thread)
+                implements Pending {}
+
         record Escalation(int taskId, String agent, String objective, String reason, CompletableFuture<EscalationChoice> answer,
                           String thread) implements Pending {}
     }
@@ -887,12 +891,31 @@ public final class ChatSession implements UserInterface {
         }
 
         @Override
+        public String ask(String from, String question, List<String> options) {
+            Run run = Run.CURRENT.get();
+            return approvals.ask(from, question, options, run == null ? EVERYWHERE : run.thread, run != null && run.stop.get());
+        }
+
+        @Override
         public String run(String from, String to, Supplier<String> work) {
+            return run(from, to, null, work);
+        }
+
+        @Override
+        public String run(String from, String to, String objective, Supplier<String> work) {
             Actor target = actors.get(to);
             if (target == null) {
                 return work.get();
             }
             Run run = Run.CURRENT.get();
+            if (run != null && group(run.thread) == null && directory.hasContact(run.thread)) {
+                // asked in a private chat to talk to a teammate: it happens in a chat of their own, not in the one with the user
+                String between = agentChatId(from, to);
+                if (objective != null && !objective.isBlank()) {
+                    add(new Message(transcript.nextId(), Kind.AGENT, from, objective, Instant.now(), State.NONE, List.of(), between));
+                }
+                run = run.handedTo(to, between);
+            }
             CompletableFuture<String> answer = new CompletableFuture<>();
             synchronized (waitsFor) {
                 waitsFor.put(from, to);
