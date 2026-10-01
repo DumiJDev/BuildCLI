@@ -43,10 +43,11 @@ import java.util.regex.Pattern;
  */
 public final class ChatSession implements UserInterface {
 
-    public enum Kind { USER, AGENT, ACTIVITY, SYSTEM, ERROR }
+    /** CHANGES: the files a run wrote, shown as a card that can be reviewed and undone. */
+    public enum Kind { USER, AGENT, ACTIVITY, SYSTEM, ERROR, CHANGES }
 
     /** User messages: queued (delivered, not read yet), running (read, being worked on), done, failed. Activity: running, done, failed. */
-    public enum State { NONE, QUEUED, RUNNING, DONE, FAILED }
+    public enum State { NONE, QUEUED, RUNNING, DONE, FAILED, UNDONE }
 
     /** The thread of the team conversation; other threads are named after the agent they talk to. */
     public static final String TEAM = "";
@@ -103,6 +104,8 @@ public final class ChatSession implements UserInterface {
         final AtomicBoolean stop = new AtomicBoolean();
         final Map<Integer, Task> tasks = new LinkedHashMap<>();
         final java.util.Set<String> handedOffTo = ConcurrentHashMap.newKeySet();
+        /** Files written during this run, by its agent or by teammates it handed work to. */
+        final List<dev.buildcli.domain.FileChange> changes = new CopyOnWriteArrayList<>();
 
         Run(long messageId, String thread, String me, int hops) {
             this.messageId = messageId;
@@ -178,6 +181,13 @@ public final class ChatSession implements UserInterface {
     private final Executor executor;
     private final ChatStore store;
     private final dev.buildcli.ports.ChatLog log;
+    /** The files behind each changes card, loaded from the log the first time a restored card asks. */
+    private final Map<Long, List<dev.buildcli.domain.FileChange>> changeSets = new ConcurrentHashMap<>();
+    /** "Always allow" answers: thread, agent and what, to what it means. In memory only: a grant never outlives the session. */
+    private final Map<String, String> grants = new ConcurrentHashMap<>();
+    private final java.util.Set<Long> savedChanges = ConcurrentHashMap.newKeySet();
+    private volatile java.nio.file.Path workspace;
+    private volatile dev.buildcli.application.tools.WorkspaceLock workspaceLock;
     /** Messages waiting to be written: the UI never waits for the disk. */
     private final LinkedBlockingDeque<Message> writes = new LinkedBlockingDeque<>();
     private final Thread writer;
@@ -351,6 +361,10 @@ public final class ChatSession implements UserInterface {
             // what is kept on disk is scrubbed of secrets, like the event log; the screen shows the original
             log.save(new dev.buildcli.domain.ChatEntry(m.id(), m.thread(), m.kind().name(), m.author(), Redactor.redact(m.text()), m.at(),
                     m.state().name(), m.attachments(), positions.getOrDefault(m.id(), 0L)));
+            List<dev.buildcli.domain.FileChange> files = changeSets.get(m.id());
+            if (m.kind() == Kind.CHANGES && files != null && savedChanges.add(m.id())) {
+                log.saveChanges(m.id(), files);
+            }
         } catch (RuntimeException e) {
             // a full disk or a locked database must not break the chat; the message stays on screen
         }
@@ -807,7 +821,11 @@ public final class ChatSession implements UserInterface {
 
     /** The oldest open question, or null. */
     public Pending pending() {
-        return pending.isEmpty() ? null : pending.get(0);
+        // one read of the list: checking isEmpty() and then get(0) fails when an answer removes the request in between
+        for (Pending p : pending) {
+            return p;
+        }
+        return null;
     }
 
     public int pendingCount() {
@@ -957,7 +975,87 @@ public final class ChatSession implements UserInterface {
             error(Orchestrator.describe(t) + "\nCheck the provider with 'buildcli provider test <provider:model>' or 'buildcli doctor'. "
                     + (run.messageId > 0 ? "Your message is kept: press Retry or type /retry to send it again." : ""));
         }
+        // a stopped or failed run may still have written files: they are shown and can be undone all the same
+        postChanges(run);
         finishRun(run, ok);
+    }
+
+    private void postChanges(Run run) {
+        if (run.changes.isEmpty()) {
+            return;
+        }
+        List<dev.buildcli.domain.FileChange> files = List.copyOf(run.changes);
+        List<String> paths = dev.buildcli.application.tools.FileChanges.net(files).stream().map(dev.buildcli.application.tools.FileChanges.Net::path).toList();
+        long id = ids.incrementAndGet();
+        changeSets.put(id, files);
+        add(new Message(id, Kind.CHANGES, run.me, "Changed " + paths.size() + (paths.size() == 1 ? " file: " : " files: ") + String.join(", ", paths),
+                Instant.now(), State.DONE, List.of(), run.thread));
+    }
+
+    /** Where undo writes, and the lock the agents share; without it undo is not offered. */
+    public void workspace(java.nio.file.Path root, dev.buildcli.application.tools.WorkspaceLock lock) {
+        this.workspace = root;
+        this.workspaceLock = lock;
+    }
+
+    public boolean canUndo() {
+        return workspace != null;
+    }
+
+    /** The files behind a changes card, oldest write first; empty if they were not kept. */
+    public List<dev.buildcli.domain.FileChange> changes(long id) {
+        return changeSets.computeIfAbsent(id, k -> {
+            try {
+                return log.changes(k);
+            } catch (RuntimeException e) {
+                return List.of();
+            }
+        });
+    }
+
+    /**
+     * Puts back the files of a changes card, except those changed since by you or another agent. The agents see in the
+     * conversation that it was undone. @return what happened, in one line (also written in the chat)
+     */
+    public String undo(long id) {
+        Message m = find(id);
+        if (m == null || m.kind() != Kind.CHANGES) {
+            return "Nothing to undo.";
+        }
+        if (m.state() == State.UNDONE) {
+            return "Already undone.";
+        }
+        if (workspace == null) {
+            return "Undo is not available here.";
+        }
+        List<dev.buildcli.domain.FileChange> files = changes(id);
+        if (files.isEmpty()) {
+            return "These changes were not kept, so they cannot be undone.";
+        }
+        String text;
+        try {
+            var r = dev.buildcli.application.tools.FileChanges.undo(workspace, workspaceLock, files);
+            if (!r.restored().isEmpty() || !r.deleted().isEmpty()) {
+                replace(id, State.UNDONE);
+            }
+            text = "Undid " + m.author() + "'s changes: " + r.summary() + ".";
+        } catch (Exception e) {
+            text = "Undo failed: " + e.getMessage();
+        }
+        note(m.thread(), text);
+        return text;
+    }
+
+    /** The newest changes card of a chat that can still be undone, or -1. */
+    public long lastChanges(String thread) {
+        List<Message> all = messages();
+        for (int i = all.size() - 1; i >= 0; i--) {
+            Message m = all.get(i);
+            if (m.kind() == Kind.CHANGES && m.thread().equals(thread) && m.state() == State.DONE) {
+                return m.id();
+            }
+        }
+        return -1;
     }
 
     /** A user message sent to several agents is done when all have answered, and failed if any failed. */
@@ -1045,7 +1143,14 @@ public final class ChatSession implements UserInterface {
         List<String> lines = new ArrayList<>();
         for (int i = all.size() - 1; i >= 0 && lines.size() < HISTORY_MESSAGES; i--) {
             Message m = all.get(i);
-            if (m.id() == exceptMessageId || (m.kind() != Kind.USER && m.kind() != Kind.AGENT) || !m.thread().equals(thread)) {
+            if (m.id() == exceptMessageId || (m.kind() != Kind.USER && m.kind() != Kind.AGENT && m.kind() != Kind.CHANGES)
+                    || !m.thread().equals(thread)) {
+                continue;
+            }
+            if (m.kind() == Kind.CHANGES) {
+                // so an agent knows what was written, and does not assume its files are still there after an undo
+                lines.add(0, "(" + m.author() + " " + m.text().substring(0, 1).toLowerCase(java.util.Locale.ROOT) + m.text().substring(1)
+                        + (m.state() == State.UNDONE ? "; the user undid these changes" : "") + ")");
                 continue;
             }
             if (m.kind() == Kind.USER && m.state() != State.DONE) {
@@ -1117,9 +1222,53 @@ public final class ChatSession implements UserInterface {
 
     // ---- UserInterface: called by the orchestrator on the agents' threads ----
 
+    @Override
+    public void fileChanged(dev.buildcli.domain.FileChange change) {
+        Run r = RUN.get();
+        if (r != null) {
+            r.changes.add(change);
+        }
+    }
+
     private String threadNow() {
         Run r = RUN.get();
         return r == null ? EVERYWHERE : r.thread;
+    }
+
+    private static String grantId(String thread, ApprovalRequest r) {
+        return thread + "\u0001" + r.agent() + "\u0001" + r.grantKey();
+    }
+
+    /** Answers yes to this request and to the same kind of request from this agent in this chat from now on. */
+    public void approveAlways(Pending.Approval a) {
+        ApprovalRequest r = a.request();
+        if (r.grantKey() != null) {
+            grants.put(grantId(a.thread(), r), r.grantLabel());
+        }
+        a.answer().complete(true);
+    }
+
+    /** What is being approved automatically in this chat. */
+    public List<String> grants(String thread) {
+        List<String> out = new ArrayList<>();
+        grants.forEach((id, label) -> {
+            if (id.startsWith(thread + "\u0001")) {
+                out.add(label);
+            }
+        });
+        java.util.Collections.sort(out);
+        return out;
+    }
+
+    /** Asks again from now on. @return how many permissions were taken back */
+    public int revokeGrants(String thread) {
+        int before = grants.size();
+        grants.keySet().removeIf(id -> id.startsWith(thread + "\u0001"));
+        int n = before - grants.size();
+        if (n > 0) {
+            touch();
+        }
+        return n;
     }
 
     @Override
@@ -1127,6 +1276,9 @@ public final class ChatSession implements UserInterface {
         Run run = RUN.get();
         if (run != null && run.stop.get()) {
             return false;
+        }
+        if (request.grantKey() != null && grants.containsKey(grantId(threadNow(), request))) {
+            return true;
         }
         var answer = new CompletableFuture<Boolean>();
         Pending p = new Pending.Approval(request, answer, threadNow());

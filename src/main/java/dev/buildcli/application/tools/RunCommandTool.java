@@ -51,7 +51,8 @@ public final class RunCommandTool implements Tool {
         boolean allowed = agent.permissions().commandAllow().stream()
                 .anyMatch(prefix -> argv.size() >= prefix.size() && argv.subList(0, prefix.size()).equals(prefix));
         if (!allowed && !ctx.approve(new ApprovalRequest(agent.name(), "command", "Run outside policy: " + String.join(" ", argv),
-                "Not in " + agent.name() + "'s command allow list."))) {
+                "Not in " + agent.name() + "'s command allow list.",
+                "command:" + String.join("\u0000", argv), "let " + agent.name() + " run exactly: " + String.join(" ", argv)))) {
             return "DENIED: command not allowed by policy and the user rejected it: " + String.join(" ", argv);
         }
         ProcessRunner.Result r = ctx.exclusive(() -> ProcessRunner.run(argv, ctx.workspace(), agent.permissions().commandTimeout(), Map.of()));

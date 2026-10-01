@@ -59,7 +59,8 @@ public final class WriteFileTool implements Tool {
         } else {
             diff = Diffs.unified(rel, before, content);
         }
-        if (!ctx.approve(new ApprovalRequest(agent.name(), "write", "Write " + rel, diff))) {
+        if (!ctx.approve(new ApprovalRequest(agent.name(), "write", "Write " + rel, diff, "write",
+                "let " + agent.name() + " edit files in this chat (you can still undo)"))) {
             return "DENIED: the user rejected the write to " + rel;
         }
         // the user approved this exact diff; if someone changed the file meanwhile, writing would silently undo their work
@@ -73,6 +74,7 @@ public final class WriteFileTool implements Tool {
             }
             Files.createDirectories(file.getParent());
             Files.writeString(file, content, StandardCharsets.UTF_8);
+            ctx.changed(new dev.buildcli.domain.FileChange(agent.name(), rel, exists, before, content));
             return "OK: wrote " + content.length() + " chars to " + rel;
         });
     }

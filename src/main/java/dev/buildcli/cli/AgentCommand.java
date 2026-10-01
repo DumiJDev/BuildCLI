@@ -130,9 +130,9 @@ final class AgentCommand implements Callable<Integer> {
             Files.createDirectories(file.getParent());
             Files.writeString(file, template(name, role, caps, ""), StandardCharsets.UTF_8);
             ctx.out.println("created  " + file);
-            ctx.out.println("Edit its instructions and permissions, then add it to a team with 'buildcli team create'.");
+            ctx.out.println("Edit its instructions and permissions there, then run 'buildcli' and chat with " + name + ".");
             if (!global) {
-                ctx.out.println("Note: project agents ask for your approval the next time a team using them runs.");
+                ctx.out.println("Note: BuildCLI asks you to approve a new or changed project agent before it first runs.");
             }
             return 0;
         }

@@ -7,8 +7,9 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.IFactory;
 
 /** The {@code buildcli} command. Without arguments on a terminal it opens the TUI; otherwise it prints the help. */
-@Command(name = "buildcli", mixinStandardHelpOptions = true, versionProvider = BuildCli.Version.class,
-        description = "Your local AI engineering team: a runtime that executes a configurable team of agents.",
+// INHERIT gives every subcommand --help and --version too, e.g. "buildcli agent create --help"
+@Command(name = "buildcli", mixinStandardHelpOptions = true, scope = CommandLine.ScopeType.INHERIT, versionProvider = BuildCli.Version.class,
+        description = "Your local AI engineering team: agents you chat with, that work on your project with the permissions you give them.",
         subcommands = {InitCommand.class, AgentCommand.class, TeamCommand.class, RunCommand.class, RunsCommand.class,
                 TaskCommand.class, UsageCommand.class, DoctorCommand.class, ConfigCommand.class, ProviderCommand.class, DevCommands.BenchCmd.class,
                 DevCommands.DemoCmd.class})
