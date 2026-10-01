@@ -1,5 +1,6 @@
 package dev.buildcli.infrastructure.tui;
 
+import static dev.buildcli.application.I18n.t;
 import static dev.buildcli.infrastructure.tui.Draw.clean;
 import static dev.buildcli.infrastructure.tui.Draw.fill;
 import static dev.buildcli.infrastructure.tui.Draw.put;
@@ -103,8 +104,8 @@ final class ViewerPane {
             }
             put(buf, x, y, l, s, r.right() - 1);
         }
-        String foot = lines.isEmpty() ? "empty" : (scroll + 1) + "–" + Math.min(lines.size(), scroll + height) + " of " + lines.size()
-                + "   ↑↓ PgUp PgDn scroll" + (view.diff() ? " · [ ] previous/next file" : "") + " · Esc close";
+        String foot = lines.isEmpty() ? t("empty") : t("{0}–{1} of {2}", scroll + 1, Math.min(lines.size(), scroll + height), lines.size())
+                + "   " + t("↑↓ PgUp PgDn scroll") + (view.diff() ? " · " + t("[ ] previous/next file") : "") + " · " + t("Esc close");
         fill(buf, new Rect(r.x(), r.bottom() - 1, r.width(), 1), bar);
         put(buf, r.x() + 2, r.bottom() - 1, foot, st(Theme.DIM, Theme.SIDEBAR), r.right());
         if (view.changes() >= 0) {
@@ -113,13 +114,16 @@ final class ViewerPane {
             fill(buf, b, st(Theme.TEXT, Theme.PANEL));
             int x = r.x() + 2;
             if (view.confirmUndo()) {
-                x += put(buf, x, b.y(), "Files you or another agent changed since are left alone.  ", st(Theme.DIM, Theme.PANEL), r.right());
-                x += put(buf, x, b.y(), " Undo  Y ", st(Theme.TEXT, Theme.DANGER).bold(), r.right());
-                hit.accept(new Rect(x - 9, b.y(), 9, 1), () -> undoChanges(id));
-                x += put(buf, x + 1, b.y(), " Cancel  N ", st(Theme.TEXT, Theme.FIELD), r.right()) + 1;
-                hit.accept(new Rect(x - 11, b.y(), 11, 1), () -> view = null);
+                x += put(buf, x, b.y(), t("Files you or another agent changed since are left alone.") + "  ", st(Theme.DIM, Theme.PANEL), r.right());
+                String undo = " " + t("Undo") + "  Y ";
+                int uw = put(buf, x, b.y(), undo, st(Theme.TEXT, Theme.DANGER).bold(), r.right());
+                hit.accept(new Rect(x, b.y(), uw, 1), () -> undoChanges(id));
+                x += uw;
+                String cancel = " " + t("Cancel") + "  N ";
+                int cw = put(buf, x + 1, b.y(), cancel, st(Theme.TEXT, Theme.FIELD), r.right());
+                hit.accept(new Rect(x + 1, b.y(), cw, 1), () -> view = null);
             } else if (session.canUndo() && !undone(id)) {
-                int w = put(buf, x, b.y(), " Undo these changes  U ", st(Theme.TEXT, Theme.FIELD), r.right());
+                int w = put(buf, x, b.y(), " " + t("Undo these changes") + "  U ", st(Theme.TEXT, Theme.FIELD), r.right());
                 hit.accept(new Rect(x, b.y(), w, 1), () -> review.accept(id, true));
             }
             height = Math.max(1, height - 1);

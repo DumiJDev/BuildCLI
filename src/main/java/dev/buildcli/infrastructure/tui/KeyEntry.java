@@ -1,5 +1,6 @@
 package dev.buildcli.infrastructure.tui;
 
+import static dev.buildcli.application.I18n.t;
 import static dev.buildcli.infrastructure.tui.Draw.fill;
 import static dev.buildcli.infrastructure.tui.Draw.putSafe;
 import static dev.buildcli.infrastructure.tui.Draw.st;
@@ -69,7 +70,7 @@ final class KeyEntry {
         }
         String key = FileCredentialStore.clean(input.text());
         if (!FileCredentialStore.valid(key)) {
-            message = key.isEmpty() ? "Paste the key first." : "That does not look like a key: it has spaces or line breaks.";
+            message = key.isEmpty() ? t("Paste the key first.") : t("That does not look like a key: it has spaces or line breaks.");
             color = Theme.RED;
             return;
         }
@@ -79,7 +80,7 @@ final class KeyEntry {
         }
         saveAnyway = null;
         checking = key;
-        message = "Checking the key with " + provider.name() + "…";
+        message = t("Checking the key with {0}…", provider.name());
         color = Theme.DIM;
         check = services.checkKey(provider.name(), key);
     }
@@ -89,15 +90,15 @@ final class KeyEntry {
         if (check != null && check.isDone() && active) {
             ModelCatalog.Result r = check.getNow(null);
             check = null;
-            String problem = r == null ? "no answer" : r.problem();
+            String problem = r == null ? t("no answer") : r.problem();
             if (problem == null) {
                 save(checking);
             } else if (problem.startsWith("HTTP 401") || problem.startsWith("HTTP 403")) {
-                message = provider.name() + " did not accept that key (" + problem + "). Check it and paste it again.";
+                message = t("{0} did not accept that key ({1}). Check it and paste it again.", provider.name(), problem);
                 color = Theme.RED;
                 input.clear();
             } else {
-                message = "Could not check it: " + problem + ". Press Enter again to save it anyway, or paste a different one.";
+                message = t("Could not check it: {0}. Press Enter again to save it anyway, or paste a different one.", problem);
                 color = Theme.AMBER;
                 saveAnyway = checking;
             }
@@ -108,7 +109,7 @@ final class KeyEntry {
         try {
             services.saveKey(provider.name(), key);
         } catch (Exception e) {
-            message = "Could not save it: " + e.getMessage();
+            message = t("Could not save it: {0}", e.getMessage());
             color = Theme.RED;
             return;
         }
@@ -159,16 +160,16 @@ final class KeyEntry {
     }
 
     void draw(Buffer buf, Rect b) {
-        putSafe(buf, b.x(), b.y(), "Your " + provider.name() + " key", st(Theme.TEXT, Theme.BG).bold(), b.right());
+        putSafe(buf, b.x(), b.y(), t("Your {0} key", provider.name()), st(Theme.TEXT, Theme.BG).bold(), b.right());
         String page = ProviderRegistry.keyPage(provider.name());
         int y = b.y() + 1;
-        putSafe(buf, b.x(), y, page != null ? "Create one at " + page : "Get one from " + provider.url(), st(Theme.DIM, Theme.BG), b.right());
+        putSafe(buf, b.x(), y, page != null ? t("Create one at {0}", page) : t("Get one from {0}", provider.url()), st(Theme.DIM, Theme.BG), b.right());
         Rect field = new Rect(b.x(), b.y() + 3, b.width(), 1);
         fill(buf, field, st(Theme.TEXT, Theme.FIELD));
         String shown = masked(input.text());
         int avail = field.width() - 3;
         String clipped = CharWidth.of(shown) > avail ? CharWidth.substringByWidthFromEnd(shown, avail) : shown;
-        putSafe(buf, field.x() + 1, field.y(), shown.isEmpty() ? "Paste the key here▏" : clipped + "▏",
+        putSafe(buf, field.x() + 1, field.y(), shown.isEmpty() ? t("Paste the key here") + "▏" : clipped + "▏",
                 st(shown.isEmpty() ? Theme.DIM : Theme.TEXT, Theme.FIELD), field.right());
         int row = b.y() + 5;
         if (!message.isEmpty()) {
@@ -177,13 +178,12 @@ final class KeyEntry {
             }
             row++;
         }
-        String where = services.keyFile().isEmpty() ? "on this computer" : "in " + services.keyFile();
-        for (String line : Wrap.lines("It is saved only on this computer, " + where + ", readable by your account only. It is never put in a project, "
-                + "and it is sent nowhere except to " + provider.name() + " (" + provider.url() + ").", b.width())) {
+        String where = services.keyFile().isEmpty() ? t("on this computer") : t("in {0}", services.keyFile());
+        for (String line : Wrap.lines(t("It is saved only on this computer, {0}, readable by your account only. It is never put in a project, and it is sent nowhere except to {1} ({2}).", where, provider.name(), provider.url()), b.width())) {
             putSafe(buf, b.x(), row++, line, st(Theme.FAINT, Theme.BG), b.right());
         }
         row++;
-        putSafe(buf, b.x(), row, "You can also set " + provider.keyEnv() + " in your environment instead; that always wins over a saved key.",
+        putSafe(buf, b.x(), row, t("You can also set {0} in your environment instead; that always wins over a saved key.", provider.keyEnv()),
                 st(Theme.FAINT, Theme.BG), b.right());
     }
 }

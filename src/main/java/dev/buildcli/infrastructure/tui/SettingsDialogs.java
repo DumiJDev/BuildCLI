@@ -1,5 +1,6 @@
 package dev.buildcli.infrastructure.tui;
 
+import static dev.buildcli.application.I18n.t;
 import static dev.buildcli.infrastructure.tui.Draw.fill;
 import static dev.buildcli.infrastructure.tui.Draw.putSafe;
 import static dev.buildcli.infrastructure.tui.Draw.st;
@@ -143,7 +144,7 @@ final class SettingsDialogs {
         int avail = field.width() - 2;
         String shown = CharWidth.of(t) > avail ? CharWidth.substringByWidthFromEnd(t, avail) : t;
         putSafe(buf, field.x() + 1, field.y(), shown + "▏", st(Theme.TEXT, Theme.FIELD), field.right());
-        putSafe(buf, b.x() + 2, b.bottom() - 2, prompt.back() == null ? "Enter next · Esc cancel" : "Enter next · Esc back", st(Theme.DIM, Theme.DIALOG), b.right() - 2);
+        putSafe(buf, b.x() + 2, b.bottom() - 2, prompt.back() == null ? t("Enter next · Esc cancel") : t("Enter next · Esc back"), st(Theme.DIM, Theme.DIALOG), b.right() - 2);
     }
 
     private void drawChecklist(Buffer buf, Rect r) {
@@ -164,20 +165,20 @@ final class SettingsDialogs {
                 toggle(checklist, opt);
             });
         }
-        putSafe(buf, b.x() + 2, b.bottom() - 2, "↑↓ move · Space tick · Enter next · Esc back", st(Theme.DIM, Theme.DIALOG), b.right() - 2);
+        putSafe(buf, b.x() + 2, b.bottom() - 2, t("↑↓ move · Space tick · Enter next · Esc back"), st(Theme.DIM, Theme.DIALOG), b.right() - 2);
     }
 
     private void drawConfirm(Buffer buf, Rect r) {
         List<String> lines = Wrap.lines(confirm.text(), 60);
         Rect b = box(r, 66, lines.size() + 5);
-        frame(buf, b, "Are you sure?");
+        frame(buf, b, t("Are you sure?"));
         for (int i = 0; i < lines.size(); i++) {
             putSafe(buf, b.x() + 2, b.y() + 1 + i, lines.get(i), st(Theme.TEXT, Theme.DIALOG), b.right() - 2);
         }
         int y = b.bottom() - 2;
-        int w1 = putSafe(buf, b.x() + 2, y, " Yes  Y ", st(Theme.TEXT, Theme.DANGER).bold(), b.right());
+        int w1 = putSafe(buf, b.x() + 2, y, " " + t("Yes") + "  Y ", st(Theme.TEXT, Theme.DANGER).bold(), b.right());
         hit.accept(new Rect(b.x() + 2, y, w1, 1), this::confirmYes);
-        int w2 = putSafe(buf, b.x() + 4 + w1, y, " No  N ", st(Theme.TEXT, Theme.FIELD), b.right());
+        int w2 = putSafe(buf, b.x() + 4 + w1, y, " " + t("No") + "  N ", st(Theme.TEXT, Theme.FIELD), b.right());
         hit.accept(new Rect(b.x() + 4 + w1, y, w2, 1), () -> confirm = null);
     }
 
@@ -193,7 +194,7 @@ final class SettingsDialogs {
         Rect field = new Rect(b.x() + 2, b.y() + 1, b.width() - 4, 1);
         fill(buf, field, st(Theme.TEXT, Theme.FIELD));
         String f = picker.filter.text();
-        putSafe(buf, field.x() + 1, field.y(), f.isEmpty() ? "Search models, or type provider:model and press Enter▏" : f + "▏",
+        putSafe(buf, field.x() + 1, field.y(), f.isEmpty() ? t("Search models, or type provider:model and press Enter") + "▏" : f + "▏",
                 st(f.isEmpty() ? Theme.DIM : Theme.TEXT, Theme.FIELD), field.right());
         List<ModelCatalog.Model> items = pickerItems();
         int rows = b.height() - 5;
@@ -227,9 +228,9 @@ final class SettingsDialogs {
                 pickSelected();
             });
         }
-        String info = loading > 0 ? "Loading models from " + loading + " provider(s)…"
-                : items.size() + " models" + (problems.isEmpty() ? "" : " · " + String.join(" · ", problems));
-        putSafe(buf, b.x() + 2, b.bottom() - 2, info + "   ·  ↑↓ Enter pick · Esc cancel", st(Theme.DIM, Theme.DIALOG), b.right() - 2);
+        String info = loading > 0 ? t("Loading models from {0} provider(s)…", loading)
+                : t("{0} models", items.size()) + (problems.isEmpty() ? "" : " · " + String.join(" · ", problems));
+        putSafe(buf, b.x() + 2, b.bottom() - 2, info + "   ·  " + t("↑↓ Enter pick · Esc cancel"), st(Theme.DIM, Theme.DIALOG), b.right() - 2);
     }
 
     private List<ModelCatalog.Model> pickerItems() {
@@ -255,7 +256,7 @@ final class SettingsDialogs {
                 && !items.get(0).ref().toLowerCase(Locale.ROOT).contains(typed.toLowerCase(Locale.ROOT)))
                 ? typed : items.isEmpty() ? null : items.get(picker.index).ref();
         if (choice == null) {
-            fail.accept("Type provider:model, e.g. openrouter:openrouter/free");
+            fail.accept(t("Type provider:model, e.g. openrouter:openrouter/free"));
             return;
         }
         Consumer<String> onPick = picker.onPick;
