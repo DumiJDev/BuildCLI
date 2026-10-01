@@ -62,16 +62,32 @@ final class Styled {
     static List<List<Span>> lines(String text, int width, Style base, Style bold, Style code, java.util.function.Consumer<String> onCopy) {
         List<List<Span>> out = new ArrayList<>();
         boolean fenced = false;
-        List<String> blocks = onCopy == null ? List.of() : codeBlocks(text);
+        List<String> blocks = codeBlocks(text);
         int block = 0;
+        List<Style[]> coloured = null;
+        int codeLine = 0;
+        int blockStart = -1;
         for (String raw : text.replace("\t", "    ").split("\n", -1)) {
             String trimmed = raw.strip();
             if (trimmed.startsWith("```")) {
                 fenced = !fenced;
-                if (fenced && onCopy != null) {
-                    String label = trimmed.length() > 3 ? trimmed.substring(3).strip() : "code";
+                if (!fenced) {
+                    padBlock(out, blockStart, code);
+                    blockStart = -1;
+                } else {
+                    blockStart = out.size();
+                }
+                if (fenced) {
                     String body = block < blocks.size() ? blocks.get(block) : "";
                     block++;
+                    coloured = CodeHighlight.styles(body, trimmed.substring(3), code);
+                    codeLine = 0;
+                } else {
+                    coloured = null;
+                }
+                if (fenced && onCopy != null) {
+                    String label = trimmed.length() > 3 ? trimmed.substring(3).strip() : "code";
+                    String body = blocks.get(Math.min(block, blocks.size()) - 1);
                     out.add(List.of(new Span(label + "  ", code), new Span(" ⧉ copy ", code.bold(), () -> onCopy.accept(body))));
                 } else if (fenced && trimmed.length() > 3) {
                     out.add(List.of(new Span(trimmed.substring(3).strip(), code)));
@@ -82,8 +98,14 @@ final class Styled {
             Style[] styles;
             if (fenced) {
                 plain = raw;
-                styles = new Style[raw.length()];
-                java.util.Arrays.fill(styles, code);
+                styles = coloured != null && codeLine < coloured.size() && coloured.get(codeLine).length == raw.length()
+                        ? coloured.get(codeLine) : new Style[raw.length()];
+                codeLine++;
+                for (int i = 0; i < styles.length; i++) {
+                    if (styles[i] == null) {
+                        styles[i] = code;
+                    }
+                }
             } else {
                 String line = raw;
                 Style lineBase = base;
@@ -106,10 +128,29 @@ final class Styled {
                 out.add(slice(plain, styles, seg.start(), stripEnd(plain, seg.start(), seg.end())));
             }
         }
+        if (blockStart >= 0) {
+            padBlock(out, blockStart, code); // a block still streaming
+        }
         if (out.isEmpty()) {
             out.add(List.of());
         }
         return out;
+    }
+
+    /** Lines of a code block get the same width, so its background is a rectangle and not a ragged edge. */
+    private static void padBlock(List<List<Span>> out, int from, Style code) {
+        int widest = 0;
+        for (int i = from; i < out.size(); i++) {
+            widest = Math.max(widest, width(out.get(i)));
+        }
+        for (int i = from; i < out.size(); i++) {
+            int missing = widest - width(out.get(i));
+            if (missing > 0) {
+                List<Span> padded = new ArrayList<>(out.get(i));
+                padded.add(new Span(" ".repeat(missing), code));
+                out.set(i, padded);
+            }
+        }
     }
 
     private static int stripEnd(String s, int start, int end) {

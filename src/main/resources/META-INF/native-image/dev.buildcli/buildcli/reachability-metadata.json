@@ -401,6 +401,9 @@
           "name": "approve"
         },
         {
+          "name": "groupName"
+        },
+        {
           "name": "headless"
         },
         {
@@ -880,6 +883,38 @@
       ]
     },
     {
+      "type": "dev.langchain4j.model.openai.internal.chat.AssistantMessage",
+      "fields": [
+        {
+          "name": "content"
+        },
+        {
+          "name": "functionCall"
+        },
+        {
+          "name": "name"
+        },
+        {
+          "name": "reasoningContent"
+        },
+        {
+          "name": "refusal"
+        },
+        {
+          "name": "role"
+        },
+        {
+          "name": "toolCalls"
+        }
+      ],
+      "methods": [
+        {
+          "name": "customParameters",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
       "type": "dev.langchain4j.model.openai.internal.chat.AssistantMessage$Builder",
       "methods": [
         {
@@ -920,6 +955,12 @@
         {
           "name": "build",
           "parameterTypes": []
+        },
+        {
+          "name": "delta",
+          "parameterTypes": [
+            "dev.langchain4j.model.openai.internal.chat.Delta"
+          ]
         },
         {
           "name": "finishReason",
@@ -1095,10 +1136,94 @@
       ]
     },
     {
-      "type": "dev.langchain4j.model.openai.internal.chat.Delta$Builder"
+      "type": "dev.langchain4j.model.openai.internal.chat.Delta$Builder",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        },
+        {
+          "name": "build",
+          "parameterTypes": []
+        },
+        {
+          "name": "content",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        },
+        {
+          "name": "reasoningContent",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        },
+        {
+          "name": "role",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        },
+        {
+          "name": "toolCalls",
+          "parameterTypes": [
+            "java.util.List"
+          ]
+        }
+      ]
     },
     {
-      "type": "dev.langchain4j.model.openai.internal.chat.FunctionCall$Builder"
+      "type": "dev.langchain4j.model.openai.internal.chat.Function",
+      "fields": [
+        {
+          "name": "description"
+        },
+        {
+          "name": "name"
+        },
+        {
+          "name": "parameters"
+        },
+        {
+          "name": "strict"
+        }
+      ]
+    },
+    {
+      "type": "dev.langchain4j.model.openai.internal.chat.FunctionCall",
+      "fields": [
+        {
+          "name": "arguments"
+        },
+        {
+          "name": "name"
+        }
+      ]
+    },
+    {
+      "type": "dev.langchain4j.model.openai.internal.chat.FunctionCall$Builder",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        },
+        {
+          "name": "arguments",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        },
+        {
+          "name": "build",
+          "parameterTypes": []
+        },
+        {
+          "name": "name",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        }
+      ]
     },
     {
       "type": "dev.langchain4j.model.openai.internal.chat.LogProb$Builder"
@@ -1113,7 +1238,100 @@
       "type": "dev.langchain4j.model.openai.internal.chat.Role"
     },
     {
-      "type": "dev.langchain4j.model.openai.internal.chat.ToolCall$Builder"
+      "type": "dev.langchain4j.model.openai.internal.chat.SystemMessage",
+      "fields": [
+        {
+          "name": "content"
+        },
+        {
+          "name": "name"
+        },
+        {
+          "name": "role"
+        }
+      ]
+    },
+    {
+      "type": "dev.langchain4j.model.openai.internal.chat.Tool",
+      "fields": [
+        {
+          "name": "function"
+        },
+        {
+          "name": "type"
+        }
+      ]
+    },
+    {
+      "type": "dev.langchain4j.model.openai.internal.chat.ToolCall",
+      "fields": [
+        {
+          "name": "function"
+        },
+        {
+          "name": "id"
+        },
+        {
+          "name": "index"
+        },
+        {
+          "name": "type"
+        }
+      ]
+    },
+    {
+      "type": "dev.langchain4j.model.openai.internal.chat.ToolCall$Builder",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        },
+        {
+          "name": "build",
+          "parameterTypes": []
+        },
+        {
+          "name": "function",
+          "parameterTypes": [
+            "dev.langchain4j.model.openai.internal.chat.FunctionCall"
+          ]
+        },
+        {
+          "name": "id",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        },
+        {
+          "name": "index",
+          "parameterTypes": [
+            "java.lang.Integer"
+          ]
+        },
+        {
+          "name": "type",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "dev.langchain4j.model.openai.internal.chat.ToolMessage",
+      "fields": [
+        {
+          "name": "content"
+        },
+        {
+          "name": "role"
+        },
+        {
+          "name": "toolCallId"
+        }
+      ]
+    },
+    {
+      "type": "dev.langchain4j.model.openai.internal.chat.ToolType"
     },
     {
       "type": "dev.langchain4j.model.openai.internal.chat.UserMessage",
@@ -1168,7 +1386,12 @@
       ]
     },
     {
-      "type": "dev.langchain4j.model.openai.internal.shared.StreamOptions"
+      "type": "dev.langchain4j.model.openai.internal.shared.StreamOptions",
+      "fields": [
+        {
+          "name": "includeUsage"
+        }
+      ]
     },
     {
       "type": "dev.langchain4j.model.openai.internal.shared.Usage$Builder",
@@ -1272,6 +1495,21 @@
     },
     {
       "type": "java.lang.Object[]"
+    },
+    {
+      "type": "java.lang.ProcessBuilder$RedirectPipeImpl",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "fd"
+        }
+      ],
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
     },
     {
       "type": "java.lang.String[]"
@@ -1426,6 +1664,9 @@
     },
     {
       "type": "java.util.RandomAccess"
+    },
+    {
+      "type": "org.h2.Driver"
     },
     {
       "type": "org.jline.nativ.CLibrary",
@@ -2130,6 +2371,9 @@
       "glob": "META-INF/services/dev.langchain4j.model.openai.spi.OpenAiChatModelBuilderFactory"
     },
     {
+      "glob": "META-INF/services/dev.langchain4j.model.openai.spi.OpenAiStreamingChatModelBuilderFactory"
+    },
+    {
       "glob": "META-INF/services/dev.langchain4j.spi.json.ProviderJsonCodecFactory"
     },
     {
@@ -2187,6 +2431,9 @@
       "glob": "dev/tamboui/tui/bindings/vscode.properties"
     },
     {
+      "glob": "i18n/pt.tsv"
+    },
+    {
       "glob": "org/jline/nativ/Linux/x86_64/libjlinenative.so"
     },
     {
@@ -2214,9 +2461,6 @@
     {
       "module": "jdk.jfr",
       "glob": "jdk/jfr/internal/types/metadata.bin"
-    },
-    {
-      "glob": "i18n/pt.tsv"
     }
   ]
 }

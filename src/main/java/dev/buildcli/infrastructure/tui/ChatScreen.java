@@ -424,9 +424,22 @@ final class ChatScreen implements Element {
         this.copier = copier;
     }
 
+    /** For the app: how to ask for a frame when something changes that the session does not know about. */
+    void redraw(Runnable redraw) {
+        this.redraw = redraw;
+    }
+
+    private volatile Runnable redraw = () -> { };
+
+    /** A message at the bottom of the chat that goes away by itself. */
+    void notice(String text) {
+        say(text);
+    }
+
     private void say(String text) {
         toast = text;
         toastUntil = System.currentTimeMillis() + 3_000; // animating() asks for the redraws until it expires
+        redraw.run();
     }
 
     /** Copies on another thread, because a clipboard tool can take a moment, and says how it went. */
