@@ -91,7 +91,9 @@ final class DevCommands {
             team.agents().forEach(a -> models.put(a.name(), fake ? "scripted" : m.provider + "/" + m.model));
             var workspaceLock = new dev.buildcli.application.tools.WorkspaceLock();
             var session = new dev.buildcli.application.ChatSession(team, (chatTeam, request, ui, cancelled, dispatcher) -> {
-                LlmGateway model = fake ? demoModel(script(escalate && request.target() == null), request) : llm;
+                // a message to the group goes to its admin, so "for the lead" means no target or the lead itself
+                boolean forLead = request.target() == null || request.target().equals(chatTeam.lead());
+                LlmGateway model = fake ? demoModel(script(escalate && forLead), request, forLead) : llm;
                 try (SqliteRunStore store = new SqliteRunStore(SqliteRunStore.IN_MEMORY)) {
                     Events events = new Events(store, "demo", ui);
                     Orchestrator o = new Orchestrator(chatTeam, model, new ToolRuntime(workspace, ui, events, workspaceLock), ui, events);
@@ -111,8 +113,8 @@ final class DevCommands {
          * The scripted scenario for team requests about the greeting; a friendly canned answer otherwise, so the chat can be
          * tried without a model. Replies are streamed a few characters at a time, like a real model, so typing shows.
          */
-        static LlmGateway demoModel(ScriptedGateway scenario, Orchestrator.Request request) {
-            boolean scripted = request.target() == null && request.text().toLowerCase(java.util.Locale.ROOT).contains("greeting");
+        static LlmGateway demoModel(ScriptedGateway scenario, Orchestrator.Request request, boolean forLead) {
+            boolean scripted = forLead && request.text().toLowerCase(java.util.Locale.ROOT).contains("greeting");
             return new LlmGateway() {
                 @Override
                 public dev.buildcli.ports.LlmReply chat(dev.buildcli.domain.Agent agent, List<dev.buildcli.ports.LlmMessage> messages,

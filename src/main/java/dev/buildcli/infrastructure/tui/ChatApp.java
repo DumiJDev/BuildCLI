@@ -13,6 +13,8 @@ public final class ChatApp extends ToolkitApp {
     private final ChatSession session;
     private final ChatScreen screen;
     private final boolean mouse;
+    private final SettingsServices services;
+    private final Attention attention = new Attention();
 
     public ChatApp(ChatSession session, Map<String, String> models, Path cwd, boolean mouse) {
         this(session, models, cwd, mouse, ChatScreen.basicServices(session, models));
@@ -21,6 +23,7 @@ public final class ChatApp extends ToolkitApp {
     public ChatApp(ChatSession session, Map<String, String> models, Path cwd, boolean mouse, SettingsServices services) {
         this.session = session;
         this.mouse = mouse;
+        this.services = services;
         this.screen = new ChatScreen(session, models, cwd, this::leave, services);
     }
 
@@ -57,7 +60,32 @@ public final class ChatApp extends ToolkitApp {
                 long ms = (System.nanoTime() - start) / 1_000_000;
                 runner().tuiRunner().dispatch(dev.tamboui.tui.event.TickEvent.of(ms, Duration.ofMillis(ms)));
             }
+            watchAttention(start);
         }, Duration.ofMillis(80));
+    }
+
+    /** The window title and the bell, written on the thread that draws so they cannot cut a frame in two. */
+    private void watchAttention(long start) {
+        var pending = session.pending();
+        Attention.Signal signal = attention.update((System.nanoTime() - start) / 1_000_000, session.pendingCount(),
+                pending == null ? null : pending.agent(), session.busy(), services.settings().flag(dev.buildcli.application.Settings.BELL));
+        if (signal.title() == null && !signal.bell()) {
+            return;
+        }
+        runner().runOnRenderThread(() -> {
+            if (signal.title() != null) {
+                setWindowTitle(signal.title());
+            }
+            if (signal.bell()) {
+                var backend = runner().tuiRunner().backend();
+                try {
+                    backend.writeRaw("\u0007");
+                    backend.flush();
+                } catch (java.io.IOException e) {
+                    // a failed bell is not worth interrupting the chat for
+                }
+            }
+        });
     }
 
     @Override
