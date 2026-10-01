@@ -35,7 +35,8 @@ BuildCLI is rebuilt from scratch as a local runtime for teams of AI agents. The 
 
 ### Added
 - **Code blocks are coloured by language** (TamboUI's highlighter: Java, JSON, YAML, shell, Python, JS/TS, SQL, Go, Rust, XML/HTML),
-  with a palette per theme, in answers while they stream and in files opened with `/open`. Unknown languages stay plain.
+  with a palette per theme, in answers while they stream and in files opened with `/open`. Unknown languages stay plain. A code
+  block is a rectangle: its lines are padded to the widest one instead of ending where each line of text ends.
 - **Your own colours in `~/.buildcli/theme.css`** (`$bg: #101820;`, `$light-bg: …`, `$agent-1: …`), read with TamboUI's CSS
   parser. A mistake in the file is shown on the first screen and skipped.
 - **English and Portuguese** (`ui.language`: auto, en, pt). `I18n.t("English text")` looks the Portuguese up in `i18n/pt.tsv` and falls back to English, so a missing text still shows; `I18nTest` checks that settings and commands are translated and that placeholders match. Tests run with `-Duser.language=en`.

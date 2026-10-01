@@ -44,7 +44,7 @@ class StyledCodeBlocksTest {
     void withoutACopyHandlerTheOutputIsAsBefore() {
         var lines = Styled.lines("```cobol\nMOVE A\n```", 40, Style.EMPTY, Style.EMPTY.bold(), Style.EMPTY);
         assertEquals("cobol", lines.get(0).get(0).text());
-        assertEquals(1, lines.get(0).size(), "no button");
+        assertTrue(lines.get(0).stream().noneMatch(sp -> sp.action() != null || sp.text().contains("copy")), "no button");
     }
 
     @Test
