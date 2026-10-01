@@ -150,8 +150,6 @@ public final class ChatSession implements UserInterface {
     private final Executor executor;
     private final ChatStore store;
     private final MessageStore transcript;
-    private volatile java.nio.file.Path workspace;
-    private volatile dev.buildcli.application.tools.WorkspaceLock workspaceLock;
     private final java.util.function.IntSupplier agentHops;
     private final ChatDirectory directory;
     /** For a user message sent to several agents: how many have not finished, and whether one failed. */
@@ -164,6 +162,7 @@ public final class ChatSession implements UserInterface {
     private final List<Run> runs = new CopyOnWriteArrayList<>();
     private final Approvals approvals;
     private final AgentFeed feed;
+    private final ChangeCards changeCards;
     /** Goes up on every change a screen could show, so a front end redraws only when something changed. */
     private final AtomicLong version = new AtomicLong();
     private volatile boolean closed;
@@ -200,6 +199,7 @@ public final class ChatSession implements UserInterface {
         this.store = store;
         this.agentHops = agentHops;
         this.approvals = new Approvals(this::touch, state::put);
+        this.changeCards = new ChangeCards(transcript, this::note);
         this.feed = new AgentFeed(transcript, state, this::touch, this::threadOf, this::threadNow, this::system);
         this.directory = new ChatDirectory(contacts, groups, store, this::touch, this::error, this::note);
         for (Agent a : directory.contacts()) {
@@ -702,30 +702,17 @@ public final class ChatSession implements UserInterface {
                     + (run.messageId > 0 ? "Your message is kept: press Retry or type /retry to send it again." : ""));
         }
         // a stopped or failed run may still have written files: they are shown and can be undone all the same
-        postChanges(run);
+        changeCards.post(run);
         finishRun(run, ok);
-    }
-
-    private void postChanges(Run run) {
-        if (run.changes.isEmpty()) {
-            return;
-        }
-        List<dev.buildcli.domain.FileChange> files = List.copyOf(run.changes);
-        List<String> paths = dev.buildcli.application.tools.FileChanges.net(files).stream().map(dev.buildcli.application.tools.FileChanges.Net::path).toList();
-        long id = transcript.nextId();
-        transcript.keepChanges(id, files);
-        add(new Message(id, Kind.CHANGES, run.me, "Changed " + paths.size() + (paths.size() == 1 ? " file: " : " files: ") + String.join(", ", paths),
-                Instant.now(), State.DONE, List.of(), run.thread));
     }
 
     /** Where undo writes, and the lock the agents share; without it undo is not offered. */
     public void workspace(java.nio.file.Path root, dev.buildcli.application.tools.WorkspaceLock lock) {
-        this.workspace = root;
-        this.workspaceLock = lock;
+        changeCards.workspace(root, lock);
     }
 
     public boolean canUndo() {
-        return workspace != null;
+        return changeCards.canUndo();
     }
 
     /** The files behind a changes card, oldest write first; empty if they were not kept. */
@@ -738,44 +725,12 @@ public final class ChatSession implements UserInterface {
      * conversation that it was undone. @return what happened, in one line (also written in the chat)
      */
     public String undo(long id) {
-        Message m = find(id);
-        if (m == null || m.kind() != Kind.CHANGES) {
-            return "Nothing to undo.";
-        }
-        if (m.state() == State.UNDONE) {
-            return "Already undone.";
-        }
-        if (workspace == null) {
-            return "Undo is not available here.";
-        }
-        List<dev.buildcli.domain.FileChange> files = changes(id);
-        if (files.isEmpty()) {
-            return "These changes were not kept, so they cannot be undone.";
-        }
-        String text;
-        try {
-            var r = dev.buildcli.application.tools.FileChanges.undo(workspace, workspaceLock, files);
-            if (!r.restored().isEmpty() || !r.deleted().isEmpty()) {
-                replace(id, State.UNDONE);
-            }
-            text = "Undid " + m.author() + "'s changes: " + r.summary() + ".";
-        } catch (Exception e) {
-            text = "Undo failed: " + e.getMessage();
-        }
-        note(m.thread(), text);
-        return text;
+        return changeCards.undo(id);
     }
 
     /** The newest changes card of a chat that can still be undone, or -1. */
     public long lastChanges(String thread) {
-        List<Message> all = messages();
-        for (int i = all.size() - 1; i >= 0; i--) {
-            Message m = all.get(i);
-            if (m.kind() == Kind.CHANGES && m.thread().equals(thread) && m.state() == State.DONE) {
-                return m.id();
-            }
-        }
-        return -1;
+        return changeCards.last(thread);
     }
 
     /** A user message sent to several agents is done when all have answered, and failed if any failed. */
