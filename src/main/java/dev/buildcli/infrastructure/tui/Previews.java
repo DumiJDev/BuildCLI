@@ -35,6 +35,15 @@ final class Previews {
         System.setProperty("java.awt.headless", "true");
     }
 
+    /**
+     * True in a GraalVM native executable. Decoding images and audio needs the JDK's desktop module (AWT, ImageIO, Java
+     * Sound), which a native executable does not have: calling it there aborts the whole process, not just the preview.
+     * The attachment is still sent to the model; only its thumbnail or waveform is left out.
+     */
+    static boolean nativeExecutable() {
+        return System.getProperty("org.graalvm.nativeimage.imagecode") != null;
+    }
+
     /** The image once decoded, or null while it is loading or if it cannot be decoded. */
     static Image image(Attachment a) {
         var f = IMAGES.computeIfAbsent(key(a), k -> CompletableFuture.supplyAsync(() -> decode(a)));
@@ -58,6 +67,9 @@ final class Previews {
     }
 
     static Image decode(Attachment a) {
+        if (nativeExecutable()) {
+            return null;
+        }
         try (var in = Files.newInputStream(a.path())) {
             BufferedImage src = ImageIO.read(in);
             if (src == null || src.getWidth() <= 0 || src.getHeight() <= 0) {
@@ -99,6 +111,9 @@ final class Previews {
     }
 
     static Audio analyse(Attachment a) {
+        if (nativeExecutable()) {
+            return null;
+        }
         try (AudioInputStream in = AudioSystem.getAudioInputStream(a.path().toFile())) {
             AudioFormat fmt = in.getFormat();
             long frames = in.getFrameLength();
