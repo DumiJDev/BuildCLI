@@ -28,6 +28,10 @@ public final class Settings {
     public static final String AGENT_HOPS = "chat.agentMessages";
     public static final String BELL = "notify.bell";
     public static final String STORAGE = "storage.backend";
+    public static final String APPROVAL_MODE = "approvals.mode";
+    public static final String PROFILE_NAME = "profile.name";
+    public static final String PROFILE_ABOUT = "profile.about";
+    public static final String PROFILE_STYLE = "profile.style";
 
     public static final List<Definition> DEFINITIONS = List.of(
             new Definition(THEME, "Appearance", "Theme", "Colours of the chat", Type.CHOICE, List.of("dark", "light", "contrast"), "dark"),
@@ -42,10 +46,18 @@ public final class Settings {
                     + "when an agent asks for approval, and when a job of 15 seconds or more ends", Type.BOOLEAN, List.of(), "true"),
             new Definition(AGENT_HOPS, "General", "Agent-to-agent messages", "How many messages agents may send each other before "
                     + "they pause and wait for you", Type.NUMBER, List.of(), "6"),
+            new Definition(APPROVAL_MODE, "General", "Approval mode at start", "manual: ask before every write, command and commit. edits: "
+                    + "write files without asking (you can undo), still ask for commands. auto: ask for nothing; use it where nothing can be "
+                    + "lost. Change it while chatting with Shift+Tab or /mode", Type.CHOICE, List.of("manual", "edits", "auto"), "manual"),
             new Definition(STORAGE, "General", "State database", "Where runs, events and chat history are kept. sqlite: a file, readable "
                     + "from several terminals. h2: a file, several times faster, one BuildCLI at a time. memory: fastest, forgotten when "
                     + "BuildCLI closes. Each keeps its own history (takes effect on the next start; BUILDCLI_STORAGE overrides it)",
                     Type.CHOICE, List.of("sqlite", "h2", "memory"), "sqlite"),
+            new Definition(PROFILE_NAME, "About you", "Your name", "What the agents call you. Empty: they just say 'you'", Type.TEXT, List.of(), ""),
+            new Definition(PROFILE_ABOUT, "About you", "About you", "What the agents should know about you and your work: who you are, what "
+                    + "you do, what you care about. Kept on this computer; agents see it in every conversation", Type.TEXT, List.of(), ""),
+            new Definition(PROFILE_STYLE, "About you", "How to deal with you", "How you like to be talked to and helped: short or detailed, "
+                    + "formal or casual, your language, whether to ask before acting", Type.TEXT, List.of(), ""),
             new Definition(DEFAULT_MODEL, "Models", "Default model", "Used by agents that have no model of their own, e.g. "
                     + "openrouter:openrouter/free", Type.MODEL, List.of(), ""));
 

@@ -34,7 +34,7 @@ public final class FileChatStore implements ChatStore {
     public List<Chat> load() {
         List<Chat> out = new ArrayList<>();
         try {
-            if (!Files.isRegularFile(file) || Files.size(file) > 256 * 1024) {
+            if (!Files.isRegularFile(file) || Files.size(file) > 512 * 1024) {
                 return out;
             }
             JsonNode root = YAML.readTree(file.toFile());
@@ -45,8 +45,10 @@ public final class FileChatStore implements ChatStore {
                 g.path("admins").forEach(m -> admins.add(m.asText()));
                 String raw = g.path("id").asText("");
                 String id = raw.equals(MAIN_KEY) || raw.equals(OLD_MAIN_KEY) ? "" : raw;
+                List<String> files = new ArrayList<>();
+                g.path("files").forEach(f -> files.add(f.asText()));
                 if (!raw.isBlank()) {
-                    out.add(new Chat(id, g.path("name").asText(id), true, members, admins));
+                    out.add(new Chat(id, g.path("name").asText(id), true, members, admins, g.path("context").asText(""), files));
                 }
             }
         } catch (IOException | RuntimeException e) {
@@ -64,6 +66,12 @@ public final class FileChatStore implements ChatStore {
             m.put("name", c.name());
             m.put("members", c.members());
             m.put("admins", c.admins());
+            if (!c.context().isEmpty()) {
+                m.put("context", c.context());
+            }
+            if (!c.files().isEmpty()) {
+                m.put("files", c.files());
+            }
             list.add(m);
         }
         try {

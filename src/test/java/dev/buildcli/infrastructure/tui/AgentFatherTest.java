@@ -23,6 +23,7 @@ class AgentFatherTest {
     final List<String> created = new ArrayList<>();
     final List<String> deleted = new ArrayList<>();
     final List<String> edited = new ArrayList<>();
+    final List<String> sampled = new ArrayList<>();
 
     SettingsServices services(ChatSession session) {
         return new SettingsServices() {
@@ -66,6 +67,17 @@ class AgentFatherTest {
             @Override
             public void deleteAgent(String name) {
                 deleted.add(name);
+            }
+
+            @Override
+            public List<String> sampleTeams() {
+                return List.of("dev: Software team (...)", "writing: Writing desk (...)");
+            }
+
+            @Override
+            public List<String> createSampleAgents(String team) {
+                sampled.add(team);
+                return List.of("writer", "editor");
             }
 
             @Override
@@ -229,5 +241,19 @@ class AgentFatherTest {
         assertTrue(ChatScreenTest.render(screen, 130, 40).contains("cannot edit it"));
         say(screen, "/editagent nobody");
         assertTrue(ChatScreenTest.render(screen, 130, 40).contains("There is no agent called nobody"));
+    }
+
+    @Test
+    void samplesOffersTheTeamsAndAddsTheOneYouName() {
+        ChatScreen screen = screen(session());
+        openFather(screen);
+        say(screen, "/samples");
+        String out = ChatScreenTest.render(screen, 130, 40);
+        assertTrue(out.contains("Which team do you want?") && out.contains("writing: Writing desk"), out);
+        say(screen, "writing");
+        assertEquals(List.of("writing"), sampled);
+        assertTrue(ChatScreenTest.render(screen, 130, 40).contains("Added writer, editor"));
+        say(screen, "/samples dev");
+        assertEquals(List.of("writing", "dev"), sampled, "a team named with the command is added at once");
     }
 }

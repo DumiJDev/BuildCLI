@@ -46,7 +46,8 @@ final class ChatDirectory {
         for (Chat g : saved) {
             List<String> members = g.members().stream().filter(contacts::containsKey).distinct().toList();
             List<String> admins = g.admins().stream().filter(members::contains).toList();
-            groups.put(g.id(), new Chat(g.id(), g.name(), true, members, admins.isEmpty() && !members.isEmpty() ? List.of(members.get(0)) : admins));
+            groups.put(g.id(), new Chat(g.id(), g.name(), true, members, admins.isEmpty() && !members.isEmpty() ? List.of(members.get(0)) : admins,
+                    g.context(), g.files()));
         }
         store.loadBlocked().forEach((from, tos) -> blocked.put(from, new LinkedHashSet<>(tos)));
     }
@@ -211,7 +212,12 @@ final class ChatDirectory {
     }
 
     void renameGroup(String id, String name) {
-        changeGroup(id, g -> new Chat(g.id(), name.strip(), true, g.members(), g.admins()));
+        changeGroup(id, g -> new Chat(g.id(), name.strip(), true, g.members(), g.admins(), g.context(), g.files()));
+    }
+
+    /** Replaces the background the agents of this group are given: a text and the files to read. */
+    void setContext(String id, String text, List<String> files) {
+        changeGroup(id, g -> g.withContext(text.length() > Chat.MAX_CONTEXT ? text.substring(0, Chat.MAX_CONTEXT) : text, files));
     }
 
     /** @return false if there was no such group */

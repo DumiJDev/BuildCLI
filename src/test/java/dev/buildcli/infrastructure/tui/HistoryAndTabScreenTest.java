@@ -182,4 +182,65 @@ class HistoryAndTabScreenTest {
         screen.handleKeyEvent(dev.tamboui.tui.event.KeyEvent.ofKey(KeyCode.DOWN, dev.tamboui.tui.event.KeyModifiers.ALT), true);
         assertEquals("something else", screen.inputForTest().text());
     }
+
+    @Test
+    void clickingAChatInTheListLeavesTheSettingsScreen() {
+        var screen = screen();
+        screen.handleKeyEvent(dev.tamboui.tui.event.KeyEvent.ofKey(KeyCode.F2), true);
+        assertTrue(screen.settingsOpenForTest());
+        ChatScreenTest.render(screen, 130, 40);
+        screen.handleMouseEvent(dev.tamboui.tui.event.MouseEvent.press(dev.tamboui.tui.event.MouseButton.LEFT, 5, 7));
+        assertFalse(screen.settingsOpenForTest(), "the chat is shown, no Esc needed");
+    }
+
+    @Test
+    void aChatWithUnsentTextShowsItAsADraftInTheList() {
+        var screen = screen();
+        ChatScreenTest.type(screen, "ask about the build");
+        screen.handleKeyEvent(dev.tamboui.tui.event.KeyEvent.ofKey(KeyCode.DOWN, dev.tamboui.tui.event.KeyModifiers.ALT), true);
+        String out = ChatScreenTest.render(screen, 130, 40);
+        assertTrue(out.contains("Draft: ask about the build"), out);
+        screen.handleKeyEvent(dev.tamboui.tui.event.KeyEvent.ofKey(KeyCode.UP, dev.tamboui.tui.event.KeyModifiers.ALT), true);
+        ChatScreenTest.key(screen, KeyCode.ENTER);
+    }
+
+    @Test
+    void shiftTabAndSlashModeChangeHowMuchAgentsMayDo() {
+        var screen = screen();
+        var session = screen.sessionForTest();
+        assertEquals(dev.buildcli.application.ApprovalMode.MANUAL, session.approvalMode());
+        assertTrue(ChatScreenTest.render(screen, 130, 40).contains("manual ⇄"));
+        screen.handleKeyEvent(dev.tamboui.tui.event.KeyEvent.ofKey(KeyCode.TAB, dev.tamboui.tui.event.KeyModifiers.SHIFT), true);
+        assertEquals(dev.buildcli.application.ApprovalMode.EDITS, session.approvalMode());
+        ChatScreenTest.type(screen, "/mode auto");
+        ChatScreenTest.key(screen, KeyCode.ENTER);
+        assertEquals(dev.buildcli.application.ApprovalMode.AUTO, session.approvalMode());
+        assertTrue(ChatScreenTest.render(screen, 130, 40).contains("auto ⇄"));
+    }
+
+    @Test
+    void slashContextSetsShowsAndClearsAGroupsBackground() {
+        var screen = screen();
+        var session = screen.sessionForTest();
+        ChatScreenTest.type(screen, "/context Our readers are not technical.");
+        ChatScreenTest.key(screen, KeyCode.ENTER);
+        assertEquals("Our readers are not technical.", session.group(screen.selectedForTest()).context());
+        ChatScreenTest.type(screen, "/context");
+        ChatScreenTest.key(screen, KeyCode.ENTER);
+        assertTrue(ChatScreenTest.render(screen, 130, 40).contains("Our readers are not technical."));
+        ChatScreenTest.type(screen, "/context clear");
+        ChatScreenTest.key(screen, KeyCode.ENTER);
+        assertFalse(session.group(screen.selectedForTest()).hasContext());
+    }
+
+    @Test
+    void slashMeSetsWhatTheAgentsKnowAboutYou() {
+        var screen = screen();
+        ChatScreenTest.type(screen, "/me name Dumi");
+        ChatScreenTest.key(screen, KeyCode.ENTER);
+        ChatScreenTest.type(screen, "/me");
+        ChatScreenTest.key(screen, KeyCode.ENTER);
+        String out = ChatScreenTest.render(screen, 130, 40);
+        assertTrue(out.contains("name: Dumi"), out);
+    }
 }
