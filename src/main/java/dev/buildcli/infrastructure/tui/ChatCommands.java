@@ -16,6 +16,12 @@ import java.util.Locale;
 final class ChatCommands {
 
     /** What a command may ask of the screen it runs in. */
+    /** Changes how much the agents may do before asking, and says so in the chat. */
+    void setMode(dev.buildcli.application.ApprovalMode mode) {
+        session.approvalMode(mode);
+        session.system("Mode: " + mode.label() + ", " + mode.description() + ".");
+    }
+
     interface Host {
         String selected();
 
@@ -97,6 +103,7 @@ final class ChatCommands {
             new Command("chats", "[text]", "Search your chats and agents by name, role or what was said", "Ctrl+K"),
             new Command("review", "", "See the files agents changed in this chat", ""),
             new Command("undo", "", "Put back the files an agent changed last (shows them first)", ""),
+            new Command("mode", "[manual|edits|auto]", "How much agents may do before asking you (Shift+Tab cycles it)", "Shift+Tab"),
             new Command("revoke", "", "Stop approving automatically in this chat (shows what was allowed)", ""),
             new Command("queue", "[clear]", "Show or drop messages waiting their turn", ""),
             new Command("settings", "", "Providers, models, agents, theme and more", "F2"),
@@ -149,6 +156,16 @@ final class ChatCommands {
                     }
                 }
                 case "undo" -> host.undoLast();
+                case "mode" -> {
+                    if (arg.isEmpty()) {
+                        var m = session.approvalMode();
+                        session.system("Mode: " + m.label() + ", " + m.description() + ". /mode manual, /mode edits or /mode auto changes it.");
+                    } else if (java.util.Arrays.stream(dev.buildcli.application.ApprovalMode.values()).noneMatch(m -> m.label().equalsIgnoreCase(arg))) {
+                        session.system("There is no mode '" + arg + "'. Use manual, edits or auto.");
+                    } else {
+                        setMode(dev.buildcli.application.ApprovalMode.parse(arg));
+                    }
+                }
                 case "revoke" -> {
                     List<String> was = session.grants(host.selected());
                     if (was.isEmpty()) {

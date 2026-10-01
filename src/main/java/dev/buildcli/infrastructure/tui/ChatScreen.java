@@ -314,6 +314,7 @@ final class ChatScreen implements Element {
                 session.system(message);
             }
         });
+        session.approvalMode(dev.buildcli.application.ApprovalMode.parse(settings().get(dev.buildcli.application.Settings.APPROVAL_MODE)));
         ensureSelection();
         if (services.canConnect() && !session.contacts().isEmpty() && noModelAnywhere()) {
             openConnect("None of your agents has a model yet. Connect one to start chatting; it takes a minute.");
@@ -636,12 +637,24 @@ final class ChatScreen implements Element {
             String cmd = b[1];
             hits.add(new Hit(new Rect(bx, r.y(), Wrap.width(b[0]), 1), () -> runCommand("/" + cmd)));
         }
+        int px = r.right() - 1;
         if (session.isActive(selected)) {
             String stop = " ■ Stop ";
-            int sx = r.right() - 1 - Wrap.width(stop);
-            put(buf, sx, r.y() + 1, stop, st(Theme.TEXT, Theme.DANGER), r.right());
-            hits.add(new Hit(new Rect(sx, r.y() + 1, Wrap.width(stop), 1), () -> session.stop(selected)));
+            px -= Wrap.width(stop);
+            put(buf, px, r.y() + 1, stop, st(Theme.TEXT, Theme.DANGER), r.right());
+            hits.add(new Hit(new Rect(px, r.y() + 1, Wrap.width(stop), 1), () -> session.stop(selected)));
+            px -= 1;
         }
+        var mode = session.approvalMode();
+        String pill = " " + mode.label() + " ⇄ ";
+        px -= Wrap.width(pill);
+        Style pillStyle = switch (mode) {
+            case MANUAL -> st(Theme.DIM, Theme.FIELD);
+            case EDITS -> st(Theme.BG, Theme.ACCENT).bold();
+            case AUTO -> st(Theme.TEXT, Theme.DANGER).bold();
+        };
+        put(buf, px, r.y() + 1, pill, pillStyle, r.right());
+        hits.add(new Hit(new Rect(px, r.y() + 1, Wrap.width(pill), 1), () -> commands.setMode(session.approvalMode().next())));
     }
 
     /** The agent currently working in {@code thread}, preferring one that is not just waiting for a teammate. */
@@ -1088,7 +1101,11 @@ final class ChatScreen implements Element {
             case PAGE_UP -> scroll(Math.max(3, area.height() / 2));
             case PAGE_DOWN -> scroll(-Math.max(3, area.height() / 2));
             case ESCAPE -> scrollOff = 0;
-            case TAB -> { }
+            case TAB -> {
+                if (key.hasShift()) {
+                    commands.setMode(session.approvalMode().next());
+                }
+            }
             case CHAR -> {
                 if (ctrl) {
                     switch (ch) {
