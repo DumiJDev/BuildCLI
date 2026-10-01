@@ -12,7 +12,7 @@ import dev.buildcli.domain.Permissions;
 import dev.buildcli.domain.RunInfo;
 import dev.buildcli.domain.Task;
 import dev.buildcli.domain.TaskStatus;
-import dev.buildcli.domain.Team;
+import dev.buildcli.domain.Roster;
 import dev.buildcli.infrastructure.StateStore;
 import dev.buildcli.ports.ChatStore;
 import java.nio.file.Path;
@@ -31,7 +31,7 @@ import org.junit.jupiter.api.io.TempDir;
 class ChatHistoryTest {
     @TempDir Path dir;
 
-    static final Team TEAM = new Team("backend", "ana", List.of(
+    static final Roster ROSTER = new Roster("backend", "ana", List.of(
             new Agent("ana", "architect", "", Set.of(), Permissions.none()),
             new Agent("bruno", "developer", "", Set.of(), Permissions.none())), Limits.defaults());
 
@@ -43,7 +43,7 @@ class ChatHistoryTest {
     }
 
     ChatSession open(StateStore db, ChatSession.Executor executor) {
-        return new ChatSession(TEAM, TEAM.agents(), executor, ChatStore.NONE, () -> 6, db);
+        return new ChatSession(ROSTER, ROSTER.agents(), executor, ChatStore.NONE, () -> 6, db);
     }
 
     ChatSession.Executor answering() {

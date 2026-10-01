@@ -10,7 +10,7 @@ import dev.buildcli.domain.Agent;
 import dev.buildcli.domain.Limits;
 import dev.buildcli.domain.Permissions;
 import dev.buildcli.domain.Task;
-import dev.buildcli.domain.Team;
+import dev.buildcli.domain.Roster;
 import dev.buildcli.infrastructure.HeadlessUi;
 import dev.buildcli.infrastructure.RecordingGateway;
 import dev.buildcli.infrastructure.ReplayGateway;
@@ -38,7 +38,7 @@ class RecordReplayTest {
         var ui = new HeadlessUi(r -> true, EscalationChoice.ABORT, false);
         try (var store = new StateStore(StateStore.IN_MEMORY)) {
             Events events = new Events(store, "r", ui);
-            Task root = new Orchestrator(new Team("t", "ana", List.of(ana, bruno), Limits.defaults()), llm,
+            Task root = new Orchestrator(new Roster("t", "ana", List.of(ana, bruno), Limits.defaults()), llm,
                     new ToolRuntime(workspace, ui, events), ui, events).run("go");
             assertEquals("all done", root.result);
         }

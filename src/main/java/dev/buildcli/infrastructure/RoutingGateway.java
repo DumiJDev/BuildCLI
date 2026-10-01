@@ -14,7 +14,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * Sends each agent to the model its team configured: a per-agent override, else the team default, else the fallback
+ * Sends each agent to the model chosen for it: a per-agent override, else the default model, else the fallback
  * (for example a model chosen on the command line). Gateways are created lazily and reused per provider/model pair.
  */
 public final class RoutingGateway implements LlmGateway {
@@ -45,7 +45,7 @@ public final class RoutingGateway implements LlmGateway {
         ref = ref != null ? ref : fallback;
         if (ref == null) {
             throw new IllegalStateException("no model configured for agent '" + agent.name()
-                    + "': set runtime.default (or runtime." + agent.name() + ") in the team file, or choose a model explicitly");
+                    + "': type /connect in the chat, set a model in Settings (F2), or pass --model provider:model");
         }
         return ref;
     }

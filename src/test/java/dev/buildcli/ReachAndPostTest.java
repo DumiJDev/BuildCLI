@@ -1,6 +1,6 @@
 package dev.buildcli;
 
-import static dev.buildcli.PeopleRuntimeTest.TEAM;
+import static dev.buildcli.PeopleRuntimeTest.ROSTER;
 import static dev.buildcli.PeopleRuntimeTest.awaitIdle;
 import static dev.buildcli.PeopleRuntimeTest.done;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -31,36 +31,36 @@ class ReachAndPostTest {
     @Test
     void anAgentWritesInAGroupAsItselfNotInTheChatItWasAskedIn() throws Exception {
         AtomicReference<String> result = new AtomicReference<>();
-        var session = new ChatSession(TEAM, (team, request, ui, cancelled, dispatcher) -> {
+        var session = new ChatSession(ROSTER, (team, request, ui, cancelled, dispatcher) -> {
             result.set(dispatcher.post("bruno", "backend", "Hello everyone, from bruno"));
             return done("bruno", "I told them");
         });
         session.submit("tell the group hello", List.of(), "bruno");
         awaitIdle(session);
         assertTrue(result.get().startsWith("Posted in the group 'backend'"), result.get());
-        assertEquals(List.of("Hello everyone, from bruno"), in(session, ChatSession.TEAM).stream().map(ChatSession.Message::text).toList());
+        assertEquals(List.of("Hello everyone, from bruno"), in(session, ChatSession.MAIN).stream().map(ChatSession.Message::text).toList());
         assertEquals(List.of("I told them"), in(session, "bruno").stream().map(ChatSession.Message::text).toList(), "the answer to the user stays private");
     }
 
     @Test
     void anAgentCannotWriteInAGroupItIsNotIn() throws Exception {
         AtomicReference<String> result = new AtomicReference<>();
-        var session = new ChatSession(TEAM, (team, request, ui, cancelled, dispatcher) -> {
+        var session = new ChatSession(ROSTER, (team, request, ui, cancelled, dispatcher) -> {
             result.set(dispatcher.post("bruno", "backend", "hi"));
             return done("bruno", "x");
         });
-        session.removeMember(ChatSession.TEAM, "bruno");
+        session.removeMember(ChatSession.MAIN, "bruno");
         session.submit("go", List.of(), "bruno");
         awaitIdle(session);
         String r = result.get();
         assertTrue(r.startsWith("ERROR") && r.contains("not a member"), r);
-        assertEquals(0, in(session, ChatSession.TEAM).size());
+        assertEquals(0, in(session, ChatSession.MAIN).size());
     }
 
     @Test
     void aPrivateChatBetweenAgentsStartsOnlyWhenOneWritesToTheOtherAndTheUserCannotWriteInIt() throws Exception {
         List<String> seen = new CopyOnWriteArrayList<>();
-        var session = new ChatSession(TEAM, TEAM.agents(), (team, request, ui, cancelled, dispatcher) -> {
+        var session = new ChatSession(ROSTER, ROSTER.agents(), (team, request, ui, cancelled, dispatcher) -> {
             String me = request.target();
             seen.add(me + " <- " + request.text() + " | " + request.chat());
             if (me.equals("bruno") && request.chat().contains("private chat with ana")) {
@@ -89,7 +89,7 @@ class ReachAndPostTest {
     void anAgentTheUserBlockedCannotBeContactedAndTheAgentIsToldSo() throws Exception {
         AtomicReference<String> result = new AtomicReference<>();
         AtomicReference<Boolean> sees = new AtomicReference<>();
-        var session = new ChatSession(TEAM, (team, request, ui, cancelled, dispatcher) -> {
+        var session = new ChatSession(ROSTER, (team, request, ui, cancelled, dispatcher) -> {
             result.set(dispatcher.post("bruno", "ana", "psst"));
             sees.set(dispatcher.sees("bruno", "ana"));
             return done("bruno", "ok");
@@ -111,9 +111,9 @@ class ReachAndPostTest {
     @Test
     void whoMayContactWhomIsRemembered() {
         var store = new FileChatStore(dir);
-        var first = new ChatSession(TEAM, TEAM.agents(), (team, request, ui, cancelled, dispatcher) -> done("ana", "x"), store, () -> 6);
+        var first = new ChatSession(ROSTER, ROSTER.agents(), (team, request, ui, cancelled, dispatcher) -> done("ana", "x"), store, () -> 6);
         first.setReach("bruno", "ana", false);
-        var second = new ChatSession(TEAM, TEAM.agents(), (team, request, ui, cancelled, dispatcher) -> done("ana", "x"), store, () -> 6);
+        var second = new ChatSession(ROSTER, ROSTER.agents(), (team, request, ui, cancelled, dispatcher) -> done("ana", "x"), store, () -> 6);
         assertFalse(second.canReach("bruno", "ana"));
         assertTrue(second.canReach("ana", "bruno"));
         assertEquals(Map.of("bruno", List.of("ana")), store.loadBlocked());
@@ -122,7 +122,7 @@ class ReachAndPostTest {
     @Test
     void yourOwnChatKeepsNotesAndNoAgentReadsThem() throws Exception {
         List<String> ran = new CopyOnWriteArrayList<>();
-        var session = new ChatSession(TEAM, (team, request, ui, cancelled, dispatcher) -> {
+        var session = new ChatSession(ROSTER, (team, request, ui, cancelled, dispatcher) -> {
             ran.add(request.text());
             return done("ana", "x");
         });

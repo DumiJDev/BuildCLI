@@ -49,7 +49,7 @@ final class UsageCommand implements Callable<Integer> {
                         + "],\"totals\":{\"calls\":" + calls + ",\"inputTokens\":" + in + ",\"outputTokens\":" + out + "}}");
                 return 0;
             }
-            ctx.out.println("Run " + r.id() + "  " + r.status() + "  team " + r.team());
+            ctx.out.println("Run " + r.id() + "  " + r.status() + "  group " + r.group());
             List<List<String>> rows = new ArrayList<>();
             for (AgentUsage u : usage) {
                 rows.add(List.of(u.agent(), String.valueOf(u.calls()), String.valueOf(u.inputTokens()), String.valueOf(u.outputTokens())));

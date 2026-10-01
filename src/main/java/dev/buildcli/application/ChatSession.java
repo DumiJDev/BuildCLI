@@ -7,7 +7,7 @@ import dev.buildcli.domain.Event;
 import dev.buildcli.domain.Limits;
 import dev.buildcli.domain.Task;
 import dev.buildcli.domain.TaskStatus;
-import dev.buildcli.domain.Team;
+import dev.buildcli.domain.Roster;
 import dev.buildcli.ports.ApprovalRequest;
 import dev.buildcli.ports.ChatStore;
 import dev.buildcli.ports.EscalationChoice;
@@ -32,12 +32,12 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Chats with a team whose agents behave like people. Each agent has an inbox and works through it on its own
+ * Chats with agents that behave like people. Each agent has an inbox and works through it on its own
  * (virtual) thread, one conversation at a time: while it answers in one chat it does not answer in another, and what
  * arrives meanwhile waits. Different agents work in parallel. A handoff is a message to a teammate's inbox; the
  * delegating agent waits for the answer. Handoffs that would make two agents wait for each other are refused.
  *
- * <p>Everything the agents do shows up as messages in the chat ("thread") it belongs to: the team chat, or a direct
+ * <p>Everything the agents do shows up as messages in the chat ("thread") it belongs to: a group, or a direct
  * chat with one agent. A front end only draws {@link #messages()}, {@link #live(String)} and {@link #pending()}.
  * This class has no UI dependency; the TUI and the tests drive it through the same methods.
  */
@@ -49,15 +49,15 @@ public final class ChatSession implements UserInterface {
     /** User messages: queued (delivered, not read yet), running (read, being worked on), done, failed. Activity: running, done, failed. */
     public enum State { NONE, QUEUED, RUNNING, DONE, FAILED, UNDONE }
 
-    /** The thread of the team conversation; other threads are named after the agent they talk to. */
-    public static final String TEAM = "";
+    /** The thread of the main group; direct chats are named after the agent they talk to. */
+    public static final String MAIN = "";
     /** Your own private chat: notes to yourself, which no agent reads. */
     public static final String NOTES = "~notes";
     /** Local notes (command output, help) show in every thread. */
     public static final String EVERYWHERE = "*";
 
     /**
-     * One entry of the conversation. {@code thread} says which chat it belongs to: {@link #TEAM}, an agent's name for
+     * One entry of the conversation. {@code thread} says which chat it belongs to: {@link #MAIN}, an agent's name for
      * a direct chat, or {@link #EVERYWHERE}.
      */
     public record Message(long id, Kind kind, String author, String text, Instant at, State state, List<Attachment> attachments,
@@ -89,8 +89,8 @@ public final class ChatSession implements UserInterface {
 
     /** Runs one request to completion on the addressed agent's thread. May block on the UI or on teammates. */
     public interface Executor {
-        /** @param team who is in the conversation, led by the agent that answers */
-        Task execute(Team team, Orchestrator.Request request, UserInterface ui, BooleanSupplier cancelled, Orchestrator.Dispatcher dispatcher)
+        /** @param roster who is in the conversation, led by the agent that answers */
+        Task execute(Roster roster, Orchestrator.Request request, UserInterface ui, BooleanSupplier cancelled, Orchestrator.Dispatcher dispatcher)
                 throws Exception;
     }
 
@@ -198,7 +198,7 @@ public final class ChatSession implements UserInterface {
     private final AtomicLong nextPosition = new AtomicLong();
     private final java.util.function.IntSupplier agentHops;
     private final Map<String, Agent> contacts = new java.util.concurrent.ConcurrentSkipListMap<>();
-    /** Groups by id; the team's own group has the id {@link #TEAM}. Guarded by {@code lock}. */
+    /** Groups by id; the group made from a roster (tests) has the id {@link #MAIN}. Guarded by {@code lock}. */
     private final Map<String, Chat> groups = new LinkedHashMap<>();
     private final java.util.Set<String> directs = new java.util.LinkedHashSet<>();
     /** Agent -> the agents it may not contact, set by the user. Guarded by {@code lock}. */
@@ -224,20 +224,20 @@ public final class ChatSession implements UserInterface {
     private final AtomicInteger outputTokens = new AtomicInteger();
     private volatile boolean closed;
 
-    /** A chat with one group made from a team (its id is {@link #TEAM}), for tests and the demo. */
-    public ChatSession(Team team, Executor executor) {
-        this(team, team.agents(), executor, ChatStore.NONE, () -> 6);
+    /** A chat with one group made from a roster (its id is {@link #MAIN}), for tests. */
+    public ChatSession(Roster roster, Executor executor) {
+        this(roster, roster.agents(), executor, ChatStore.NONE, () -> 6);
     }
 
-    /** A team becomes the group {@link #TEAM}; the groups in {@code store} are added or override it. */
-    public ChatSession(Team team, List<Agent> contacts, Executor executor, ChatStore store, java.util.function.IntSupplier agentHops) {
-        this(team, contacts, executor, store, agentHops, dev.buildcli.ports.ChatLog.NONE);
+    /** A roster becomes the group {@link #MAIN}; the groups in {@code store} are added or override it. */
+    public ChatSession(Roster roster, List<Agent> contacts, Executor executor, ChatStore store, java.util.function.IntSupplier agentHops) {
+        this(roster, contacts, executor, store, agentHops, dev.buildcli.ports.ChatLog.NONE);
     }
 
-    public ChatSession(Team team, List<Agent> contacts, Executor executor, ChatStore store, java.util.function.IntSupplier agentHops,
+    public ChatSession(Roster roster, List<Agent> contacts, Executor executor, ChatStore store, java.util.function.IntSupplier agentHops,
             dev.buildcli.ports.ChatLog log) {
-        this(merge(team.agents(), contacts), withStored(new Chat(TEAM, team.name(), true, team.agents().stream().map(Agent::name).toList(),
-                List.of(team.lead())), store.load()), team.limits(), executor, store, agentHops, log);
+        this(merge(roster.agents(), contacts), withStored(new Chat(MAIN, roster.name(), true, roster.agents().stream().map(Agent::name).toList(),
+                List.of(roster.lead())), store.load()), roster.limits(), executor, store, agentHops, log);
     }
 
     /**
@@ -403,7 +403,7 @@ public final class ChatSession implements UserInterface {
     }
 
     /**
-     * Sends a message. In the team chat it goes to the lead, or to the agent it @mentions; in a direct chat
+     * Sends a message. In a group it goes to the lead, or to the agent it @mentions; in a direct chat
      * ({@code agent} not null) it goes to that agent unless it @mentions someone else. If the agent is busy, the
      * message waits in its inbox.
      *
@@ -668,9 +668,9 @@ public final class ChatSession implements UserInterface {
         changeGroup(id, g -> new Chat(g.id(), name.strip(), true, g.members(), g.admins()));
     }
 
-    /** The team's own group cannot be deleted. @return false if it was not deleted */
+    /** The main group cannot be deleted. @return false if it was not deleted */
     public boolean deleteGroup(String id) {
-        if (TEAM.equals(id)) {
+        if (MAIN.equals(id)) {
             return false;
         }
         boolean removed;
@@ -838,7 +838,7 @@ public final class ChatSession implements UserInterface {
         return -1;
     }
 
-    /** Local notes (help, errors about a command) that are not part of the conversation with the team. */
+    /** Local notes (help, errors about a command) that are not part of the conversation with the agents. */
     public void system(String text) {
         add(new Message(ids.incrementAndGet(), Kind.SYSTEM, "", text, Instant.now(), State.NONE, List.of(), threadNow()));
     }
@@ -1035,7 +1035,7 @@ public final class ChatSession implements UserInterface {
         String request = from == null ? text : "Message from " + from + " in this chat:\n" + text;
         boolean ok = false;
         try {
-            Task root = executor.execute(teamFor(run.thread, me), new Orchestrator.Request(request, me, history, attachments, chatContext(run.thread, me)),
+            Task root = executor.execute(rosterFor(run.thread, me), new Orchestrator.Request(request, me, history, attachments, chatContext(run.thread, me)),
                     this, run.stop::get, dispatcher);
             flushLive(me);
             if (root.status == TaskStatus.DONE) {
@@ -1043,7 +1043,7 @@ public final class ChatSession implements UserInterface {
                 ok = true;
                 deliverMentions(run, said);
             } else {
-                error("The team could not finish this request: " + (root.result == null ? "no result" : root.result));
+                error("This request could not be finished: " + (root.result == null ? "no result" : root.result));
             }
         } catch (RunAborted e) {
             flushAll();
@@ -1184,7 +1184,7 @@ public final class ChatSession implements UserInterface {
     }
 
     /** Who is in the conversation, led by the agent that answers: group members, or everyone for a direct chat. */
-    private Team teamFor(String thread, String me) {
+    private Roster rosterFor(String thread, String me) {
         Chat g = group(thread);
         List<Agent> members = new ArrayList<>();
         members.add(contacts.get(me));
@@ -1194,7 +1194,7 @@ public final class ChatSession implements UserInterface {
                 members.add(a);
             }
         }
-        return new Team(g != null ? g.name() : me, me, members, limits, dev.buildcli.domain.ModelRouting.unspecified());
+        return new Roster(g != null ? g.name() : me, me, members, limits, dev.buildcli.domain.ModelRouting.unspecified());
     }
 
     private String chatContext(String thread, String me) {

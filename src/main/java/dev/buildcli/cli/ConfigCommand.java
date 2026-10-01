@@ -19,7 +19,7 @@ final class ConfigCommand implements Callable<Integer> {
         ctx.out.println("buildcli " + (v == null ? "dev" : v));
         ctx.out.println();
         ctx.out.println("project directory : " + ctx.cwd);
-        ctx.out.println("project config    : " + ctx.cwd.resolve(".buildcli") + "  (agents/, teams/), and AGENTS.md");
+        ctx.out.println("project config    : " + ctx.cwd.resolve(".buildcli") + "  (agents/), and AGENTS.md");
         ctx.out.println("global directory  : " + ctx.globalDir() + "  (override with BUILDCLI_HOME)");
         ctx.out.println("state database    : " + ctx.storageBackend().name().toLowerCase(java.util.Locale.ROOT) + " ("
                 + (ctx.storageBackend() == dev.buildcli.infrastructure.StateStore.Backend.MEMORY ? "nothing kept after BuildCLI closes" : ctx.stateDb()) + ")");

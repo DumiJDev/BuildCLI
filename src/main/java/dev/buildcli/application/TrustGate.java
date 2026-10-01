@@ -2,7 +2,7 @@ package dev.buildcli.application;
 
 import dev.buildcli.domain.Agent;
 import dev.buildcli.domain.Origin;
-import dev.buildcli.domain.Team;
+import dev.buildcli.domain.Roster;
 import dev.buildcli.ports.ApprovalRequest;
 import dev.buildcli.ports.ConfigRepository;
 import dev.buildcli.ports.TrustStore;
@@ -17,9 +17,9 @@ import java.util.List;
 public final class TrustGate {
     private TrustGate() {}
 
-    /** @return true if the team may run; false if the user declined to trust the project's definitions */
-    public static boolean ensureTrusted(Team team, ConfigRepository config, TrustStore store, String projectKey, UserInterface ui) {
-        List<Agent> fromProject = team.agents().stream().filter(a -> a.origin() == Origin.PROJECT).toList();
+    /** @return true if the agents may run; false if the user declined to trust the project's definitions */
+    public static boolean ensureTrusted(Roster roster, ConfigRepository config, TrustStore store, String projectKey, UserInterface ui) {
+        List<Agent> fromProject = roster.agents().stream().filter(a -> a.origin() == Origin.PROJECT).toList();
         String digest = config.projectDigest();
         if (fromProject.isEmpty() || store.isTrusted(projectKey, digest)) {
             return true;
@@ -33,7 +33,7 @@ public final class TrustGate {
                     .append("\n  may run:      ").append(a.permissions().commandAllow()).append("\n");
         }
         boolean granted = ui.approve(new ApprovalRequest("system", "trust",
-                "Trust " + (team.agents().size() == 1 ? "this agent" : "these agents") + " from the project?", detail.toString()));
+                "Trust " + (roster.agents().size() == 1 ? "this agent" : "these agents") + " from the project?", detail.toString()));
         if (granted) {
             store.trust(projectKey, digest);
         }

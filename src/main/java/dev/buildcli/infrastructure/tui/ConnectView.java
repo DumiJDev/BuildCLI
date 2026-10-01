@@ -375,7 +375,7 @@ final class ConnectView {
         services.settings().set(scope, Settings.DEFAULT_MODEL, model);
         List<String> own = new ArrayList<>();
         for (SettingsServices.AgentInfo a : services.agents()) {
-            if (services.settings().modelFor(a.name()) != null || services.teamModel(a.name()) != null) {
+            if (services.settings().modelFor(a.name()) != null) {
                 own.add(a.name());
             }
         }
