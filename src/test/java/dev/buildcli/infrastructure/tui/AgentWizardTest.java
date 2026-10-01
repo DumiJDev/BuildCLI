@@ -65,6 +65,6 @@ class AgentWizardTest {
         ChatScreenTest.key(screen, KeyCode.DOWN);
         ChatScreenTest.type(screen, " ");
         String out = ChatScreenTest.render(screen, 120, 36);
-        assertTrue(out.contains("[x] agent.handoff") || out.contains("[x] command.execute"), "Space ticks the highlighted line:\n" + out);
+        assertTrue(out.contains("[x] chat.post") && out.contains("[ ] agent.handoff"), "Space ticks the highlighted line:\n" + out);
     }
 }
