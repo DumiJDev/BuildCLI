@@ -23,13 +23,10 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingDeque;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Chats with agents that behave like people. Each agent has an inbox and works through it on its own
@@ -94,29 +91,6 @@ public final class ChatSession implements UserInterface {
                 throws Exception;
     }
 
-    /**
-     * One agent answering one message, with everything that happens for it (on any agent's thread). {@code hops}
-     * counts messages agents sent each other since the user last wrote, so their conversation cannot run away.
-     */
-    private static final class Run {
-        final long messageId;
-        final String thread;
-        final String me;
-        final int hops;
-        final AtomicBoolean stop = new AtomicBoolean();
-        final Map<Integer, Task> tasks = new LinkedHashMap<>();
-        final java.util.Set<String> handedOffTo = ConcurrentHashMap.newKeySet();
-        /** Files written during this run, by its agent or by teammates it handed work to. */
-        final List<dev.buildcli.domain.FileChange> changes = new CopyOnWriteArrayList<>();
-
-        Run(long messageId, String thread, String me, int hops) {
-            this.messageId = messageId;
-            this.thread = thread;
-            this.me = me;
-            this.hops = hops;
-        }
-    }
-
     private record Job(Run run, Runnable body) {}
 
     /** An agent as a person: an inbox and one thread that handles one job at a time. */
@@ -148,11 +122,11 @@ public final class ChatSession implements UserInterface {
                 }
                 current = job;
                 touch();
-                RUN.set(job.run());
+                Run.CURRENT.set(job.run());
                 try {
                     job.body().run();
                 } finally {
-                    RUN.remove();
+                    Run.CURRENT.remove();
                     current = null;
                     state.put(name, "idle");
                     pending.decrementAndGet();
@@ -170,9 +144,6 @@ public final class ChatSession implements UserInterface {
             return pending.get() > 0;
         }
     }
-
-    private static final ThreadLocal<Run> RUN = new ThreadLocal<>();
-        private static final int MAX_EVENTS = 300;
     private static final int MAX_RUNS = 50;
 
     private final Limits limits;
@@ -186,20 +157,15 @@ public final class ChatSession implements UserInterface {
     /** For a user message sent to several agents: how many have not finished, and whether one failed. */
     private final Map<Long, AtomicInteger> openRuns = new ConcurrentHashMap<>();
     private final java.util.Set<Long> failedMessages = ConcurrentHashMap.newKeySet();
-    private final Object lock = new Object();
-    private final List<Event> events = new ArrayList<>();
     private final Map<String, Actor> actors = new java.util.concurrent.ConcurrentSkipListMap<>();
     private final Map<String, String> state = new ConcurrentHashMap<>();
-    private final Map<String, StringBuilder> live = new LinkedHashMap<>();
-    private final Map<String, String> liveThread = new HashMap<>();
     /** Who waits for whom because of a handoff: the graph in which a deadlock would be a cycle. */
     private final Map<String, String> waitsFor = new HashMap<>();
     private final List<Run> runs = new CopyOnWriteArrayList<>();
     private final Approvals approvals;
+    private final AgentFeed feed;
     /** Goes up on every change a screen could show, so a front end redraws only when something changed. */
     private final AtomicLong version = new AtomicLong();
-    private final AtomicInteger inputTokens = new AtomicInteger();
-    private final AtomicInteger outputTokens = new AtomicInteger();
     private volatile boolean closed;
 
     /** A chat with one group made from a roster (its id is {@link #MAIN}), for tests. */
@@ -234,6 +200,7 @@ public final class ChatSession implements UserInterface {
         this.store = store;
         this.agentHops = agentHops;
         this.approvals = new Approvals(this::touch, state::put);
+        this.feed = new AgentFeed(transcript, state, this::touch, this::threadOf, this::threadNow, this::system);
         this.directory = new ChatDirectory(contacts, groups, store, this::touch, this::error, this::note);
         for (Agent a : directory.contacts()) {
             actors.put(a.name(), new Actor(a.name()));
@@ -594,14 +561,7 @@ public final class ChatSession implements UserInterface {
 
     /** What an agent is writing in {@code thread} right now, or null. */
     public Live live(String thread) {
-        synchronized (live) {
-            for (var e : live.entrySet()) {
-                if (!e.getValue().isEmpty() && thread.equals(liveThread.get(e.getKey()))) {
-                    return new Live(e.getKey(), e.getValue().toString(), thread);
-                }
-            }
-        }
-        return null;
+        return feed.live(thread);
     }
 
     /** The oldest open question, or null. */
@@ -670,13 +630,13 @@ public final class ChatSession implements UserInterface {
             }
             latest = r;
             if (isRunning(r)) {
-                synchronized (lock) {
+                synchronized (r.tasks) {
                     out.addAll(r.tasks.values());
                 }
             }
         }
         if (out.isEmpty() && latest != null) {
-            synchronized (lock) {
+            synchronized (latest.tasks) {
                 out.addAll(latest.tasks.values());
             }
         }
@@ -694,17 +654,15 @@ public final class ChatSession implements UserInterface {
     }
 
     public List<Event> events() {
-        synchronized (lock) {
-            return List.copyOf(events);
-        }
+        return feed.events();
     }
 
     public int inputTokens() {
-        return inputTokens.get();
+        return feed.inputTokens();
     }
 
     public int outputTokens() {
-        return outputTokens.get();
+        return feed.outputTokens();
     }
 
     // ---- answering a message, on the addressed agent's thread ----
@@ -727,7 +685,7 @@ public final class ChatSession implements UserInterface {
         try {
             Task root = executor.execute(rosterFor(run.thread, me), new Orchestrator.Request(request, me, history, attachments, chatContext(run.thread, me)),
                     this, run.stop::get, dispatcher);
-            flushLive(me);
+            feed.flushLive(me);
             if (root.status == TaskStatus.DONE) {
                 String said = addFinalIfMissing(me, root.result, before);
                 ok = true;
@@ -736,10 +694,10 @@ public final class ChatSession implements UserInterface {
                 error("This request could not be finished: " + (root.result == null ? "no result" : root.result));
             }
         } catch (RunAborted e) {
-            flushAll();
+            feed.flushAll();
             system("Stopped: " + e.getMessage());
         } catch (Throwable t) {
-            flushAll();
+            feed.flushAll();
             error(Orchestrator.describe(t) + "\nCheck the provider with 'buildcli provider test <provider:model>' or 'buildcli doctor'. "
                     + (run.messageId > 0 ? "Your message is kept: press Retry or type /retry to send it again." : ""));
         }
@@ -955,7 +913,7 @@ public final class ChatSession implements UserInterface {
             if (target == null) {
                 return work.get();
             }
-            Run run = RUN.get();
+            Run run = Run.CURRENT.get();
             CompletableFuture<String> answer = new CompletableFuture<>();
             synchronized (waitsFor) {
                 waitsFor.put(from, to);
@@ -988,7 +946,7 @@ public final class ChatSession implements UserInterface {
 
     /** An agent writes, as itself, in a group it belongs to or in a private chat with a teammate. Runs on that agent's thread. */
     private String postAs(String from, String to, String text) {
-        Run run = RUN.get();
+        Run run = Run.CURRENT.get();
         Chat g = groups().stream().filter(c -> c.id().equalsIgnoreCase(to) || c.name().equalsIgnoreCase(to)).findFirst().orElse(null);
         if (g != null) {
             if (!g.has(from)) {
@@ -1025,7 +983,7 @@ public final class ChatSession implements UserInterface {
 
     @Override
     public void fileChanged(dev.buildcli.domain.FileChange change) {
-        Run r = RUN.get();
+        Run r = Run.CURRENT.get();
         if (r != null) {
             r.changes.add(change);
         }
@@ -1042,7 +1000,7 @@ public final class ChatSession implements UserInterface {
     }
 
     private String threadNow() {
-        Run r = RUN.get();
+        Run r = Run.CURRENT.get();
         return r == null ? EVERYWHERE : r.thread;
     }
 
@@ -1063,162 +1021,32 @@ public final class ChatSession implements UserInterface {
 
     @Override
     public boolean approve(ApprovalRequest request) {
-        Run run = RUN.get();
+        Run run = Run.CURRENT.get();
         return approvals.approve(request, threadNow(), run != null && run.stop.get());
     }
 
     @Override
     public EscalationChoice escalate(int taskId, String agent, String objective, String reason) {
-        Run run = RUN.get();
+        Run run = Run.CURRENT.get();
         return approvals.escalate(taskId, agent, objective, reason, threadNow(), run != null && run.stop.get());
     }
 
     @Override
     public void onTaskChanged(Task t) {
-        Run run = RUN.get();
-        if (run == null) {
-            return;
-        }
-        Task copy = new Task(t.id, t.parentId, t.from, t.to, t.objective, t.brief);
-        copy.status = t.status;
-        copy.tokens = t.tokens;
-        copy.attempts = t.attempts;
-        synchronized (lock) {
-            run.tasks.put(t.id, copy);
-        }
+        feed.onTaskChanged(t);
     }
 
     @Override
     public void onText(int taskId, String agent, String delta) {
-        touch();
-        synchronized (live) {
-            live.computeIfAbsent(agent, k -> new StringBuilder()).append(delta);
-            liveThread.put(agent, threadOf(agent));
-        }
-        state.put(agent, "typing");
+        feed.onText(agent, delta);
     }
 
     @Override
     public void onEvent(Event e) {
-        touch();
-        synchronized (lock) {
-            events.add(e);
-            if (events.size() > MAX_EVENTS) {
-                events.remove(0);
-            }
-        }
-        switch (e.type()) {
-            case "AgentInvoked" -> {
-                inputTokens.addAndGet(e.inputTokens());
-                outputTokens.addAndGet(e.outputTokens());
-                state.put(e.agent(), "thinking");
-            }
-            case "AgentReplied", "TaskFailed", "TaskCompleted", "LimitReached", "TaskEscalated" -> flushLive(e.agent());
-            default -> { }
-        }
-        switch (e.type()) {
-            case "ToolCalled" -> {
-                flushLive(e.agent());
-                state.put(e.agent(), "working");
-                if (!e.payload().startsWith("handoff")) {
-                    activity(e.agent(), describeTool(e.payload()));
-                }
-            }
-            case "ToolCompleted" -> completeActivity(e.agent(), e.payload());
-            case "TaskCreated" -> {
-                Task t = lookup(e.taskId());
-                Run r = RUN.get();
-                if (t != null && r != null && !t.from.equals("user")) {
-                    r.handedOffTo.add(t.to);
-                }
-                if (t != null && !t.from.equals("user")) {
-                    // a handoff reads like one teammate writing to another in the chat
-                    add(new Message(transcript.nextId(), Kind.AGENT, t.from, "@" + t.to + " " + t.objective
-                            + (t.brief == null || t.brief.isBlank() ? "" : "\n" + t.brief), Instant.now(), State.NONE, List.of(), threadNow()));
-                }
-            }
-            case "WaitingForWorkspace" -> state.put(e.agent(), "waiting for the workspace");
-            case "TaskFailed" -> system(e.agent() + " had a problem: " + e.payload());
-            case "TaskRetried" -> system(e.agent() + " is trying again (" + e.payload() + ").");
-            case "TaskEscalated" -> state.put(e.agent(), "needs you");
-            case "TaskSkipped" -> system(e.agent() + "'s task was closed by you.");
-            default -> { }
-        }
+        feed.onEvent(e);
     }
 
-    private Task lookup(int id) {
-        Run run = RUN.get();
-        if (run == null) {
-            return null;
-        }
-        synchronized (lock) {
-            return run.tasks.get(id);
-        }
-    }
-
-    // ---- building messages ----
-
-    private void flushLive(String agent) {
-        String text;
-        String thread;
-        synchronized (live) {
-            StringBuilder sb = live.get(agent);
-            if (sb == null || sb.isEmpty()) {
-                return;
-            }
-            text = sb.toString().strip();
-            thread = liveThread.getOrDefault(agent, threadNow());
-            sb.setLength(0);
-        }
-        if (!text.isEmpty()) {
-            add(new Message(transcript.nextId(), Kind.AGENT, agent, text, Instant.now(), State.NONE, List.of(), thread));
-        }
-    }
-
-    private void flushAll() {
-        List<String> agents;
-        synchronized (live) {
-            agents = new ArrayList<>(live.keySet());
-        }
-        agents.forEach(this::flushLive);
-    }
-
-    private static final Pattern PATH_ARG = Pattern.compile("path=([^,}]+)");
-    private static final Pattern ARGV_ARG = Pattern.compile("argv=\\[([^\\]]*)\\]");
-
-    /** A short human line for "write_file {path=x, content=...}" without dumping the content. */
-    static String describeTool(String payload) {
-        int sp = payload.indexOf(' ');
-        String name = sp < 0 ? payload : payload.substring(0, sp);
-        String args = sp < 0 ? "" : payload.substring(sp + 1);
-        Matcher argv = ARGV_ARG.matcher(args);
-        if (argv.find()) {
-            return "ran " + argv.group(1).replace(",", "");
-        }
-        Matcher to = Pattern.compile("to=([^,}]+)").matcher(args);
-        if (name.equals("send_message") && to.find()) {
-            return "wrote to " + to.group(1).strip();
-        }
-        Matcher path = PATH_ARG.matcher(args);
-        if (path.find()) {
-            String verb = switch (name) {
-                case "write_file" -> "wrote";
-                case "read_file" -> "read";
-                case "list_files" -> "listed";
-                default -> name;
-            };
-            return verb + " " + path.group(1).strip();
-        }
-        return name + (args.isBlank() ? "" : " " + ToolRuntime.abbreviate(args, 120));
-    }
-
-    private void activity(String agent, String text) {
-        add(new Message(transcript.nextId(), Kind.ACTIVITY, agent, text, Instant.now(), State.RUNNING, List.of(), threadOf(agent)));
-    }
-
-    private void completeActivity(String agent, String payload) {
-        transcript.completeActivity(agent, payload);
-    }
+    // ---- the message list ----
 
     private void add(Message m) {
         transcript.add(m);
