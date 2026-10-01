@@ -431,6 +431,11 @@ final class ChatScreen implements Element {
 
     private volatile Runnable redraw = () -> { };
 
+    /** A message at the bottom of the chat that goes away by itself. */
+    void notice(String text) {
+        say(text);
+    }
+
     private void say(String text) {
         toast = text;
         toastUntil = System.currentTimeMillis() + 3_000; // animating() asks for the redraws until it expires

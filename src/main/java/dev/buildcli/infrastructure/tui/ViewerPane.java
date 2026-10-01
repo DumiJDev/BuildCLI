@@ -59,6 +59,27 @@ final class ViewerPane {
     void open(View v) {
         view = v;
         scroll = 0;
+        coloured = null;
+        colouredFor = null;
+    }
+
+    /** Files up to this long are coloured by language; a bigger one is shown plain rather than slow down every frame. */
+    private static final int HIGHLIGHT_LINES = 3000;
+    private List<Style[]> coloured;
+    private String colouredFor;
+
+    /** Colours of each character of a file view, by the language of its name; null for diffs, unknown names and huge files. */
+    private List<Style[]> colours(Style base) {
+        String key = Theme.current();
+        if (!key.equals(colouredFor)) {
+            colouredFor = key;
+            coloured = null;
+            if (!view.diff() && view.lines().size() <= HIGHLIGHT_LINES) {
+                String text = view.lines().stream().map(l -> clean(l).replace("\t", "    ")).collect(java.util.stream.Collectors.joining("\n"));
+                coloured = CodeHighlight.styles(text, CodeHighlight.extension(view.title()), base);
+            }
+        }
+        return coloured;
     }
 
     void draw(Buffer buf, Rect r) {
@@ -74,6 +95,7 @@ final class ViewerPane {
         List<String> lines = view.lines();
         int max = Math.max(0, lines.size() - height);
         scroll = Math.max(0, Math.min(scroll, max));
+        List<Style[]> colours = colours(base);
         int gutter = view.numbered() ? Integer.toString(lines.size()).length() + 2 : 0;
         for (int i = 0; i < height && scroll + i < lines.size(); i++) {
             int n = scroll + i;
@@ -102,7 +124,11 @@ final class ViewerPane {
                     s = st(Theme.DEL_FG, Theme.DEL_BG);
                 }
             }
-            put(buf, x, y, l, s, r.right() - 1);
+            if (colours != null && n < colours.size() && colours.get(n).length == l.length()) {
+                putColoured(buf, x, y, l, colours.get(n), r.right() - 1);
+            } else {
+                put(buf, x, y, l, s, r.right() - 1);
+            }
         }
         String foot = lines.isEmpty() ? t("empty") : t("{0}–{1} of {2}", scroll + 1, Math.min(lines.size(), scroll + height), lines.size())
                 + "   " + t("↑↓ PgUp PgDn scroll") + (view.diff() ? " · " + t("[ ] previous/next file") : "") + " · " + t("Esc close");
@@ -127,6 +153,18 @@ final class ViewerPane {
                 hit.accept(new Rect(x, b.y(), w, 1), () -> review.accept(id, true));
             }
             height = Math.max(1, height - 1);
+        }
+    }
+
+    /** Draws {@code text} in runs of equal style. */
+    private static void putColoured(Buffer buf, int x, int y, String text, Style[] styles, int limit) {
+        int cx = x;
+        int from = 0;
+        for (int i = 1; i <= text.length(); i++) {
+            if (i == text.length() || styles[i] != styles[from]) {
+                cx += put(buf, cx, y, text.substring(from, i), styles[from], limit);
+                from = i;
+            }
         }
     }
 

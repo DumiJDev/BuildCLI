@@ -18,6 +18,7 @@ public final class ChatApp extends ToolkitApp {
     private final SettingsServices services;
     private final Attention attention = new Attention();
     private volatile Redraw redraw;
+    private final java.util.List<String> themeProblems;
 
     public ChatApp(ChatSession session, Map<String, String> models, Path cwd, boolean mouse) {
         this(session, models, cwd, mouse, ChatScreen.basicServices(session, models));
@@ -27,6 +28,11 @@ public final class ChatApp extends ToolkitApp {
         this.session = session;
         this.mouse = mouse;
         this.services = services;
+        // your own colours, if there is a theme.css; a broken one is reported on the first screen and ignored
+        ThemeFile.Result theme = ThemeFile.load(dev.buildcli.infrastructure.StateLocations
+                .globalDir(System.getenv(), Path.of(System.getProperty("user.home"))).resolve("theme.css"));
+        Theme.customise(theme.colours());
+        this.themeProblems = theme.problems();
         this.screen = new ChatScreen(session, models, cwd, this::leave, services);
     }
 
@@ -68,6 +74,9 @@ public final class ChatApp extends ToolkitApp {
         }, runner().tuiRunner().scheduler(), screen::animating);
         screen.redraw(redraw::request);
         session.onChange(redraw::request);
+        if (!themeProblems.isEmpty()) {
+            screen.notice("theme.css: " + themeProblems.get(0) + (themeProblems.size() > 1 ? " (+" + (themeProblems.size() - 1) + " more)" : ""));
+        }
         redraw.request();
     }
 
