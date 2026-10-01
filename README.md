@@ -130,6 +130,18 @@ are ticked from a list), theme, and **State database**: `sqlite` (default, a fil
 background in batches; in a synthetic load test that took the event log from about 7 000 to about 90 000 events/s with
 SQLite (see [`docs/storage.md`](docs/storage.md)). `BUILDCLI_STORAGE` overrides the setting.
 
+**Your own colours.** Put variables in `~/.buildcli/theme.css` (read when BuildCLI starts):
+
+```css
+$accent: #ff8800;        /* every theme */
+$light-bg: #fffdf5;      /* only the light theme; also $dark-… and $contrast-… */
+$agent-1: #4dd0e1;       /* the colours agents get, 1 to 8 */
+```
+
+The names are `bg sidebar panel field selected me them pill code error-bg dialog text dim faint accent green blue red amber
+on-me on-me-dim tick code-text line on-accent add-bg add-fg del-bg del-fg danger`. Anything it does not understand is
+reported on the first screen and skipped.
+
 There is also an experimental **native executable** (GraalVM): about half the memory and 5 to 10 times faster to start, built
 on Linux only so far. See [`docs/native-image.md`](docs/native-image.md).
 

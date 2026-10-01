@@ -17,6 +17,8 @@ public final class ChatApp extends ToolkitApp {
     private final boolean mouse;
     private final SettingsServices services;
     private final Attention attention = new Attention();
+    private volatile Redraw redraw;
+    private final java.util.List<String> themeProblems;
 
     public ChatApp(ChatSession session, Map<String, String> models, Path cwd, boolean mouse) {
         this(session, models, cwd, mouse, ChatScreen.basicServices(session, models));
@@ -26,6 +28,11 @@ public final class ChatApp extends ToolkitApp {
         this.session = session;
         this.mouse = mouse;
         this.services = services;
+        // your own colours, if there is a theme.css; a broken one is reported on the first screen and ignored
+        ThemeFile.Result theme = ThemeFile.load(dev.buildcli.infrastructure.StateLocations
+                .globalDir(System.getenv(), Path.of(System.getProperty("user.home"))).resolve("theme.css"));
+        Theme.customise(theme.colours());
+        this.themeProblems = theme.problems();
         this.screen = new ChatScreen(session, models, cwd, this::leave, services);
     }
 
@@ -57,24 +64,20 @@ public final class ChatApp extends ToolkitApp {
                 // the copy then simply does not happen; the chat says so
             }
         }));
-        // Check 12 times a second whether anything changed; draw only then, or while something moves (typing, spinner).
-        // Idle, this costs almost nothing, unlike redrawing the whole screen on every tick.
-        long[] seen = {-1};
-        boolean[] moving = {false};
+        // Nothing polls: the session calls us when something changes and the screen when it needs a frame (a toast, a
+        // spinner starting). Idle, the program does no work at all; see Redraw.
         long start = System.nanoTime();
-        runner().scheduleRepeating(() -> {
-            long v = session.version();
-            boolean now = screen.animating();
-            // one more frame after the movement stops, or the screen keeps showing the last "loading…"
-            boolean draw = v != seen[0] || now || moving[0];
-            moving[0] = now;
-            if (draw) {
-                seen[0] = v;
-                long ms = (System.nanoTime() - start) / 1_000_000;
-                runner().tuiRunner().dispatch(dev.tamboui.tui.event.TickEvent.of(ms, Duration.ofMillis(ms)));
-            }
+        redraw = new Redraw(() -> {
+            long ms = (System.nanoTime() - start) / 1_000_000;
+            runner().tuiRunner().dispatch(dev.tamboui.tui.event.TickEvent.of(ms, Duration.ofMillis(ms)));
             watchAttention(start);
-        }, Duration.ofMillis(80));
+        }, runner().tuiRunner().scheduler(), screen::animating);
+        screen.redraw(redraw::request);
+        session.onChange(redraw::request);
+        if (!themeProblems.isEmpty()) {
+            screen.notice("theme.css: " + themeProblems.get(0) + (themeProblems.size() > 1 ? " (+" + (themeProblems.size() - 1) + " more)" : ""));
+        }
+        redraw.request();
     }
 
     /** The window title and the bell, written on the thread that draws so they cannot cut a frame in two. */
@@ -103,6 +106,10 @@ public final class ChatApp extends ToolkitApp {
 
     @Override
     protected Element render() {
+        Redraw r = redraw;
+        if (r != null) {
+            r.frameDrawn();
+        }
         return screen;
     }
 

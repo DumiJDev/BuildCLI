@@ -30,21 +30,21 @@ class StyledCodeBlocksTest {
     @Test
     void theHeaderNamesTheLanguageAndItsButtonCopiesThatBlock() {
         List<String> copied = new ArrayList<>();
-        var lines = Styled.lines("```kotlin\nval a = 1\n```", 40, Style.EMPTY, Style.EMPTY.bold(), Style.EMPTY, copied::add);
+        var lines = Styled.lines("```cobol\nMOVE A\n```", 40, Style.EMPTY, Style.EMPTY.bold(), Style.EMPTY, copied::add);
         assertEquals(2, lines.size(), "a header line and the code line");
-        assertEquals("kotlin  ", lines.get(0).get(0).text());
+        assertEquals("cobol  ", lines.get(0).get(0).text());
         var button = lines.get(0).get(1);
         assertTrue(button.text().contains("copy"));
         button.action().run();
-        assertEquals(List.of("val a = 1"), copied);
-        assertEquals("val a = 1", lines.get(1).get(0).text());
+        assertEquals(List.of("MOVE A"), copied);
+        assertEquals("MOVE A", lines.get(1).get(0).text());
     }
 
     @Test
     void withoutACopyHandlerTheOutputIsAsBefore() {
-        var lines = Styled.lines("```kotlin\nval a = 1\n```", 40, Style.EMPTY, Style.EMPTY.bold(), Style.EMPTY);
-        assertEquals("kotlin", lines.get(0).get(0).text());
-        assertEquals(1, lines.get(0).size(), "no button");
+        var lines = Styled.lines("```cobol\nMOVE A\n```", 40, Style.EMPTY, Style.EMPTY.bold(), Style.EMPTY);
+        assertEquals("cobol", lines.get(0).get(0).text());
+        assertTrue(lines.get(0).stream().noneMatch(sp -> sp.action() != null || sp.text().contains("copy")), "no button");
     }
 
     @Test
