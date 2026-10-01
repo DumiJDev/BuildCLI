@@ -1,7 +1,5 @@
 package dev.buildcli.infrastructure.tui;
 
-import static dev.buildcli.infrastructure.tui.Draw.DAY;
-import static dev.buildcli.infrastructure.tui.Draw.TIME;
 import static dev.buildcli.infrastructure.tui.Draw.clean;
 import static dev.buildcli.infrastructure.tui.Draw.fill;
 import static dev.buildcli.infrastructure.tui.Draw.put;
@@ -34,7 +32,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.time.ZoneId;
 
 /**
  * The chat screen. It looks like WhatsApp Web: a list of chats on the left (your groups and a direct chat
@@ -45,8 +42,6 @@ import java.time.ZoneId;
  * becomes an attachment) end up as calls on the {@link ChatSession}.
  */
 final class ChatScreen implements Element {
-
-    private record Row(int x, List<Span> spans) {}
 
     private record Hit(Rect rect, Runnable action) {}
 
@@ -95,6 +90,7 @@ final class ChatScreen implements Element {
     private final SettingsServices services;
     private final ChatListView chatList;
     private final ChatCommands commands;
+    private final ConversationRows conversation;
     private final SettingsView settingsView;
     private boolean settingsOpen;
     private ChatInfoView infoView;
@@ -244,6 +240,53 @@ final class ChatScreen implements Element {
                 return chatList.title(thread);
             }
         });
+        this.conversation = new ConversationRows(session, services, chatList, new ConversationRows.Host() {
+            @Override
+            public String selected() {
+                return selected;
+            }
+
+            @Override
+            public void review(long changesId, boolean undo) {
+                reviewChanges(changesId, undo);
+            }
+
+            @Override
+            public void copy(String text) {
+                copyText(text);
+            }
+
+            @Override
+            public void addSampleAgents() {
+                ChatScreen.this.addSampleAgents();
+            }
+
+            @Override
+            public void createAgent() {
+                settingsOpen = true;
+                settingsView.startNewAgent();
+            }
+
+            @Override
+            public void openConnect(String why) {
+                ChatScreen.this.openConnect(why);
+            }
+
+            @Override
+            public void openSettings() {
+                settingsOpen = true;
+            }
+
+            @Override
+            public boolean runCommand(String text) {
+                return commands.run(text);
+            }
+
+            @Override
+            public void setInput(String text) {
+                input.set(text);
+            }
+        });
         this.models = models;
         this.cwd = cwd;
         this.quit = quit;
@@ -334,10 +377,9 @@ final class ChatScreen implements Element {
 
     /** True while something on screen moves by itself: an agent working (spinner, dots) or a preview loading. */
     boolean animating() {
-        return session.busy() || loadingPreviews || connectOpen && connectView.animating() || System.currentTimeMillis() < toastUntil;
+        return session.busy() || conversation.loadingPreviews() || connectOpen && connectView.animating() || System.currentTimeMillis() < toastUntil;
     }
 
-    private volatile boolean loadingPreviews;
 
     /** For the app: how to write bytes straight to the terminal. */
     void rawOutput(java.util.function.Consumer<String> writer) {
@@ -588,20 +630,20 @@ final class ChatScreen implements Element {
     private record RowsKey(long version, int width, String chat, String theme, boolean activity, boolean compact, long frame) {}
 
     private RowsKey rowsKey;
-    private List<Row> rowsCache = List.of();
+    private List<ConversationRows.Row> rowsCache = List.of();
 
     private void drawConversation(Buffer buf, Rect r, List<Message> msgs) {
         int width = r.width() - 1;
         // rebuilding every bubble is the costly part of a frame: reuse the rows until the chat changes or something moves
-        boolean moving = session.isActive(selected) || loadingPreviews;
+        boolean moving = session.isActive(selected) || conversation.loadingPreviews();
         var key = new RowsKey(session.version(), width, selected, Theme.current(), settings().flag(dev.buildcli.application.Settings.SHOW_ACTIVITY),
                 settings().flag(dev.buildcli.application.Settings.COMPACT), moving ? System.currentTimeMillis() / 100 : 0);
         if (!key.equals(rowsKey)) {
-            loadingPreviews = false;
-            rowsCache = chatRows(width, msgs);
+            conversation.previewsRendered();
+            rowsCache = conversation.build(width, msgs);
             rowsKey = key;
         }
-        List<Row> rows = rowsCache;
+        List<ConversationRows.Row> rows = rowsCache;
         int total = rows.size();
         int viewH = r.height();
         scrollMax = Math.max(0, total - viewH);
@@ -629,7 +671,7 @@ final class ChatScreen implements Element {
         boolean empty = msgs.isEmpty() && !session.isActive(selected);
         int yOff = total < viewH ? (empty ? Math.max(0, (viewH - total) / 3) : viewH - total) : 0;
         for (int i = 0; i < viewH && first + i < total; i++) {
-            Row row = rows.get(first + i);
+            ConversationRows.Row row = rows.get(first + i);
             drawSpans(buf, r.x() + row.x(), r.y() + yOff + i, row.spans(), r.x() + width);
             if (!query.isEmpty()) {
                 boolean current = findIndex >= 0 && findRows.get(findIndex) == first + i;
@@ -670,7 +712,7 @@ final class ChatScreen implements Element {
     }
 
     /** The rows whose text contains the (lower-cased) query, top to bottom. A phrase split over two rows is not found. */
-    private static List<Integer> matchingRows(List<Row> rows, String query) {
+    private static List<Integer> matchingRows(List<ConversationRows.Row> rows, String query) {
         if (query.isEmpty()) {
             return List.of();
         }
@@ -771,100 +813,6 @@ final class ChatScreen implements Element {
 
     // ---- conversation rows ----
 
-    private List<Row> chatRows(int width, List<Message> msgs) {
-        List<Row> rows = new ArrayList<>();
-        if (session.group(selected) == null && session.contact(selected) == null) {
-            onboarding(rows, width);
-            return rows;
-        }
-        if (msgs.isEmpty() && !session.isActive(selected)) {
-            welcome(rows, width);
-            return rows;
-        }
-        boolean group = session.group(selected) != null;
-        long failed = session.lastFailedMessage();
-        java.time.LocalDate day = null;
-        Message prev = null;
-        rows.add(new Row(0, List.of()));
-        for (Message m : msgs) {
-            java.time.LocalDate d = m.at().atZone(ZoneId.systemDefault()).toLocalDate();
-            if (!d.equals(day)) {
-                day = d;
-                String label = d.equals(java.time.LocalDate.now()) ? "TODAY" : d.equals(java.time.LocalDate.now().minusDays(1)) ? "YESTERDAY"
-                        : DAY.format(d).toUpperCase(Locale.ROOT);
-                centred(rows, width, " " + label + " ", st(Theme.DIM, Theme.PILL));
-                rows.add(new Row(0, List.of()));
-                prev = null;
-            }
-            boolean sameAuthor = prev != null && prev.kind() == m.kind() && prev.author().equals(m.author())
-                    && (m.kind() == ChatSession.Kind.USER || m.kind() == ChatSession.Kind.AGENT);
-            if (m.kind() == ChatSession.Kind.ACTIVITY && !settings().flag(dev.buildcli.application.Settings.SHOW_ACTIVITY)) {
-                continue;
-            }
-            boolean bothQuiet = prev != null && isQuiet(prev) && isQuiet(m);
-            if (prev != null && !sameAuthor && !bothQuiet && !settings().flag(dev.buildcli.application.Settings.COMPACT)) {
-                rows.add(new Row(0, List.of()));
-            }
-            switch (m.kind()) {
-                case USER -> userBubble(rows, width, m, m.id() == failed);
-                case AGENT -> agentBubble(rows, width, group && !sameAuthor ? clean(m.author()) : null, m.text(), TIME.format(m.at()), false);
-                case ACTIVITY -> activity(rows, width, m);
-                case CHANGES -> changesCard(rows, width, m);
-                case SYSTEM -> centred(rows, width, " " + clean(m.text()).replace('\n', ' ') + " ", st(Theme.DIM, Theme.PILL));
-                case ERROR -> problem(rows, width, m.text(), failed);
-                default -> { }
-            }
-            prev = m;
-        }
-        if (session.isActive(selected)) {
-            rows.add(new Row(0, List.of()));
-            ChatSession.Live live = session.live(selected);
-            if (live != null) {
-                agentBubble(rows, width, group ? clean(live.agent()) : null, live.text() + " ▍", "", true);
-            } else if (session.pending() == null) {
-                String who = chatList.busyAgentIn(selected);
-                typingDots(rows, group ? who : "", who.isEmpty() ? "" : session.agentState(who));
-            }
-        }
-        rows.add(new Row(0, List.of()));
-        return rows;
-    }
-
-    private static boolean isQuiet(Message m) {
-        return m.kind() == ChatSession.Kind.ACTIVITY || m.kind() == ChatSession.Kind.SYSTEM || m.kind() == ChatSession.Kind.CHANGES;
-    }
-
-    /** "ana changed 2 files", with buttons to see exactly what changed and to put it back. */
-    private void changesCard(List<Row> rows, int width, Message m) {
-        boolean undone = m.state() == State.UNDONE;
-        var nets = dev.buildcli.application.tools.FileChanges.net(session.changes(m.id()));
-        int add = 0;
-        int del = 0;
-        for (var n : nets) {
-            int[] c = n.counts();
-            add += c[0];
-            del += c[1];
-        }
-        String stat = nets.isEmpty() ? "" : "  +" + add + " −" + del;
-        String text = (undone ? "↶ " : "✎ ") + clean(m.author()) + " " + clean(m.text()).replaceFirst("^Changed", "changed");
-        int room = Math.max(10, Math.min(width - 14 - Wrap.width(stat), 76));
-        String shown = CharWidth.truncateWithEllipsis(text, room, CharWidth.TruncatePosition.END);
-        Style pill = st(undone ? Theme.DIM : Theme.TEXT, Theme.PILL);
-        int w = Wrap.width(shown) + Wrap.width(stat) + 2;
-        rows.add(new Row(Math.max(0, (width - w) / 2), List.of(new Span(" " + shown, pill),
-                new Span(stat + " ", st(undone ? Theme.DIM : Theme.ACCENT, Theme.PILL)))));
-        List<Span> buttons = new ArrayList<>();
-        buttons.add(new Span(" Review ", st(Theme.TEXT, Theme.FIELD), () -> reviewChanges(m.id(), false)));
-        if (undone) {
-            buttons.add(new Span("  undone", st(Theme.DIM, Theme.BG).italic()));
-        } else if (session.canUndo()) {
-            buttons.add(new Span(" ", st(Theme.TEXT, Theme.BG)));
-            buttons.add(new Span(" Undo ", st(Theme.TEXT, Theme.FIELD), () -> reviewChanges(m.id(), true)));
-        }
-        int bw = Styled.width(buttons);
-        rows.add(new Row(Math.max(0, (width - bw) / 2), buttons));
-    }
-
     /** Opens the files of a changes card as a diff. With {@code undo} it asks to confirm putting them back. */
     private void reviewChanges(long id, boolean undo) {
         var files = session.changes(id);
@@ -893,67 +841,6 @@ final class ChatScreen implements Element {
         }
     }
 
-    private static void centred(List<Row> rows, int width, String text, Style style) {
-        for (String line : Wrap.lines(text, Math.max(10, width - 10))) {
-            String l = line.startsWith(" ") ? line : " " + line;
-            l = l.endsWith(" ") ? l : l + " ";
-            rows.add(new Row(Math.max(0, (width - Wrap.width(l)) / 2), List.of(new Span(l, style))));
-        }
-    }
-
-    private void typingDots(List<Row> rows, String who, String state) {
-        int phase = (int) (System.currentTimeMillis() / 300 % 3);
-        StringBuilder dots = new StringBuilder(" ");
-        for (int i = 0; i < 3; i++) {
-            dots.append(i == phase ? "●" : "•").append(' ');
-        }
-        List<Span> spans = new ArrayList<>();
-        spans.add(new Span(" ", st(Theme.TEXT, Theme.THEM)));
-        if (!who.isEmpty()) {
-            spans.add(new Span(clean(who) + " ", st(Theme.agentColor(who), Theme.THEM).bold()));
-        }
-        spans.add(new Span(dots.toString(), st(Theme.DIM, Theme.THEM)));
-        if (state.startsWith("waiting") || state.equals("reading") || state.equals("working")) {
-            spans.add(new Span(state + " ", st(Theme.DIM, Theme.THEM).italic()));
-        }
-        rows.add(new Row(2, spans));
-    }
-
-    /** No agents yet: BuildCLI is about agents, so the first thing to do is create one. */
-    private void onboarding(List<Row> rows, int width) {
-        centred(rows, width, "No agents yet", st(Theme.TEXT, Theme.BG).bold());
-        rows.add(new Row(0, List.of()));
-        centred(rows, width, "Agents are the people you chat with: each has a role and a model, and does only what you allow.",
-                st(Theme.DIM, Theme.BG));
-        rows.add(new Row(0, List.of()));
-        rows.add(new Row(0, List.of()));
-        int boxW = Math.min(width - 4, 56);
-        int x = Math.max(0, (width - boxW) / 2);
-        String[][] actions = {{"Add the sample agents: wheslley, breno, matheus and dumildes", "samples"}, {"Create your own agent", "agent"},
-            {"Connect a model and provider", "connect"}};
-        for (String[] a : actions) {
-            Runnable act = switch (a[1]) {
-                case "samples" -> this::addSampleAgents;
-                case "agent" -> () -> {
-                    settingsOpen = true;
-                    settingsView.startNewAgent();
-                };
-                default -> () -> {
-                    if (services.canConnect()) {
-                        openConnect(null);
-                    } else {
-                        settingsOpen = true;
-                    }
-                };
-            };
-            String label = "  " + a[0];
-            rows.add(new Row(x, List.of(new Span(label + " ".repeat(Math.max(1, boxW - Wrap.width(label) - 2)) + "› ", st(Theme.TEXT, Theme.PANEL), act))));
-            rows.add(new Row(0, List.of()));
-        }
-        centred(rows, width, "The sample agents: wheslley plans and leads, matheus does the coding, breno looks after the build and CI, dumildes brings ideas. "
-                + "Every write asks you first, and you can undo it.", st(Theme.FAINT, Theme.BG));
-    }
-
     /** The "add the sample agents" button of an empty chat: writes the agents, adds them live and opens their group. */
     private void addSampleAgents() {
         try {
@@ -964,208 +851,6 @@ final class ChatScreen implements Element {
             say("Added " + String.join(", ", added) + ". Say something in the group to start.");
         } catch (Exception e) {
             say("Could not add them: " + e.getMessage());
-        }
-    }
-
-    private void welcome(List<Row> rows, int width) {
-        var g = session.group(selected);
-        boolean isGroup = g != null;
-        String who = isGroup ? clean(g.name()) : clean(selected);
-        centred(rows, width, "Start a conversation with " + who, st(Theme.TEXT, Theme.BG).bold());
-        rows.add(new Row(0, List.of()));
-        String sub = isGroup ? (g.admins().isEmpty() ? "No admin yet" : clean(String.join(", ", g.admins())) + " (admin) answers messages that "
-                + "mention nobody") + ". Type @ to talk to someone, or mention two people to ask both."
-                : clean(chatList.roleOf(selected)) + ". Messages here go straight to " + clean(selected) + ".";
-        centred(rows, width, sub, st(Theme.DIM, Theme.BG));
-        rows.add(new Row(0, List.of()));
-        rows.add(new Row(0, List.of()));
-        String[][] ideas = isGroup
-                ? new String[][] {{"Review my uncommitted changes", "Review my uncommitted changes and point out risks."},
-                    {"Explain this project", "Explain how this project is organised and where to start."},
-                    {"Add missing tests", "Find important code without tests and add unit tests for it."},
-                    {"Show my changes", "/diff"}}
-                : new String[][] {{"What can you do?", "What can you do for me in this project, with your tools and permissions?"},
-                    {"Look at my changes", "Look at my uncommitted changes and tell me what you think."}};
-        int boxW = Math.min(width - 4, 56);
-        int x = Math.max(0, (width - boxW) / 2);
-        for (String[] idea : ideas) {
-            Runnable act = idea[1].startsWith("/") ? () -> runCommand(idea[1]) : () -> input.set(idea[1]);
-            String label = "  " + idea[0];
-            rows.add(new Row(x, List.of(new Span(label + " ".repeat(Math.max(1, boxW - Wrap.width(label) - 2)) + "› ", st(Theme.TEXT, Theme.PANEL), act))));
-            rows.add(new Row(0, List.of()));
-        }
-    }
-
-    private int maxBody(int width) {
-        return Math.max(16, Math.min(width - 10, Math.max(40, (int) (width * 0.72))));
-    }
-
-    private void userBubble(List<Row> rows, int width, Message m, boolean retryable) {
-        Style base = st(Theme.TEXT, Theme.ME);
-        Style code = st(Theme.CODE_TEXT, Theme.CODE);
-        int max = maxBody(width);
-        List<List<Span>> body = new ArrayList<>();
-        for (Attachment a : m.attachments()) {
-            attachmentLines(body, a, base, max);
-        }
-        if (!m.text().isEmpty()) {
-            body.addAll(Styled.lines(clean(m.text()), max, base, base.bold(), code));
-        }
-        List<Span> footer = new ArrayList<>();
-        Style meta = st(Theme.ON_ME_DIM, Theme.ME);
-        footer.add(new Span(TIME.format(m.at()) + " ", meta));
-        switch (m.state()) {
-            case QUEUED -> footer.add(new Span("✓", meta));
-            case RUNNING -> footer.add(new Span("✓✓", st(Theme.BLUE, Theme.ME)));
-            case DONE -> footer.add(new Span("✓✓", st(Theme.BLUE, Theme.ME)));
-            case FAILED -> {
-                footer.add(new Span("! not sent ", st(Theme.RED, Theme.ME).bold()));
-                if (retryable) {
-                    footer.add(new Span(" Retry ", st(Theme.BG, Theme.AMBER).bold(), () -> session.retry(m.id())));
-                    if (services.canConnect()) {
-                        footer.add(new Span(" ", meta));
-                        footer.add(new Span(" Change model ", st(Theme.TEXT, Theme.FIELD), () -> openConnect(null)));
-                    }
-                }
-            }
-            default -> { }
-        }
-        bubble(rows, width, true, null, null, body, footer, base, code);
-    }
-
-    private void agentBubble(List<Row> rows, int width, String author, String text, String time, boolean live) {
-        Style base = st(Theme.TEXT, Theme.THEM);
-        Style code = st(Theme.CODE_TEXT, Theme.CODE);
-        List<List<Span>> body = Styled.lines(clean(text), maxBody(width), base, base.bold(), code, live ? null : this::copyText);
-        List<Span> footer = time.isEmpty() ? List.of() : List.of(new Span(time, st(Theme.DIM, Theme.THEM)));
-        bubble(rows, width, false, author, author == null ? null : Theme.agentColor(author), body, footer, base, code);
-    }
-
-    private void problem(List<Row> rows, int width, String text, long failed) {
-        Style base = st(Theme.TEXT, Theme.ERROR_BG);
-        List<List<Span>> body = Styled.lines(clean(text), maxBody(width), base, base.bold(), base);
-        List<Span> footer = new ArrayList<>();
-        if (failed >= 0) {
-            footer.add(new Span(" Retry ", st(Theme.BG, Theme.AMBER).bold(), () -> session.retry(failed)));
-        }
-        if (services.canConnect()) {
-            footer.add(new Span(" ", base));
-            footer.add(new Span(" Change model ", st(Theme.TEXT, Theme.FIELD), () -> openConnect("The last message failed: " + text)));
-        }
-        bubble(rows, width, false, "Something went wrong", Theme.RED, body, footer, base, base);
-    }
-
-    private void activity(List<Row> rows, int width, Message m) {
-        Color c = switch (m.state()) {
-            case DONE -> Theme.ACCENT;
-            case FAILED -> Theme.RED;
-            default -> Theme.AMBER;
-        };
-        String glyph = switch (m.state()) {
-            case DONE -> "✓";
-            case FAILED -> "✗";
-            default -> "◌";
-        };
-        String text = clean(m.author()) + " " + clean(m.text()).replace('\n', ' ');
-        String shown = CharWidth.truncateWithEllipsis(text, Math.max(10, Math.min(width - 14, 76)), CharWidth.TruncatePosition.END);
-        int w = Wrap.width(shown) + 4;
-        rows.add(new Row(Math.max(0, (width - w) / 2), List.of(new Span(" " + glyph + " ", st(c, Theme.PILL)),
-                new Span(shown + " ", st(m.state() == State.FAILED ? Theme.RED : Theme.DIM, Theme.PILL)))));
-    }
-
-    /** A bubble: optional author line, body, a footer aligned right (time, ticks), with one column of padding. */
-    private void bubble(List<Row> rows, int width, boolean mine, String author, Color authorColor, List<List<Span>> body,
-            List<Span> footer, Style base, Style code) {
-        int inner = 0;
-        for (List<Span> line : body) {
-            inner = Math.max(inner, Styled.width(line));
-        }
-        if (author != null) {
-            inner = Math.max(inner, Wrap.width(author));
-        }
-        // the time sits on the last line when it fits, as in WhatsApp; otherwise on its own line
-        int footW = Styled.width(footer);
-        List<Span> lastLine = body.isEmpty() ? List.of() : body.get(body.size() - 1);
-        boolean inline = !footer.isEmpty() && Styled.width(lastLine) + 2 + footW <= Math.max(inner, maxBody(width)) && !isCode(lastLine, code);
-        inner = Math.max(inner, inline ? Styled.width(lastLine) + 2 + footW : footW);
-        inner = Math.max(inner, 6);
-        int x = mine ? Math.max(0, width - inner - 4) : 2;
-        if (author != null) {
-            rows.add(line(x, List.of(new Span(author, st(authorColor, base.bg().orElse(Theme.THEM)).bold())), inner, base));
-        }
-        for (int i = 0; i < body.size(); i++) {
-            List<Span> l = body.get(i);
-            if (inline && i == body.size() - 1) {
-                List<Span> withTime = new ArrayList<>(l);
-                withTime.add(new Span(" ".repeat(inner - Styled.width(l) - footW), base));
-                withTime.addAll(footer);
-                rows.add(line(x, withTime, inner, base));
-            } else {
-                rows.add(line(x, l, inner, isCode(l, code) ? code : base));
-            }
-        }
-        if (!inline && !footer.isEmpty()) {
-            List<Span> f = new ArrayList<>();
-            f.add(new Span(" ".repeat(Math.max(0, inner - footW)), base));
-            f.addAll(footer);
-            rows.add(line(x, f, inner, base));
-        }
-    }
-
-    private static boolean isCode(List<Span> line, Style code) {
-        if (line.isEmpty()) {
-            return false;
-        }
-        for (Span s : line) {
-            if (!s.style().equals(code)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /** One bubble row; {@code fillStyle} pads the content (code lines keep their darker background to the edge). */
-    private static Row line(int x, List<Span> content, int inner, Style fillStyle) {
-        List<Span> spans = new ArrayList<>();
-        Style edge = Style.create().fg(fillStyle.fg().orElse(Theme.TEXT)).bg(fillStyle == null ? Theme.THEM : fillStyle.bg().orElse(Theme.THEM));
-        spans.add(new Span(" ", edge));
-        spans.addAll(content);
-        spans.add(new Span(" ".repeat(Math.max(0, inner - Styled.width(content))) + " ", edge));
-        return new Row(x, spans);
-    }
-
-    private void attachmentLines(List<List<Span>> body, Attachment a, Style base, int max) {
-        if (Previews.loading(a)) {
-            loadingPreviews = true;
-        }
-        String size = a.size() >= 1024 * 1024 ? a.size() / 1024 / 1024 + " MB" : Math.max(1, a.size() / 1024) + " KB";
-        if (a.kind() == Attachment.Kind.IMAGE) {
-            Previews.Image img = Previews.image(a);
-            if (img != null) {
-                int cols = Math.min(img.width(), Math.min(max, 40));
-                int pixRows = Math.max(1, Math.round((float) img.height() * cols / img.width()));
-                for (int py = 0; py < pixRows; py += 2) {
-                    List<Span> line = new ArrayList<>();
-                    for (int cx = 0; cx < cols; cx++) {
-                        int sx = Math.min(img.width() - 1, cx * img.width() / cols);
-                        int top = img.pixels()[Math.min(img.height() - 1, py * img.height() / pixRows) * img.width() + sx];
-                        int bottom = img.pixels()[Math.min(img.height() - 1, (py + 1) * img.height() / pixRows) * img.width() + sx];
-                        line.add(new Span("▀", Style.create().fg(Color.rgb(top >> 16 & 255, top >> 8 & 255, top & 255))
-                                .bg(Color.rgb(bottom >> 16 & 255, bottom >> 8 & 255, bottom & 255))));
-                    }
-                    body.add(line);
-                }
-            }
-            body.add(List.of(new Span("▣ " + clean(a.name()) + " · " + size, st(Theme.ON_ME_DIM, Theme.ME))));
-        } else {
-            Previews.Audio audio = Previews.audio(a);
-            String d = audio == null ? "" : Previews.duration(audio.seconds());
-            List<Span> l = new ArrayList<>();
-            l.add(new Span("▶ ", st(Theme.TEXT, Theme.ME).bold()));
-            l.add(new Span(audio != null && !audio.waveform().isEmpty() ? audio.waveform() : "━━━━━━━━━━━━━━━━━━", st(Theme.BLUE, Theme.ME)));
-            l.add(new Span("  " + (d.isEmpty() ? size : d), st(Theme.ON_ME_DIM, Theme.ME)));
-            body.add(l);
-            body.add(List.of(new Span("♪ " + clean(a.name()), st(Theme.ON_ME_DIM, Theme.ME))));
         }
     }
 
