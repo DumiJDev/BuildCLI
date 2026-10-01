@@ -1,5 +1,6 @@
 package dev.buildcli.application;
 
+import static dev.buildcli.application.I18n.t;
 import dev.buildcli.domain.Agent;
 import dev.buildcli.domain.Chat;
 import dev.buildcli.ports.ChatStore;
@@ -188,7 +189,7 @@ final class ChatDirectory {
         try {
             store.saveBlocked(copy);
         } catch (RuntimeException e) {
-            onError.accept("Could not save who can contact whom: " + e.getMessage());
+            onError.accept(t("Could not save who can contact whom: {0}", e.getMessage()));
         }
     }
 
@@ -296,7 +297,7 @@ final class ChatDirectory {
         try {
             store.save(groups());
         } catch (RuntimeException e) {
-            onError.accept("Could not save the groups: " + e.getMessage());
+            onError.accept(t("Could not save the groups: {0}", e.getMessage()));
         }
     }
 }

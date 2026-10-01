@@ -399,3 +399,190 @@ Delete an agent (asks to confirm)	Apaga um agente (pede confirmação)
 Add a ready-made team: software, writing desk or office assistants	Junta uma equipa pronta: software, escrita ou escritório
 Stop what we were doing	Para o que estávamos a fazer
 Go back one question	Volta uma pergunta
+Enter next · Esc cancel	Enter avança · Esc cancela
+Enter next · Esc back	Enter avança · Esc volta
+↑↓ move · Space tick · Enter next · Esc back	↑↓ move · Espaço marca · Enter avança · Esc volta
+Are you sure?	Tens a certeza?
+Yes	Sim
+No	Não
+Search models, or type provider:model and press Enter	Procura modelos, ou escreve fornecedor:modelo e prime Enter
+Loading models from {0} provider(s)…	A carregar modelos de {0} fornecedor(es)…
+{0} models	{0} modelos
+↑↓ Enter pick · Esc cancel	↑↓ Enter escolhe · Esc cancela
+Type provider:model, e.g. openrouter:openrouter/free	Escreve fornecedor:modelo, ex.: openrouter:openrouter/free
+empty	vazio
+↑↓ PgUp PgDn scroll	↑↓ PgUp PgDn deslizam
+[ ] previous/next file	[ ] ficheiro anterior/seguinte
+Esc close	Esc fecha
+Files you or another agent changed since are left alone.	Os ficheiros que tu ou outro agente alteraram desde então ficam como estão.
+Undo these changes	Desfazer estas alterações
+Paste the key first.	Cola primeiro a chave.
+That does not look like a key: it has spaces or line breaks.	Isso não parece uma chave: tem espaços ou quebras de linha.
+Checking the key with {0}…	A verificar a chave com {0}…
+no answer	sem resposta
+{0} did not accept that key ({1}). Check it and paste it again.	{0} não aceitou essa chave ({1}). Verifica-a e cola outra vez.
+Could not check it: {0}. Press Enter again to save it anyway, or paste a different one.	Não consegui verificá-la: {0}. Prime Enter outra vez para a guardar mesmo assim, ou cola outra.
+Could not save it: {0}	Não consegui guardá-la: {0}
+Your {0} key	A tua chave de {0}
+Create one at {0}	Cria uma em {0}
+Get one from {0}	Obtém uma em {0}
+Paste the key here	Cola a chave aqui
+on this computer	neste computador
+in {0}	em {0}
+It is saved only on this computer, {0}, readable by your account only. It is never put in a project, and it is sent nowhere except to {1} ({2}).	É guardada só neste computador, {0}, legível apenas pela tua conta. Nunca é posta num projeto, e não é enviada para lado nenhum exceto para {1} ({2}).
+You can also set {0} in your environment instead; that always wins over a saved key.	Também podes definir {0} no teu ambiente; isso sobrepõe-se sempre a uma chave guardada.
+needs a key	precisa de chave
+checking…	a verificar…
+Checking {0} …	A verificar {0} …
+not running	não está a correr
+key rejected	chave recusada
+The key comes from the environment variable {0}. Fix it there, or press K to save a different key here (a variable that is set wins, so unset it first).	A chave vem da variável de ambiente {0}. Corrige-a lá, ou prime K para guardar outra chave aqui (uma variável definida tem prioridade, por isso remove-a primeiro).
+Press K to enter a new key.	Prime K para pôr uma chave nova.
+not reachable	inacessível
+key or endpoint failed	a chave ou o endereço falharam
+Check the URL {0}, then press R to check again.	Verifica o endereço {0}, depois prime R para verificar de novo.
+Check the URL {0} and the key (press K to enter a new one), then press R to check again.	Verifica o endereço {0} e a chave (prime K para pôr uma nova), depois prime R para verificar de novo.
+no models yet	ainda sem modelos
+Ollama is running but has no models. Download one in a terminal:	O Ollama está a correr mas não tem modelos. Descarrega um num terminal:
+then press R. Models of 7B or more work much better with tools.	depois prime R. Modelos de 7B ou mais funcionam muito melhor com ferramentas.
+{0} answered but lists no models. Press Enter to type a model name yourself.	{0} respondeu mas não lista modelos. Prime Enter para escreveres o nome de um modelo.
+1 model	1 modelo
+{0} free	{0} grátis
+ready	pronto
+Press Enter to choose a model.	Prime Enter para escolher um modelo.
+Create a key at {0}	Cria uma chave em {0}
+Get a key from the provider	Obtém uma chave no fornecedor
+Press Enter here and paste it. It is saved only on this computer, readable by your account only.	Prime Enter aqui e cola-a. É guardada só neste computador, legível apenas pela tua conta.
+Prefer an environment variable? Set {0} before starting BuildCLI; it always wins over a saved key.	Preferes uma variável de ambiente? Define {0} antes de iniciar o BuildCLI; sobrepõe-se sempre a uma chave guardada.
+Ollama runs models on this machine, free and private.	O Ollama corre modelos neste computador, grátis e em privado.
+Install it from {0}	Instala-o a partir de {0}
+Start it:	Arranca-o:
+Download a model:	Descarrega um modelo:
+Press R to check again.	Prime R para verificar de novo.
+LM Studio runs models on this machine, free and private.	O LM Studio corre modelos neste computador, grátis e em privado.
+Install it from {0} and download a model	Instala-o a partir de {0} e descarrega um modelo
+Start its server: Developer tab › Start server	Arranca o servidor: separador Developer › Start server
+Nothing answers at {0}. Start the server, then press R to check again.	Nada responde em {0}. Arranca o servidor e depois prime R para verificar de novo.
+Key saved. Looking for {0}'s models…	Chave guardada. A procurar os modelos de {0}…
+Forgot the saved key for {0}.	Esqueci a chave guardada de {0}.
+There was no saved key to forget.	Não havia chave guardada para esquecer.
+Could not forget it: {0}	Não consegui esquecê-la: {0}
+Default model: {0}	Modelo predefinido: {0}
+(this project).	(este projeto).
+(all projects).	(todos os projetos).
+{0} keeps its own model (Settings › Models).	{0} mantém o seu próprio modelo (Definições › Modelos).
+{0} keep their own model (Settings › Models).	{0} mantêm o seu próprio modelo (Definições › Modelos).
+Now create an agent: F2 › Agents.	Agora cria um agente: F2 › Agentes.
+Connect a model	Ligar um modelo
+Provider	Fornecedor
+Model	Modelo
+Test	Teste
+Enter save · Ctrl+U clear · Esc back	Enter guarda · Ctrl+U limpa · Esc volta
+↑↓ choose · Enter next · K key · D forget key · R check again · Esc close	↑↓ escolhe · Enter avança · K chave · D esquece chave · R verifica de novo · Esc fecha
+type to search · ↑↓ choose · Enter test it · Esc back	escreve para procurar · ↑↓ escolhe · Enter testa · Esc volta
+P this project · G all projects · B another model · Esc back	P este projeto · G todos os projetos · B outro modelo · Esc volta
+R try again · B another model · Esc back	R tenta de novo · B outro modelo · Esc volta
+Esc back	Esc volta
+Where should your agents' model come from?	De onde deve vir o modelo dos teus agentes?
+on this machine	neste computador
+cloud	na nuvem
+checking	a verificar
+Key: saved by you (K replace · D forget)	Chave: guardada por ti (K substitui · D esquece)
+Key: from the environment variable {0} (K saves a different one)	Chave: da variável de ambiente {0} (K guarda outra)
+Add your key	Pôr a tua chave
+Choose a model	Escolher um modelo
+Check again	Verificar de novo
+Which {0} model?	Que modelo de {0}?
+Search, or type a model name and press Enter	Procura, ou escreve o nome de um modelo e prime Enter
+no tools	sem ferramentas
+No models listed.	Sem modelos listados.
+No match: Enter tests {0}:{1}	Sem resultados: Enter testa {0}:{1}
+{0} models · models marked "no tools" can chat but cannot read or edit files	{0} modelos · os marcados "sem ferramentas" conversam mas não leem nem editam ficheiros
+Testing {0}	A testar {0}
+Sending a one-word message… {0} s	A enviar uma mensagem de uma palavra… {0} s
+Free and local models can take a while the first time (loading the model).	Modelos grátis e locais podem demorar a primeira vez (a carregar o modelo).
+Use it for agents that have no model of their own:	Usa-o nos agentes que não têm modelo próprio:
+Another model	Outro modelo
+This looks like a key problem: press Esc until the provider list, select it and press K for a new key.	Parece um problema de chave: prime Esc até à lista de fornecedores, seleciona-o e prime K para uma chave nova.
+Try again	Tentar de novo
+It answered.	Respondeu.
+It answered "{0}" in {1}	Respondeu "{0}" em {1}
+{0} needs no key.	{0} não precisa de chave.
+That key comes from the environment variable {0}; BuildCLI cannot remove it.	Essa chave vem da variável de ambiente {0}; o BuildCLI não a pode remover.
+No saved key for {0}.	Sem chave guardada para {0}.
+Press D again to forget the saved key for {0}.	Prime D outra vez para esquecer a chave guardada de {0}.
+New chat	Novo chat
+Add to {0}	Adicionar a {0}
+group	grupo
+New group: {0} · choose members	Novo grupo: {0} · escolhe os membros
+Group info · {0}	Grupo · {0}
+Contact info · {0}	Contacto · {0}
+Name of the new group	Nome do novo grupo
+New group	Novo grupo
+{0} joined {1}	{0} entrou em {1}
+pick at least one member	escolhe pelo menos um membro
+{0} member(s); the first is admin	{0} membro(s); o primeiro é admin
+{0} is no longer admin	{0} já não é admin
+{0} is now admin	{0} é agora admin
+{0} was removed	{0} foi removido
+optional: background the agents read before answering	opcional: contexto que os agentes leem antes de responder
+Context for {0}	Contexto de {0}
+Context saved	Contexto guardado
+File to add to the context	Ficheiro a juntar ao contexto
+path to a text file	caminho de um ficheiro de texto
+there is no file {0}	não existe o ficheiro {0}
+File added	Ficheiro adicionado
+File removed	Ficheiro removido
+New name	Novo nome
+Renamed	Renomeado
+the messages stay in memory until you quit	as mensagens ficam em memória até saíres
+none	nenhum
+{0} in {1}	{0} em {1}
+{0} in a direct chat	{0} num chat direto
+↑↓ choose · letters or click run the buttons · Esc back	↑↓ escolhe · as letras ou o clique usam os botões · Esc volta
+↑↓ choose · Enter · Esc back	↑↓ escolhe · Enter · Esc volta
++ New group	+ Novo grupo
+choose a name and the members	escolhe um nome e os membros
+Everyone is already in this group	Já estão todos neste grupo
+Create the group	Criar o grupo
++ Add member	+ Adicionar membro
+Context	Contexto
+Rename group	Mudar o nome do grupo
+Delete group	Apagar o grupo
+Role	Papel
+Status	Estado
+May	Pode
+Groups	Grupos
+Create	Criar
+Message	Mensagem
+Add	Adicionar
+Remove	Remover
+Dismiss admin	Retirar admin
+Make admin	Fazer admin
+Edit	Editar
+Add file	Juntar ficheiro
+Rename	Mudar nome
+Changed 1 file: {0}	Alterado 1 ficheiro: {0}
+Changed {0} files: {1}	Alterados {0} ficheiros: {1}
+Nothing to undo.	Nada para desfazer.
+Already undone.	Já desfeito.
+These changes were not kept, so they cannot be undone.	Estas alterações não foram guardadas, por isso não se podem desfazer.
+Undid {0}'s changes: {1}.	Desfiz as alterações de {0}: {1}.
+Undo failed: {0}	Não consegui desfazer: {0}
+This chat is between {0}. You can read it, not write in it: ask one of them in their own chat to write to the other.	Este chat é entre {0}. Podes lê-lo, não escrever nele: pede a um deles, no chat dele, para escrever ao outro.
+and	e
+There is nobody to talk to yet. Create an agent in Settings (F2) > Agents, or run 'buildcli init'.	Ainda não há ninguém com quem falar. Cria um agente em Definições (F2) > Agentes, ou corre 'buildcli init'.
+{0} is not in this group. Add them from the group info to talk to them here.	{0} não está neste grupo. Adiciona-o a partir da informação do grupo para falares com ele aqui.
+{0} are not in this group. Add them from the group info to talk to them here.	{0} não estão neste grupo. Adiciona-os a partir da informação do grupo para falares com eles aqui.
+This group has no members. Add someone from the group info.	Este grupo não tem membros. Adiciona alguém a partir da informação do grupo.
+Dropped {0} waiting message(s).	Descartei {0} mensagem(ns) em espera.
+Could not delete the saved messages: {0}	Não consegui apagar as mensagens guardadas: {0}
+This request could not be finished: {0}	Este pedido não pôde ser concluído: {0}
+no result	sem resultado
+Stopped: {0}	Parado: {0}
+Check the provider with 'buildcli provider test <provider:model>' or 'buildcli doctor'.	Verifica o fornecedor com 'buildcli provider test <fornecedor:modelo>' ou 'buildcli doctor'.
+Your message is kept: press Retry or type /retry to send it again.	A tua mensagem ficou guardada: prime Repetir ou escreve /retry para a enviar de novo.
+The agents paused after {0} messages among themselves. Write to them to keep going.	Os agentes pararam depois de {0} mensagens entre eles. Escreve-lhes para continuarem.
+{0} wrote to you in your private chat.	{0} escreveu-te no teu chat privado.
+Could not save who can contact whom: {0}	Não consegui guardar quem pode contactar quem: {0}
+Could not save the groups: {0}	Não consegui guardar os grupos: {0}

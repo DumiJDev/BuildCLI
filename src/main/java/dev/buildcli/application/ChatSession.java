@@ -1,5 +1,6 @@
 package dev.buildcli.application;
 
+import static dev.buildcli.application.I18n.t;
 import dev.buildcli.domain.Agent;
 import dev.buildcli.domain.Attachment;
 import dev.buildcli.domain.Chat;
@@ -316,13 +317,12 @@ public final class ChatSession implements UserInterface {
             return id;
         }
         if (isAgentChat(chat)) {
-            system("This chat is between " + String.join(" and ", agentChatMembers(chat)) + ". You can read it, not write in it: ask one of "
-                    + "them in their own chat to write to the other.");
+            system(t("This chat is between {0}. You can read it, not write in it: ask one of them in their own chat to write to the other.", String.join(" " + t("and") + " ", agentChatMembers(chat))));
             return -1;
         }
         String thread = chat == null || (group(chat) == null && !directory.hasContact(chat)) ? defaultChat() : chat;
         if (thread == null) {
-            error("There is nobody to talk to yet. Create an agent in Settings (F2) > Agents, or run 'buildcli init'.");
+            error(t("There is nobody to talk to yet. Create an agent in Settings (F2) > Agents, or run 'buildcli init'."));
             return -1;
         }
         long id = transcript.nextId();
@@ -345,14 +345,14 @@ public final class ChatSession implements UserInterface {
             List<String> mentioned = mentioned(text);
             List<String> outside = mentioned.stream().filter(m -> !g.has(m)).toList();
             if (!outside.isEmpty()) {
-                note(thread, String.join(", ", outside) + (outside.size() == 1 ? " is" : " are") + " not in this group. Add "
-                        + (outside.size() == 1 ? "them" : "them") + " from the group info to talk to them here.");
+                note(thread, outside.size() == 1 ? t("{0} is not in this group. Add them from the group info to talk to them here.", outside.get(0))
+                        : t("{0} are not in this group. Add them from the group info to talk to them here.", String.join(", ", outside)));
             }
             targets = mentioned.stream().filter(g::has).toList();
             if (targets.isEmpty()) {
                 String admin = pickAdmin(g);
                 if (admin == null) {
-                    note(thread, "This group has no members. Add someone from the group info.");
+                    note(thread, t("This group has no members. Add someone from the group info."));
                     replace(id, State.FAILED);
                     return;
                 }
@@ -555,7 +555,7 @@ public final class ChatSession implements UserInterface {
             }
         }
         if (dropped > 0) {
-            system("Dropped " + dropped + " waiting message(s).");
+            system(t("Dropped {0} waiting message(s).", dropped));
         }
         return dropped;
     }
@@ -589,7 +589,7 @@ public final class ChatSession implements UserInterface {
     public void clearChat(String thread) {
         String why = transcript.clearThread(thread);
         if (why != null) {
-            error("Could not delete the saved messages: " + why);
+            error(t("Could not delete the saved messages: {0}", why));
         }
     }
 
@@ -751,15 +751,15 @@ public final class ChatSession implements UserInterface {
                 ok = true;
                 deliverMentions(run, said);
             } else {
-                error("This request could not be finished: " + (root.result == null ? "no result" : root.result));
+                error(t("This request could not be finished: {0}", root.result == null ? t("no result") : root.result));
             }
         } catch (RunAborted e) {
             feed.flushAll();
-            system("Stopped: " + e.getMessage());
+            system(t("Stopped: {0}", e.getMessage()));
         } catch (Throwable t) {
             feed.flushAll();
-            error(Orchestrator.describe(t) + "\nCheck the provider with 'buildcli provider test <provider:model>' or 'buildcli doctor'. "
-                    + (run.messageId > 0 ? "Your message is kept: press Retry or type /retry to send it again." : ""));
+            error(Orchestrator.describe(t) + "\n" + I18n.t("Check the provider with 'buildcli provider test <provider:model>' or 'buildcli doctor'.") + " "
+                    + (run.messageId > 0 ? I18n.t("Your message is kept: press Retry or type /retry to send it again.") : ""));
         }
         // a stopped or failed run may still have written files: they are shown and can be undone all the same
         changeCards.post(run);
@@ -833,7 +833,7 @@ public final class ChatSession implements UserInterface {
             }
             int limit = Math.max(0, agentHops.getAsInt());
             if (run.hops + 1 > limit) {
-                note(thread, "The agents paused after " + limit + " messages among themselves. Write to them to keep going.");
+                note(thread, t("The agents paused after {0} messages among themselves. Write to them to keep going.", limit));
                 return;
             }
             enqueue(new Run(-1, thread, m, run.hops + 1), said, List.of(), run.me);
@@ -993,7 +993,7 @@ public final class ChatSession implements UserInterface {
             add(new Message(transcript.nextId(), Kind.AGENT, from, text, Instant.now(), State.NONE, List.of(), from));
             String where = run == null ? from : run.origin;
             if (!where.equals(from)) {
-                note(where, from + " wrote to you in your private chat.");
+                note(where, t("{0} wrote to you in your private chat.", from));
             }
             return "Sent to the person in your private chat with them; they will see it there. Tell whoever asked you that it is done.";
         }
