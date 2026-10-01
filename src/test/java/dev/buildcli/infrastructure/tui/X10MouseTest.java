@@ -2,31 +2,21 @@ package dev.buildcli.infrastructure.tui;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import java.io.ByteArrayOutputStream;
-import java.nio.charset.StandardCharsets;
-import org.jline.terminal.Terminal;
-import org.jline.terminal.TerminalBuilder;
 import org.junit.jupiter.api.Test;
 
 /** The Windows console reports the mouse as X10; the UI library reads SGR. Everything else must pass through untouched. */
-class WindowsMouseBackendTest {
+class X10MouseTest {
 
-    /** What the UI library would read from these console bytes. */
+    /** What the UI library would read from these console bytes; a script stands in for the console, so no terminal or thread is involved. */
     static String read(String console) throws Exception {
-        // a pipe that stays open: the end of a plain stream would close the terminal under the reader
-        var feed = new java.io.PipedOutputStream();
-        var in = new java.io.PipedInputStream(feed, 4096);
-        Terminal terminal = TerminalBuilder.builder().system(false).type("xterm").streams(in, new ByteArrayOutputStream()).build();
-        try (WindowsMouseBackend backend = new WindowsMouseBackend(terminal)) {
-            backend.enableRawMode();
-            feed.write(console.getBytes(StandardCharsets.ISO_8859_1));
-            feed.flush();
-            StringBuilder sb = new StringBuilder();
-            for (int c = backend.read(400); c >= 0; c = backend.read(400)) {
-                sb.appendCodePoint(c);
-            }
-            return sb.toString().replace("\u001b", "<ESC>");
+        var bytes = new java.util.ArrayDeque<Integer>();
+        console.chars().forEach(bytes::add);
+        X10Mouse mouse = new X10Mouse(timeout -> bytes.isEmpty() ? -2 : bytes.poll());
+        StringBuilder sb = new StringBuilder();
+        for (int c = mouse.read(0); c >= 0; c = mouse.read(0)) {
+            sb.appendCodePoint(c);
         }
+        return sb.toString().replace("\u001b", "<ESC>");
     }
 
     /** An X10 report as the Windows console writes it: ESC [ M, then button, column and row each plus 32. */
