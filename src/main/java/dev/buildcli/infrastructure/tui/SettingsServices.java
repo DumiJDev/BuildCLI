@@ -9,7 +9,12 @@ import java.util.concurrent.CompletableFuture;
 public interface SettingsServices {
     Settings settings();
 
-    record Provider(String name, String url, String keyEnv, boolean keySet, boolean removable, String description) {
+    /** @param keyFrom where its key comes from: "environment", "saved" (typed into BuildCLI) or "" */
+    record Provider(String name, String url, String keyEnv, boolean keySet, boolean removable, String description, String keyFrom) {
+        public Provider(String name, String url, String keyEnv, boolean keySet, boolean removable, String description) {
+            this(name, url, keyEnv, keySet, removable, description, keySet ? "environment" : "");
+        }
+
         public Provider(String name, String url, String keyEnv, boolean keySet, boolean removable) {
             this(name, url, keyEnv, keySet, removable, "");
         }
@@ -30,6 +35,29 @@ public interface SettingsServices {
     CompletableFuture<String> test(String model);
 
     CompletableFuture<ModelCatalog.Result> models(String provider);
+
+    /** Saves the API key of a provider in the user's own BuildCLI folder, so no variable has to be set before starting. */
+    default void saveKey(String provider, String key) throws Exception {
+        throw new IllegalStateException("keys cannot be saved here");
+    }
+
+    /**
+     * Asks the provider for its models with this key, without saving it, so a wrong key is caught before it is kept. Providers
+     * that list their models without a key (OpenRouter) accept any key here; the test message later is the real check.
+     */
+    default CompletableFuture<ModelCatalog.Result> checkKey(String provider, String key) {
+        return CompletableFuture.completedFuture(new ModelCatalog.Result(List.of(), null));
+    }
+
+    /** Deletes a key saved with {@link #saveKey}. A variable set in the environment is not touched. @return false if none was saved */
+    default boolean forgetKey(String provider) throws Exception {
+        return false;
+    }
+
+    /** Where saved keys are kept, to tell the user. */
+    default String keyFile() {
+        return "";
+    }
 
     /** Forgets the model lists, so the next {@link #models} asks the providers again (after starting Ollama, say). */
     default void refreshModels() { }

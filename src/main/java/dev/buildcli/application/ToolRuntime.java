@@ -36,6 +36,13 @@ public final class ToolRuntime {
     private final Events events;
     private final List<Tool> tools;
     private final WorkspaceLock lock;
+    private List<Path> protectedPaths = List.of();
+
+    /** Folders the tools must never touch, whatever an agent is allowed to read or write; see {@link ToolContext#protect}. */
+    public ToolRuntime protect(List<Path> paths) {
+        this.protectedPaths = List.copyOf(paths);
+        return this;
+    }
 
     public ToolRuntime(Path workspace, UserInterface ui, Events events) {
         this(workspace, ui, events, defaultTools(), new WorkspaceLock());
@@ -95,7 +102,7 @@ public final class ToolRuntime {
             } else {
                 ToolContext ctx = new ToolContext(workspace, request -> approve(agent, task, request), lock, agent.name(),
                         holder -> events.emit("WaitingForWorkspace", task.id, agent.name(), holder + " is changing the workspace"))
-                        .onChange(ui::fileChanged);
+                        .onChange(ui::fileChanged).protect(protectedPaths);
                 // tools that change the workspace take the exclusive lock themselves, after any approval
                 result = tool.capability().equals(Capability.FILESYSTEM_WRITE) || tool.capability().equals(Capability.COMMAND_EXECUTE)
                         || tool.capability().equals(Capability.GIT_COMMIT) ? tool.execute(ctx, agent, call)

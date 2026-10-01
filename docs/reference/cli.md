@@ -12,8 +12,9 @@ Exit codes: **0** success, **1** the work failed or was aborted, **2** usage or 
 | `buildcli runs [--limit N]` | The recent runs of this project. |
 | `buildcli task list [--run ID]` / `task show <n> [--run ID]` | The tasks and handoffs of a run (default: the latest), and one task with its events. |
 | `buildcli usage [--run ID] [--json]` | Tokens per agent for a run, derived from the event log. |
+| `buildcli provider list` / `login <provider> [--stdin]` / `logout <provider>` / `add <name> --url <url>` / `test <provider:model>` | The places models come from. `login` saves the provider's API key on this computer (asked hidden, or the first line of standard input with `--stdin`) so no variable has to be set before starting; `logout` forgets it. A set environment variable wins over a saved key. Inside the app, `/connect` does the same step by step. |
 | `buildcli doctor` | Checks Java, git, the state directory, the configuration and the model providers. Exits 1 if something is broken; an unreachable Ollama is only a warning. |
-| `buildcli config` | Where configuration and state live, and the provider endpoints (never the API key). |
+| `buildcli config` | Where configuration and state live, and the provider endpoints. For each key it says only whether it is set, and whether from the environment or saved by you (never the key). |
 
 ## `run`
 
@@ -50,5 +51,6 @@ generating, and a status bar with token usage. Approvals show the diff; a task t
 
 ### Environment
 
-`OLLAMA_HOST` (default `http://localhost:11434`), `OPENAI_BASE_URL`, `OPENAI_API_KEY` (read from the environment, never
-stored or printed), `BUILDCLI_HOME` (default `~/.buildcli`).
+`OLLAMA_HOST` (default `http://localhost:11434`), `OPENAI_BASE_URL`, the API-key variables of the providers
+(`OPENROUTER_API_KEY`, `OPENAI_API_KEY`, ...; never printed, and a set one wins over a key saved with `provider login` or in the app),
+`BUILDCLI_HOME` (default `~/.buildcli`), `BUILDCLI_MOUSE=0` (turn the mouse off).

@@ -14,7 +14,8 @@ import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
 @Command(name = "provider", description = "List, add and test the places models come from (Ollama, OpenRouter, DeepSeek, Kimi, ...)",
-        subcommands = {ProviderCommand.ListCmd.class, ProviderCommand.AddCmd.class, ProviderCommand.TestCmd.class})
+        subcommands = {ProviderCommand.ListCmd.class, ProviderCommand.AddCmd.class, ProviderCommand.TestCmd.class,
+                ProviderCommand.LoginCmd.class, ProviderCommand.LogoutCmd.class})
 final class ProviderCommand implements Callable<Integer> {
     private final CliContext ctx;
 
@@ -24,7 +25,8 @@ final class ProviderCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
-        ctx.out.println("Use one of: provider list | provider add <name> --url <url> | provider test <provider:model>");
+        ctx.out.println("Use one of: provider list | provider login <provider> | provider logout <provider> | provider add <name> --url <url> "
+                + "| provider test <provider:model>");
         return 2;
     }
 
@@ -47,11 +49,12 @@ final class ProviderCommand implements Callable<Integer> {
             }
             List<List<String>> rows = settings.registry().all().stream().map(s -> List.of(s.name(), s.baseUrl(),
                     !s.needsKey() ? "no key needed" : ctx.env.getOrDefault(s.apiKeyEnv(), "").isBlank() ? s.apiKeyEnv() + " (not set)"
-                            : s.apiKeyEnv() + " (set)")).toList();
+                            : s.apiKeyEnv() + (ctx.processEnv.getOrDefault(s.apiKeyEnv(), "").isBlank() ? " (saved)" : " (environment)"))).toList();
             Tables.print(ctx.out, List.of("PROVIDER", "URL", "API KEY"), rows);
             ctx.out.println();
             ctx.out.println("Use a model as provider:model, e.g. openrouter:openrouter/free or deepseek:deepseek-chat.");
-            ctx.out.println("Your own providers live in " + ctx.globalDir().resolve(ProviderRegistry.FILE_NAME) + ". Keys are read from the environment, never stored.");
+            ctx.out.println("Your own providers live in " + ctx.globalDir().resolve(ProviderRegistry.FILE_NAME) + ".");
+            ctx.out.println("Add a key with 'buildcli provider login <provider>' (or inside the app: /connect); an environment variable, if set, wins.");
             return 0;
         }
     }
@@ -93,6 +96,96 @@ final class ProviderCommand implements Callable<Integer> {
             if (keyEnv != null) {
                 ctx.out.println("Set " + keyEnv + " in your environment, then try: buildcli provider test " + name + ":<model>");
             }
+            return 0;
+        }
+    }
+
+    @Command(name = "login", description = "Save the API key of a provider on this computer, so no variable has to be set before starting")
+    static final class LoginCmd implements Callable<Integer> {
+        private final CliContext ctx;
+
+        @Parameters(index = "0", paramLabel = "PROVIDER", description = "For example openrouter, deepseek, kimi")
+        String provider;
+
+        @Option(names = "--stdin", description = "Read the key from the first line of standard input (for scripts); otherwise it is asked for, hidden")
+        boolean stdin;
+
+        LoginCmd(CliContext ctx) {
+            this.ctx = ctx;
+        }
+
+        @Override
+        public Integer call() throws Exception {
+            ProviderSpec spec = ctx.providerSettings().registry().find(provider).orElse(null);
+            if (spec == null) {
+                ctx.err.println("error: unknown provider '" + provider + "'. See 'buildcli provider list'.");
+                return 2;
+            }
+            if (!spec.needsKey()) {
+                ctx.err.println("error: " + provider + " needs no key.");
+                return 2;
+            }
+            String key;
+            if (stdin) {
+                key = ctx.in.readLine();
+            } else if (ctx.terminal && System.console() != null) {
+                char[] typed = System.console().readPassword("%s", "API key for " + provider + " (" + spec.apiKeyEnv() + "), input hidden: ");
+                key = typed == null ? null : new String(typed);
+                if (typed != null) {
+                    java.util.Arrays.fill(typed, ' ');
+                }
+            } else {
+                ctx.err.println("error: no terminal to ask on. Pipe the key in with --stdin, for example: echo $KEY | buildcli provider login " + provider + " --stdin");
+                return 2;
+            }
+            if (!dev.buildcli.infrastructure.FileCredentialStore.valid(key)) {
+                ctx.err.println("error: that does not look like a key (empty, with spaces, or too long). Nothing was saved.");
+                return 2;
+            }
+            try {
+                ctx.credentials.put(spec.apiKeyEnv(), key);
+            } catch (java.io.IOException | RuntimeException e) {
+                ctx.err.println("error: " + e.getMessage());
+                return 1;
+            }
+            ctx.out.println("Saved the key for " + provider + " (" + spec.apiKeyEnv() + ") in " + ctx.credentials.file() + ", readable by your account only.");
+            if (!ctx.processEnv.getOrDefault(spec.apiKeyEnv(), "").isBlank()) {
+                ctx.out.println("Note: " + spec.apiKeyEnv() + " is also set in your environment, and a set variable wins over the saved key.");
+            }
+            ctx.out.println("Check it with: buildcli provider test " + provider + ":<model>");
+            return 0;
+        }
+    }
+
+    @Command(name = "logout", description = "Forget the API key of a provider that was saved with 'provider login' or inside the app")
+    static final class LogoutCmd implements Callable<Integer> {
+        private final CliContext ctx;
+
+        @Parameters(index = "0", paramLabel = "PROVIDER", description = "For example openrouter")
+        String provider;
+
+        LogoutCmd(CliContext ctx) {
+            this.ctx = ctx;
+        }
+
+        @Override
+        public Integer call() {
+            ProviderSpec spec = ctx.providerSettings().registry().find(provider).orElse(null);
+            if (spec == null || !spec.needsKey()) {
+                ctx.err.println("error: unknown provider '" + provider + "', or it needs no key.");
+                return 2;
+            }
+            try {
+                if (!ctx.credentials.remove(spec.apiKeyEnv())) {
+                    ctx.out.println("No saved key for " + provider + "." + (ctx.processEnv.getOrDefault(spec.apiKeyEnv(), "").isBlank() ? ""
+                            : " Its key comes from the environment variable " + spec.apiKeyEnv() + ", which BuildCLI cannot remove."));
+                    return 1;
+                }
+            } catch (java.io.IOException | RuntimeException e) {
+                ctx.err.println("error: " + e.getMessage());
+                return 1;
+            }
+            ctx.out.println("Forgot the saved key for " + provider + " (" + spec.apiKeyEnv() + ").");
             return 0;
         }
     }
