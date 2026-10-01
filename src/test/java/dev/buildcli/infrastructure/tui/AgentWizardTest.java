@@ -44,7 +44,7 @@ class AgentWizardTest {
 
         ChatScreenTest.key(screen, KeyCode.ESCAPE);
         out = ChatScreenTest.render(screen, 120, 36);
-        assertTrue(out.contains("Role of rita (2/4)") && out.contains("developerx"), "back to the role, as typed:\n" + out);
+        assertTrue(out.contains("Role of rita (2/4)") && out.contains("assistantx"), "back to the role, as typed:\n" + out);
         ChatScreenTest.key(screen, KeyCode.ESCAPE);
         out = ChatScreenTest.render(screen, 120, 36);
         assertTrue(out.contains("New agent: name (1/4)") && out.contains("rita"), out);

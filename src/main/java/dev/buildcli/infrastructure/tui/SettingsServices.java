@@ -88,4 +88,14 @@ public interface SettingsServices {
     default List<String> createSampleAgents() throws Exception {
         throw new IllegalStateException("not available here");
     }
+
+    /** The same for another sample team: {@code dev}, {@code writing} or {@code office}. */
+    default List<String> createSampleAgents(String team) throws Exception {
+        return createSampleAgents();
+    }
+
+    /** The sample teams on offer, as "key: what is in it" lines. */
+    default List<String> sampleTeams() {
+        return List.of();
+    }
 }

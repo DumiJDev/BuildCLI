@@ -49,6 +49,9 @@ final class ConversationRows {
         boolean runCommand(String text);
 
         void setInput(String text);
+
+        /** Whether the folder is a git repository, where "my changes" and "tests" mean something. */
+        boolean codeFolder();
     }
 
     private final ChatSession session;
@@ -247,13 +250,24 @@ final class ConversationRows {
         centred(rows, width, sub, st(Theme.DIM, Theme.BG));
         rows.add(new Row(0, List.of()));
         rows.add(new Row(0, List.of()));
-        String[][] ideas = isGroup
-                ? new String[][] {{"Review my uncommitted changes", "Review my uncommitted changes and point out risks."},
-                    {"Explain this project", "Explain how this project is organised and where to start."},
-                    {"Add missing tests", "Find important code without tests and add unit tests for it."},
-                    {"Show my changes", "/diff"}}
-                : new String[][] {{"What can you do?", "What can you do for me in this project, with your tools and permissions?"},
-                    {"Look at my changes", "Look at my uncommitted changes and tell me what you think."}};
+        String[][] ideas;
+        if (host.codeFolder()) {
+            ideas = isGroup
+                    ? new String[][] {{"Review my uncommitted changes", "Review my uncommitted changes and point out risks."},
+                        {"Explain this project", "Explain how this project is organised and where to start."},
+                        {"Add missing tests", "Find important code without tests and add unit tests for it."},
+                        {"Show my changes", "/diff"}}
+                    : new String[][] {{"What can you do?", "What can you do for me here, with your tools and permissions?"},
+                        {"Look at my changes", "Look at my uncommitted changes and tell me what you think."}};
+        } else {
+            ideas = isGroup
+                    ? new String[][] {{"Summarize what is in this folder", "Look at the files in this folder and summarize what each one is about."},
+                        {"Draft a document from my notes", "Read my notes in this folder and draft a clear document from them."},
+                        {"Find mistakes and unclear parts", "Read the documents in this folder and point out mistakes and unclear parts."},
+                        {"Plan next steps", "Read what is in this folder and propose a short list of next steps."}}
+                    : new String[][] {{"What can you do?", "What can you do for me here, with your tools and permissions?"},
+                        {"Summarize this folder", "Look at the files in this folder and summarize what each one is about."}};
+        }
         int boxW = Math.min(width - 4, 56);
         int x = Math.max(0, (width - boxW) / 2);
         for (String[] idea : ideas) {

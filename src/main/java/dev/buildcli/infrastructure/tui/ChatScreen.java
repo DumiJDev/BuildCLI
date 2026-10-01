@@ -50,6 +50,8 @@ final class ChatScreen implements Element {
     private final ChatSession session;
     private final Map<String, String> models;
     private final Path cwd;
+    /** Whether the folder is a git repository; if not, nothing about "changes" or "tests" is offered. */
+    private final boolean gitFolder;
     private final Runnable quit;
     private final InputEditor input = new InputEditor();
     private final PendingDialog pending;
@@ -106,6 +108,7 @@ final class ChatScreen implements Element {
 
     ChatScreen(ChatSession session, Map<String, String> models, Path cwd, Runnable quit, SettingsServices services) {
         this.session = session;
+        this.gitFolder = java.nio.file.Files.exists(cwd.resolve(".git"));
         this.menu = new SlashMenu(input, session, () -> selected, this::runCommand, (rect, action) -> hits.add(new Hit(rect, action)));
         this.pending = new PendingDialog(session, input, (rect, action) -> hits.add(new Hit(rect, action)), this::pendingChatTitle);
         this.viewer = new ViewerPane(session, (rect, action) -> hits.add(new Hit(rect, action)), this::reviewChanges);
@@ -249,6 +252,11 @@ final class ChatScreen implements Element {
             @Override
             public String selected() {
                 return selected;
+            }
+
+            @Override
+            public boolean codeFolder() {
+                return gitFolder;
             }
 
             @Override
@@ -630,7 +638,8 @@ final class ChatScreen implements Element {
         put(buf, nx, r.y() + 1, sub, subStyle, r.right() - 30);
         hits.add(new Hit(new Rect(x, r.y(), Math.max(1, r.right() - 32 - x), 2), () -> openInfo(ChatInfoView.Mode.INFO)));
         int bx = r.right() - 1;
-        String[][] buttons = {{" Help ", "help"}, {" Tasks ", "tasks"}, {" Changes ", "diff"}};
+        String[][] buttons = gitFolder ? new String[][] {{" Help ", "help"}, {" Tasks ", "tasks"}, {" Changes ", "diff"}}
+                : new String[][] {{" Help ", "help"}, {" Tasks ", "tasks"}};
         for (String[] b : buttons) {
             bx -= Wrap.width(b[0]) + 1;
             put(buf, bx, r.y(), b[0], st(Theme.TEXT, Theme.FIELD), r.right());
