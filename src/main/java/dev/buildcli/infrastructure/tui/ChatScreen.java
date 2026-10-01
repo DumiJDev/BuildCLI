@@ -11,7 +11,6 @@ import dev.buildcli.application.ChatSession.Message;
 import dev.buildcli.application.ChatSession.State;
 import dev.buildcli.domain.Agent;
 import dev.buildcli.domain.Attachment;
-import dev.buildcli.domain.Task;
 import dev.buildcli.infrastructure.tui.Styled.Span;
 import dev.buildcli.ports.EscalationChoice;
 import dev.tamboui.buffer.Buffer;
@@ -29,8 +28,6 @@ import dev.tamboui.tui.event.KeyEvent;
 import dev.tamboui.tui.event.MouseEvent;
 import dev.tamboui.tui.event.MouseEventKind;
 import dev.tamboui.tui.event.PasteEvent;
-import java.io.IOException;
-import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -53,9 +50,6 @@ final class ChatScreen implements Element {
 
     private record Hit(Rect rect, Runnable action) {}
 
-    /** A slash command: what the menu shows and what it does. {@code arg} is a hint when it takes an argument. */
-    record Command(String name, String arg, String description, String shortcut) {}
-
     /** What the full-screen viewer shows. */
     private record View(String title, List<String> lines, boolean diff, boolean numbered, long changes, boolean confirmUndo) {
         View(String title, List<String> lines, boolean diff, boolean numbered) {
@@ -63,38 +57,6 @@ final class ChatScreen implements Element {
         }
     }
 
-    static final List<Command> COMMANDS = List.of(
-            new Command("diff", "[--staged] [path]", "Show uncommitted changes (git diff)", "Ctrl+G"),
-            new Command("status", "", "Show git status", ""),
-            new Command("log", "", "Show recent commits", ""),
-            new Command("open", "<file>", "Open a file in the viewer", "Ctrl+O"),
-            new Command("attach", "<file>", "Attach an image or audio file (or paste its path)", ""),
-            new Command("tasks", "", "Show what the agents are doing: tasks and handoffs", "Ctrl+T"),
-            new Command("stop", "", "Stop the work in this chat", "Ctrl+X"),
-            new Command("retry", "", "Send the last failed message again", ""),
-            new Command("copy", "[message]", "Copy the last code block (or the whole last answer)", ""),
-            new Command("find", "[text]", "Search this chat", "Ctrl+F"),
-            new Command("chats", "[text]", "Search your chats and agents by name, role or what was said", "Ctrl+K"),
-            new Command("review", "", "See the files agents changed in this chat", ""),
-            new Command("undo", "", "Put back the files an agent changed last (shows them first)", ""),
-            new Command("revoke", "", "Stop approving automatically in this chat (shows what was allowed)", ""),
-            new Command("queue", "[clear]", "Show or drop messages waiting their turn", ""),
-            new Command("settings", "", "Providers, models, agents, theme and more", "F2"),
-            new Command("connect", "", "Connect a provider and choose the default model", ""),
-            new Command("model", "[@agent] [provider:model]", "Show the models, or change the default (or one agent's) model", ""),
-            new Command("reach", "[@agent @other on|off]", "Show or set which agents may contact each other", ""),
-            new Command("dm", "@agent", "Open a direct chat with an agent", ""),
-            new Command("newgroup", "<name> [@agents]", "Create a group with some agents", ""),
-            new Command("add", "@agent", "Add an agent to this group", ""),
-            new Command("remove", "@agent", "Remove an agent from this group", ""),
-            new Command("admin", "@agent", "Make an agent admin of this group", ""),
-            new Command("dismiss", "@agent", "Dismiss an admin of this group", ""),
-            new Command("rename", "<name>", "Rename this group", ""),
-            new Command("info", "", "Group or contact info", ""),
-            new Command("sidebar", "", "Show or hide the chat list", "Ctrl+B"),
-            new Command("clear", "", "Delete this chat's messages (asks you to confirm)", ""),
-            new Command("help", "", "Keys, commands and tips", ""),
-            new Command("quit", "", "Leave BuildCLI", "Ctrl+C"));
 
     private static final int SIDEBAR_WIDTH = 34;
     private static final int SIDEBAR_MIN_TOTAL = 96;
@@ -132,10 +94,9 @@ final class ChatScreen implements Element {
 
     private final SettingsServices services;
     private final ChatListView chatList;
+    private final ChatCommands commands;
     private final SettingsView settingsView;
     private boolean settingsOpen;
-    /** The chat a first /clear was typed in; a second /clear there deletes it. */
-    private String clearArmedFor;
     private ChatInfoView infoView;
     private boolean infoOpen;
     private final ConnectView connectView;
@@ -189,6 +150,98 @@ final class ChatScreen implements Element {
             @Override
             public void showSidebar() {
                 sidebar = true;
+            }
+        });
+        this.commands = new ChatCommands(session, services, cwd, new ChatCommands.Host() {
+            @Override
+            public String selected() {
+                return selected;
+            }
+
+            @Override
+            public void select(String thread) {
+                ChatScreen.this.select(thread);
+            }
+
+            @Override
+            public void openView(ChatCommands.ViewSpec v) {
+                open(new View(v.title(), v.lines(), v.diff(), v.numbered()));
+            }
+
+            @Override
+            public void setInput(String text) {
+                input.set(text);
+            }
+
+            @Override
+            public void attach(Attachment attachment) {
+                attachments.add(attachment);
+            }
+
+            @Override
+            public void openSettings() {
+                settingsOpen = true;
+            }
+
+            @Override
+            public void showModels() {
+                settingsOpen = true;
+                settingsView.showModels();
+            }
+
+            @Override
+            public void openConnect() {
+                ChatScreen.this.openConnect(null);
+            }
+
+            @Override
+            public void openInfo(ChatInfoView.Mode mode) {
+                ChatScreen.this.openInfo(mode);
+            }
+
+            @Override
+            public void toggleSidebar() {
+                ChatScreen.this.toggleSidebar();
+            }
+
+            @Override
+            public void openFind(String text) {
+                openSearch(text);
+            }
+
+            @Override
+            public void openChats(String text) {
+                chatList.openSearch(text);
+            }
+
+            @Override
+            public void copyLast(boolean wholeMessage) {
+                ChatScreen.this.copyLast(wholeMessage);
+            }
+
+            @Override
+            public void review(long changesId) {
+                reviewChanges(changesId, false);
+            }
+
+            @Override
+            public void undoLast() {
+                ChatScreen.this.undoLast();
+            }
+
+            @Override
+            public void quit() {
+                ChatScreen.this.quit.run();
+            }
+
+            @Override
+            public void say(String text) {
+                ChatScreen.this.say(text);
+            }
+
+            @Override
+            public String titleOf(String thread) {
+                return chatList.title(thread);
             }
         });
         this.models = models;
@@ -901,49 +954,6 @@ final class ChatScreen implements Element {
                 + "Every write asks you first, and you can undo it.", st(Theme.FAINT, Theme.BG));
     }
 
-    /**
-     * /model: with no argument, the Models settings (the default and each agent's model). With {@code provider:model} it
-     * becomes the default model of this project; with {@code @agent provider:model}, that agent's model. The model is not
-     * tested here (use /connect for that); a typo shows up as an error on the next message, with Retry.
-     */
-    private void changeModel(String arg) {
-        if (arg.isBlank()) {
-            settingsOpen = true;
-            settingsView.showModels();
-            return;
-        }
-        String[] words = arg.strip().split("\\s+");
-        String agent = null;
-        String model = words[words.length - 1];
-        if (words.length == 2 && words[0].startsWith("@")) {
-            agent = words[0].substring(1);
-        } else if (words.length != 1) {
-            say("Use /model provider:model, or /model @agent provider:model");
-            return;
-        }
-        int colon = model.indexOf(':');
-        if (colon <= 0 || colon == model.length() - 1) {
-            say("A model is written provider:model, for example openrouter:openrouter/free");
-            return;
-        }
-        String provider = model.substring(0, colon);
-        if (services.providers().stream().noneMatch(p -> p.name().equals(provider))) {
-            say("Unknown provider '" + provider + "'. Try /connect to see them.");
-            return;
-        }
-        if (agent != null && session.contact(agent) == null) {
-            say("There is no agent called " + agent + ".");
-            return;
-        }
-        try {
-            settings().set(dev.buildcli.ports.SettingsStore.Scope.PROJECT,
-                    agent == null ? dev.buildcli.application.Settings.DEFAULT_MODEL : dev.buildcli.application.Settings.AGENT_MODEL + agent, model);
-            say((agent == null ? "Default model: " : agent + " now uses ") + model + " (this project)");
-        } catch (RuntimeException e) {
-            say("Could not save it: " + e.getMessage());
-        }
-    }
-
     /** The "add the sample agents" button of an empty chat: writes the agents, adds them live and opens their group. */
     private void addSampleAgents() {
         try {
@@ -1223,7 +1233,7 @@ final class ChatScreen implements Element {
         if (text.startsWith("/") && !text.contains(" ") && !text.contains("\n") && input.cursor() == text.length()) {
             key = text;
             String typed = text.substring(1).toLowerCase(Locale.ROOT);
-            for (Command c : COMMANDS) {
+            for (ChatCommands.Command c : ChatCommands.LIST) {
                 if (c.name().startsWith(typed)) {
                     items.add(new MenuItem("/" + c.name() + (c.arg().isEmpty() ? "" : " " + c.arg()), c.description(), c.shortcut(),
                             () -> acceptCommand(c)));
@@ -1257,7 +1267,7 @@ final class ChatScreen implements Element {
         return key.equals(menuDismissedFor) ? List.of() : items;
     }
 
-    private void acceptCommand(Command c) {
+    private void acceptCommand(ChatCommands.Command c) {
         if (c.arg().isEmpty() || c.arg().startsWith("[")) {
             input.clear();
             runCommand("/" + c.name());
@@ -1760,15 +1770,6 @@ final class ChatScreen implements Element {
         return EventResult.HANDLED;
     }
 
-    private String firstMention(String text) {
-        List<String> m = session.mentioned(text);
-        if (!m.isEmpty()) {
-            return m.get(0);
-        }
-        String bare = text.strip();
-        return session.contact(bare) != null ? bare : null;
-    }
-
     private void toggleSidebar() {
         sidebar = sideWidth == 0;
         autoSidebar = false;
@@ -1808,11 +1809,14 @@ final class ChatScreen implements Element {
 
     // ---- sending and commands ----
 
+    /** @return true if the text was a slash command (and was handled); "/home/me/file" is not one */
+    boolean runCommand(String text) {
+        return commands.run(text);
+    }
+
     void submit() {
         String text = input.text().strip();
-        if (!text.equals("/clear")) {
-            clearArmedFor = null;
-        }
+        commands.typed(text);
         if (text.isEmpty() && attachments.isEmpty()) {
             return;
         }
@@ -1826,219 +1830,6 @@ final class ChatScreen implements Element {
         input.clear();
         attachments.clear();
         scrollOff = 0;
-    }
-
-    /** @return true if the text was a slash command (and was handled); "/home/me/file" is not one */
-    boolean runCommand(String text) {
-        if (!text.startsWith("/")) {
-            return false;
-        }
-        String[] parts = text.substring(1).split("\\s+", 2);
-        String name = parts[0].toLowerCase(Locale.ROOT);
-        String arg = parts.length > 1 ? parts[1].strip() : "";
-        if (COMMANDS.stream().noneMatch(c -> c.name().equals(name))) {
-            return false;
-        }
-        try {
-            switch (name) {
-                case "diff" -> {
-                    List<String> lines = LocalViews.diff(cwd, arg);
-                    if (lines.isEmpty()) {
-                        session.system("No " + (arg.contains("--staged") ? "staged " : "") + "changes.");
-                    } else {
-                        open(new View("Changes" + (arg.isEmpty() ? "" : "  " + arg), lines, true, false));
-                    }
-                }
-                case "copy" -> copyLast(arg.equalsIgnoreCase("message"));
-                case "find" -> openSearch(arg);
-                case "review" -> {
-                    long id = session.lastChanges(selected);
-                    if (id < 0) {
-                        session.system("No files changed by agents in this chat yet.");
-                    } else {
-                        reviewChanges(id, false);
-                    }
-                }
-                case "undo" -> undoLast();
-                case "revoke" -> {
-                    List<String> was = session.grants(selected);
-                    if (was.isEmpty()) {
-                        session.system("Nothing is approved automatically in this chat.");
-                    } else {
-                        session.revokeGrants(selected);
-                        session.system("Asking again from now on. Was allowed: " + String.join("; ", was) + ".");
-                    }
-                }
-                case "status" -> open(new View("git status", LocalViews.status(cwd), false, false));
-                case "log" -> open(new View("Recent commits", LocalViews.log(cwd), false, false));
-                case "open" -> {
-                    if (arg.isEmpty()) {
-                        input.set("/open ");
-                        return true;
-                    }
-                    Path file = resolve(arg);
-                    open(new View(cwd.relativize(file.toAbsolutePath().normalize()).toString(), LocalViews.file(file), false, true));
-                }
-                case "attach" -> {
-                    if (arg.isEmpty()) {
-                        input.set("/attach ");
-                        return true;
-                    }
-                    attachments.add(Attachment.of(resolve(arg)));
-                }
-                case "tasks" -> open(new View("Tasks", taskLines(), false, false));
-                case "stop" -> session.stop(selected);
-                case "retry" -> {
-                    long id = session.lastFailedMessage();
-                    if (id < 0 || !session.retry(id)) {
-                        session.system("Nothing to retry.");
-                    }
-                }
-                case "queue" -> {
-                    if (arg.equals("clear")) {
-                        session.clearQueue();
-                    } else {
-                        session.system(session.queued() == 0 ? "No messages are waiting." : session.queued() + " message(s) waiting their turn.");
-                    }
-                }
-                case "sidebar" -> toggleSidebar();
-                case "settings" -> settingsOpen = true;
-                case "connect" -> openConnect(null);
-                case "chats" -> {
-                    chatList.openSearch(arg);
-                }
-                case "model" -> changeModel(arg);
-                case "reach" -> changeReach(arg);
-                case "info" -> openInfo(ChatInfoView.Mode.INFO);
-                case "dm" -> {
-                    String who = firstMention(arg);
-                    if (who == null) {
-                        openInfo(ChatInfoView.Mode.NEW_CHAT);
-                    } else {
-                        session.openDirect(who);
-                        select(who);
-                    }
-                }
-                case "newgroup" -> {
-                    List<String> members = session.mentioned(arg);
-                    String groupName = arg.replaceAll("@[A-Za-z][A-Za-z0-9_-]*", "").strip();
-                    if (groupName.isEmpty()) {
-                        openInfo(ChatInfoView.Mode.NEW_CHAT);
-                    } else {
-                        select(session.createGroup(groupName, members));
-                    }
-                }
-                case "add", "remove", "admin", "dismiss" -> {
-                    if (session.group(selected) == null) {
-                        session.error("Open a group first: this is a direct chat.");
-                        return true;
-                    }
-                    List<String> who = session.mentioned(arg);
-                    if (who.isEmpty()) {
-                        openInfo(name.equals("add") ? ChatInfoView.Mode.ADD_MEMBER : ChatInfoView.Mode.INFO);
-                        return true;
-                    }
-                    for (String w : who) {
-                        switch (name) {
-                            case "add" -> session.addMember(selected, w);
-                            case "remove" -> session.removeMember(selected, w);
-                            case "admin" -> session.setAdmin(selected, w, true);
-                            default -> session.setAdmin(selected, w, false);
-                        }
-                    }
-                }
-                case "rename" -> {
-                    if (session.group(selected) != null && !arg.isBlank()) {
-                        session.renameGroup(selected, arg);
-                    }
-                }
-                case "clear" -> {
-                    if (selected.equals(clearArmedFor)) {
-                        clearArmedFor = null;
-                        session.clearChat(selected);
-                    } else {
-                        clearArmedFor = selected;
-                        long n = session.messages().stream().filter(m -> m.thread().equals(selected)).count();
-                        session.system("This deletes the " + n + " message(s) of " + chatList.title(selected) + ", also from the saved history. "
-                                + "Type /clear again to confirm.");
-                    }
-                }
-                case "help" -> open(new View("Help", help(), false, false));
-                case "quit" -> quit.run();
-                default -> { }
-            }
-        } catch (IOException | IllegalArgumentException e) {
-            session.error(e.getMessage());
-        }
-        return true;
-    }
-
-    private List<String> taskLines() {
-        List<String> out = new ArrayList<>();
-        List<Task> tasks = session.tasks(selected);
-        if (tasks.isEmpty()) {
-            out.add("No tasks yet. Each message becomes a task; a handoff becomes a child task.");
-        }
-        for (Task t : tasks) {
-            int depth = 0;
-            Integer parent = t.parentId;
-            while (parent != null && depth < 10) {
-                int id = parent;
-                Task up = tasks.stream().filter(x -> x.id == id).findFirst().orElse(null);
-                parent = up == null ? null : up.parentId;
-                depth++;
-            }
-            out.add("  ".repeat(depth) + "#" + t.id + "  " + t.status + "  " + t.from + " → " + t.to + "   " + t.tokens + " tokens"
-                    + (t.attempts > 1 ? ", attempt " + t.attempts : ""));
-            out.add("  ".repeat(depth) + "    " + t.objective.replace('\n', ' '));
-        }
-        return out;
-    }
-
-    private static List<String> help() {
-        List<String> out = new ArrayList<>();
-        out.add("Talk to your agents like in a chat. Press Enter to send; you can keep typing while they work,");
-        out.add("messages wait their turn. @name sends a message straight to one agent.");
-        out.add("");
-        out.add("Commands (type / to see the menu)");
-        for (Command c : COMMANDS) {
-            out.add(String.format("  /%-24s %-52s %s", c.name() + (c.arg().isEmpty() ? "" : " " + c.arg()), c.description(), c.shortcut()));
-        }
-        out.add("");
-        out.add("Keys");
-        out.add("  Enter send · Shift+Enter, Alt+Enter, Ctrl+J or a trailing \\ new line · ↑ previous message");
-        out.add("  PgUp/PgDn or the mouse wheel scroll · Esc jump to the latest · Ctrl+W delete word · Ctrl+U clear");
-        out.add("  Ctrl+F find in this chat (↑ older, ↓ newer, Esc close) · Ctrl+K search your chats and agents · /copy copies the last code block");
-        out.add("");
-        out.add("Mouse");
-        out.add("  Click agents to mention them, menu items, buttons, ⧉ copy on a code block and the ✕ on attachments.");
-        out.add("  Drag the scrollbar. To select text for copying, hold Shift (Option on macOS) while dragging.");
-        out.add("");
-        out.add("Attachments");
-        out.add("  Drop or paste the path of an image (png, jpg, gif, webp) or audio file (wav, mp3, m4a, ogg, flac),");
-        out.add("  or use /attach <file>. The model must support images or audio for it to be understood.");
-        return out;
-    }
-
-    private Path resolve(String pathText) {
-        String s = pathText.strip();
-        if (s.length() > 1 && (s.startsWith("\"") && s.endsWith("\"") || s.startsWith("'") && s.endsWith("'"))) {
-            s = s.substring(1, s.length() - 1);
-        }
-        if (s.startsWith("file://")) {
-            try {
-                return Path.of(new URI(s));
-            } catch (Exception e) {
-                s = s.substring(7);
-            }
-        }
-        if (s.startsWith("~")) {
-            s = System.getProperty("user.home") + s.substring(1);
-        }
-        if (!s.matches("^[A-Za-z]:\\\\.*")) {
-            s = s.replace("\\ ", " ");
-        }
-        return cwd.resolve(s);
     }
 
     // ---- paste and mouse ----
@@ -2074,7 +1865,7 @@ final class ChatScreen implements Element {
                 continue;
             }
             try {
-                Path p = resolve(line);
+                Path p = ChatCommands.resolve(cwd, line);
                 if (!Files.isRegularFile(p)) {
                     return List.of();
                 }
@@ -2157,22 +1948,6 @@ final class ChatScreen implements Element {
 
     boolean connectOpenForTest() {
         return connectOpen;
-    }
-
-    /** {@code /reach} lists who cannot contact whom; {@code /reach @bruno @ana off} stops bruno writing to ana, {@code on} lifts it. */
-    private void changeReach(String arg) {
-        List<String> names = session.mentioned(arg);
-        String lower = arg.toLowerCase(java.util.Locale.ROOT).strip();
-        boolean off = lower.endsWith(" off");
-        boolean on = lower.endsWith(" on");
-        if (names.size() == 2 && (on || off)) {
-            session.setReach(names.get(0), names.get(1), on);
-            session.system(names.get(0) + (on ? " can" : " can no longer") + " contact " + names.get(1) + ".");
-            return;
-        }
-        List<String> pairs = session.blockedPairs();
-        session.system((pairs.isEmpty() ? "Every agent can contact every other." : "Cannot contact: " + String.join(", ", pairs) + ".")
-                + " Change it with /reach @bruno @ana off (or on).");
     }
 
     boolean listSearchOpenForTest() {
