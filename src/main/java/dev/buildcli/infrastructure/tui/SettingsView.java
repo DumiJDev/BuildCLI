@@ -11,7 +11,6 @@ import dev.buildcli.infrastructure.TerminalText;
 import dev.tamboui.buffer.Buffer;
 import dev.tamboui.layout.Rect;
 import dev.tamboui.style.Color;
-import dev.tamboui.style.Style;
 import dev.tamboui.text.CharWidth;
 import dev.tamboui.tui.event.KeyCode;
 import dev.tamboui.tui.event.KeyEvent;
@@ -19,7 +18,6 @@ import dev.tamboui.tui.event.MouseEvent;
 import dev.tamboui.tui.event.MouseEventKind;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
@@ -44,46 +42,6 @@ final class SettingsView {
 
     private record Hit(Rect rect, Runnable action) {}
 
-    /** A one-line question with an input, answered with Enter. */
-    private record Prompt(String title, String hint, InputEditor editor, Consumer<String> onSubmit, Runnable back) {}
-
-    /** Several things to tick, for a step of a flow; Esc goes back one step. */
-    private static final class Checklist {
-        final String title;
-        final List<String> options;
-        final List<String> notes;
-        final java.util.Set<String> checked = new java.util.LinkedHashSet<>();
-        final Consumer<List<String>> onDone;
-        final Runnable back;
-        int index;
-
-        Checklist(String title, List<String> options, List<String> notes, java.util.Collection<String> initial, Consumer<List<String>> onDone,
-                  Runnable back) {
-            this.title = title;
-            this.options = options;
-            this.notes = notes;
-            this.checked.addAll(initial);
-            this.onDone = onDone;
-            this.back = back;
-        }
-    }
-
-    private record Confirm(String text, Runnable yes) {}
-
-    private static final class Picker {
-        final String title;
-        final Consumer<String> onPick;
-        final InputEditor filter = new InputEditor();
-        final List<CompletableFuture<ModelCatalog.Result>> sources = new ArrayList<>();
-        int index;
-        int first;
-
-        Picker(String title, Consumer<String> onPick) {
-            this.title = title;
-            this.onPick = onPick;
-        }
-    }
-
     private final SettingsServices services;
     private final Runnable close;
     private final Consumer<String> open;
@@ -93,10 +51,7 @@ final class SettingsView {
     private Scope scope = Scope.PROJECT;
     private int index;
     private int firstVisible;
-    private Prompt prompt;
-    private Checklist checklist;
-    private Confirm confirm;
-    private Picker picker;
+    private final SettingsDialogs dialogs = new SettingsDialogs((rect, action) -> hits.add(new Hit(rect, action)), this::fail);
     private String status = "";
     private Color statusColor = Theme.DIM;
 
@@ -249,13 +204,11 @@ final class SettingsView {
 
     /** @param back what Esc does: the previous step of a flow; null cancels the whole flow */
     private void ask(String title, String hint, String initial, Consumer<String> onSubmit, Runnable back) {
-        InputEditor e = new InputEditor();
-        e.set(initial);
-        prompt = new Prompt(title, hint, e, onSubmit, back);
+        dialogs.ask(title, hint, initial, onSubmit, back);
     }
 
     private void confirm(String text, Runnable yes) {
-        confirm = new Confirm(text, yes);
+        dialogs.confirm(text, yes);
     }
 
     /** What the steps of a flow have collected so far, so that going back shows what was typed. */
@@ -316,7 +269,7 @@ final class SettingsView {
     private void agentCapabilities(Draft d) {
         List<String> names = dev.buildcli.domain.Capability.KNOWN.stream().sorted().toList();
         List<String> notes = names.stream().map(CapabilityInfo::describe).toList();
-        checklist = new Checklist("What " + d.a + " may do (3/4)", names, notes, d.caps, picked -> {
+        dialogs.tick("What " + d.a + " may do (3/4)", names, notes, d.caps, picked -> {
             d.caps = picked;
             agentHow(d);
         }, () -> agentRole(d));
@@ -358,29 +311,13 @@ final class SettingsView {
     }
 
     private void pickModel(String title, Consumer<String> onPick) {
-        Picker p = new Picker(title, onPick);
+        List<CompletableFuture<ModelCatalog.Result>> sources = new ArrayList<>();
         for (SettingsServices.Provider pr : services.providers()) {
             if (pr.keyEnv() == null || pr.keySet()) {
-                p.sources.add(services.models(pr.name()));
+                sources.add(services.models(pr.name()));
             }
         }
-        picker = p;
-    }
-
-    private List<ModelCatalog.Model> pickerItems() {
-        List<ModelCatalog.Model> all = new ArrayList<>();
-        String f = picker.filter.text().strip().toLowerCase(Locale.ROOT);
-        for (var src : picker.sources) {
-            ModelCatalog.Result r = src.getNow(null);
-            if (r != null) {
-                for (ModelCatalog.Model m : r.models()) {
-                    if (f.isEmpty() || m.ref().toLowerCase(Locale.ROOT).contains(f) || m.note().toLowerCase(Locale.ROOT).contains(f)) {
-                        all.add(m);
-                    }
-                }
-            }
-        }
-        return all;
+        dialogs.pick(title, onPick, sources);
     }
 
     // ---- drawing ----
@@ -461,150 +398,10 @@ final class SettingsView {
         String keys = "↑↓ choose · Enter change · ←→ switch · Del reset · Tab section · S scope · Esc close";
         putSafe(buf, foot.x() + navW + 2, foot.y(), status.isEmpty() ? keys : status, st(status.isEmpty() ? Theme.DIM : statusColor, Theme.PANEL), foot.right());
 
-        if (picker != null || prompt != null || confirm != null || checklist != null) {
+        if (dialogs.active()) {
             hits.clear(); // a dialog is modal: clicks outside it do nothing
         }
-        if (picker != null) {
-            drawPicker(buf, r);
-        } else if (checklist != null) {
-            drawChecklist(buf, r);
-        } else if (prompt != null) {
-            drawPrompt(buf, r);
-        } else if (confirm != null) {
-            drawConfirm(buf, r);
-        }
-    }
-
-    private Rect box(Rect r, int w, int h) {
-        int bw = Math.min(r.width() - 4, w);
-        int bh = Math.min(r.height() - 2, h);
-        return new Rect(r.x() + (r.width() - bw) / 2, r.y() + Math.max(1, (r.height() - bh) / 2), bw, bh);
-    }
-
-    private void frame(Buffer buf, Rect b, String title) {
-        fill(buf, b, st(Theme.TEXT, Theme.DIALOG));
-        Style border = st(Theme.FAINT, Theme.DIALOG);
-        putSafe(buf, b.x(), b.y(), "╭" + "─".repeat(b.width() - 2) + "╮", border, b.right());
-        for (int y = b.y() + 1; y < b.bottom() - 1; y++) {
-            putSafe(buf, b.x(), y, "│", border, b.right());
-            putSafe(buf, b.right() - 1, y, "│", border, b.right());
-        }
-        putSafe(buf, b.x(), b.bottom() - 1, "╰" + "─".repeat(b.width() - 2) + "╯", border, b.right());
-        putSafe(buf, b.x() + 2, b.y(), " " + title + " ", st(Theme.TEXT, Theme.DIALOG).bold(), b.right() - 2);
-    }
-
-    private void drawPrompt(Buffer buf, Rect r) {
-        Rect b = box(r, 70, 7);
-        frame(buf, b, prompt.title());
-        putSafe(buf, b.x() + 2, b.y() + 1, prompt.hint(), st(Theme.DIM, Theme.DIALOG), b.right() - 2);
-        Rect field = new Rect(b.x() + 2, b.y() + 3, b.width() - 4, 1);
-        fill(buf, field, st(Theme.TEXT, Theme.FIELD));
-        String t = prompt.editor().text();
-        int avail = field.width() - 2;
-        String shown = CharWidth.of(t) > avail ? CharWidth.substringByWidthFromEnd(t, avail) : t;
-        putSafe(buf, field.x() + 1, field.y(), shown + "▏", st(Theme.TEXT, Theme.FIELD), field.right());
-        putSafe(buf, b.x() + 2, b.bottom() - 2, prompt.back() == null ? "Enter next · Esc cancel" : "Enter next · Esc back", st(Theme.DIM, Theme.DIALOG), b.right() - 2);
-    }
-
-    private void drawChecklist(Buffer buf, Rect r) {
-        Rect b = box(r, 76, checklist.options.size() + 6);
-        frame(buf, b, checklist.title);
-        for (int i = 0; i < checklist.options.size(); i++) {
-            String opt = checklist.options.get(i);
-            boolean on = i == checklist.index;
-            Style st = on ? st(Theme.TEXT, Theme.FIELD) : st(Theme.TEXT, Theme.DIALOG);
-            int y = b.y() + 2 + i;
-            int row = i;
-            Rect line = new Rect(b.x() + 1, y, b.width() - 2, 1);
-            fill(buf, line, st);
-            putSafe(buf, b.x() + 2, y, (checklist.checked.contains(opt) ? "[x] " : "[ ] ") + opt, st, b.right() - 2);
-            putSafe(buf, b.x() + 26, y, checklist.notes.get(i), on ? st : st(Theme.DIM, Theme.DIALOG), b.right() - 2);
-            hits.add(new Hit(line, () -> {
-                checklist.index = row;
-                toggle(checklist, opt);
-            }));
-        }
-        putSafe(buf, b.x() + 2, b.bottom() - 2, "↑↓ move · Space tick · Enter next · Esc back", st(Theme.DIM, Theme.DIALOG), b.right() - 2);
-    }
-
-    private void drawConfirm(Buffer buf, Rect r) {
-        List<String> lines = Wrap.lines(confirm.text(), 60);
-        Rect b = box(r, 66, lines.size() + 5);
-        frame(buf, b, "Are you sure?");
-        for (int i = 0; i < lines.size(); i++) {
-            putSafe(buf, b.x() + 2, b.y() + 1 + i, lines.get(i), st(Theme.TEXT, Theme.DIALOG), b.right() - 2);
-        }
-        int y = b.bottom() - 2;
-        int w1 = putSafe(buf, b.x() + 2, y, " Yes  Y ", st(Theme.TEXT, Theme.DANGER).bold(), b.right());
-        hits.add(new Hit(new Rect(b.x() + 2, y, w1, 1), this::confirmYes));
-        int w2 = putSafe(buf, b.x() + 4 + w1, y, " No  N ", st(Theme.TEXT, Theme.FIELD), b.right());
-        hits.add(new Hit(new Rect(b.x() + 4 + w1, y, w2, 1), () -> confirm = null));
-    }
-
-    private void confirmYes() {
-        Runnable yes = confirm.yes();
-        confirm = null;
-        yes.run();
-    }
-
-    private void drawPicker(Buffer buf, Rect r) {
-        Rect b = box(r, 90, r.height() - 4);
-        frame(buf, b, picker.title);
-        Rect field = new Rect(b.x() + 2, b.y() + 1, b.width() - 4, 1);
-        fill(buf, field, st(Theme.TEXT, Theme.FIELD));
-        String f = picker.filter.text();
-        putSafe(buf, field.x() + 1, field.y(), f.isEmpty() ? "Search models, or type provider:model and press Enter▏" : f + "▏",
-                st(f.isEmpty() ? Theme.DIM : Theme.TEXT, Theme.FIELD), field.right());
-        List<ModelCatalog.Model> items = pickerItems();
-        int rows = b.height() - 5;
-        picker.index = Math.max(0, Math.min(picker.index, items.size() - 1));
-        if (picker.index < picker.first) {
-            picker.first = picker.index;
-        } else if (picker.index >= picker.first + rows) {
-            picker.first = picker.index - rows + 1;
-        }
-        int loading = 0;
-        List<String> problems = new ArrayList<>();
-        for (var src : picker.sources) {
-            ModelCatalog.Result res = src.getNow(null);
-            if (res == null) {
-                loading++;
-            } else if (res.problem() != null) {
-                problems.add(res.problem());
-            }
-        }
-        for (int i = 0; i < rows && picker.first + i < items.size(); i++) {
-            ModelCatalog.Model m = items.get(picker.first + i);
-            boolean sel = picker.first + i == picker.index;
-            Color bg = sel ? Theme.SELECTED : Theme.DIALOG;
-            Rect row = new Rect(b.x() + 1, b.y() + 3 + i, b.width() - 2, 1);
-            fill(buf, row, st(Theme.TEXT, bg));
-            int w = putSafe(buf, row.x() + 1, row.y(), m.ref(), st(m.tools() ? Theme.TEXT : Theme.DIM, bg), row.right() - 2);
-            putSafe(buf, row.x() + 3 + w, row.y(), m.note(), st(m.free() ? Theme.ACCENT : Theme.DIM, bg), row.right() - 1);
-            int idx = picker.first + i;
-            hits.add(new Hit(row, () -> {
-                picker.index = idx;
-                pickSelected();
-            }));
-        }
-        String info = loading > 0 ? "Loading models from " + loading + " provider(s)…"
-                : items.size() + " models" + (problems.isEmpty() ? "" : " · " + String.join(" · ", problems));
-        putSafe(buf, b.x() + 2, b.bottom() - 2, info + "   ·  ↑↓ Enter pick · Esc cancel", st(Theme.DIM, Theme.DIALOG), b.right() - 2);
-    }
-
-    private void pickSelected() {
-        List<ModelCatalog.Model> items = pickerItems();
-        String typed = picker.filter.text().strip();
-        String choice = typed.contains(":") && (items.isEmpty() || items.stream().noneMatch(m -> m.ref().equals(typed)) && picker.index == 0
-                && !items.get(0).ref().toLowerCase(Locale.ROOT).contains(typed.toLowerCase(Locale.ROOT)))
-                ? typed : items.isEmpty() ? null : items.get(picker.index).ref();
-        if (choice == null) {
-            fail("Type provider:model, e.g. openrouter:openrouter/free");
-            return;
-        }
-        Consumer<String> onPick = picker.onPick;
-        picker = null;
-        onPick.accept(choice);
+        dialogs.render(buf, r);
     }
 
     // ---- input ----
@@ -630,68 +427,7 @@ final class SettingsView {
     void key(KeyEvent key) {
         KeyCode code = key.code();
         char ch = code == KeyCode.CHAR ? Character.toLowerCase(key.character()) : 0;
-        if (picker != null) {
-            switch (code) {
-                case ESCAPE -> picker = null;
-                case UP -> picker.index = Math.max(0, picker.index - 1);
-                case DOWN -> picker.index++;
-                case PAGE_DOWN -> picker.index += 10;
-                case PAGE_UP -> picker.index = Math.max(0, picker.index - 10);
-                case ENTER -> pickSelected();
-                default -> edit(picker.filter, key);
-            }
-            if (code == KeyCode.CHAR || code == KeyCode.BACKSPACE) {
-                picker.index = 0;
-                picker.first = 0;
-            }
-            return;
-        }
-        if (checklist != null) {
-            Checklist c = checklist;
-            switch (code) {
-                case ESCAPE -> {
-                    checklist = null;
-                    c.back.run();
-                }
-                case UP -> c.index = Math.max(0, c.index - 1);
-                case DOWN -> c.index = Math.min(c.options.size() - 1, c.index + 1);
-                case ENTER -> {
-                    checklist = null;
-                    c.onDone.accept(c.options.stream().filter(c.checked::contains).toList());
-                }
-                case CHAR -> {
-                    if (ch == ' ') {
-                        toggle(c, c.options.get(c.index));
-                    }
-                }
-                default -> { }
-            }
-            return;
-        }
-        if (prompt != null) {
-            switch (code) {
-                case ESCAPE -> {
-                    Runnable back = prompt.back();
-                    prompt = null;
-                    if (back != null) {
-                        back.run();
-                    }
-                }
-                case ENTER -> {
-                    Prompt p = prompt;
-                    prompt = null;
-                    p.onSubmit().accept(p.editor().text());
-                }
-                default -> edit(prompt.editor(), key);
-            }
-            return;
-        }
-        if (confirm != null) {
-            if (ch == 'y' || code == KeyCode.ENTER) {
-                confirmYes();
-            } else if (ch == 'n' || code == KeyCode.ESCAPE) {
-                confirm = null;
-            }
+        if (dialogs.key(key)) {
             return;
         }
         List<Item> items = items();
@@ -720,51 +456,20 @@ final class SettingsView {
         }
     }
 
-    private static void toggle(Checklist c, String option) {
-        if (!c.checked.remove(option)) {
-            c.checked.add(option);
-        }
-    }
-
     private static void run(Runnable r) {
         if (r != null) {
             r.run();
         }
     }
 
-    private static void edit(InputEditor e, KeyEvent key) {
-        switch (key.code()) {
-            case BACKSPACE -> e.backspace();
-            case DELETE -> e.delete();
-            case LEFT -> e.left();
-            case RIGHT -> e.right();
-            case HOME -> e.home();
-            case END -> e.end();
-            case CHAR -> {
-                if (key.hasCtrl() && Character.toLowerCase(key.character()) == 'u') {
-                    e.clear();
-                } else if (!key.hasCtrl() && !key.hasAlt() && key.character() >= ' ') {
-                    e.insert(key.string());
-                }
-            }
-            default -> { }
-        }
-    }
-
     void paste(String text) {
-        if (picker != null) {
-            picker.filter.insert(text.strip());
-        } else if (prompt != null) {
-            prompt.editor().insert(text.replace('\n', ' '));
-        }
+        dialogs.paste(text);
     }
 
     void mouse(MouseEvent m) {
         if (m.kind() == MouseEventKind.SCROLL_UP || m.kind() == MouseEventKind.SCROLL_DOWN) {
             int d = m.kind() == MouseEventKind.SCROLL_UP ? -1 : 1;
-            if (picker != null) {
-                picker.index = Math.max(0, picker.index + d * 3);
-            } else {
+            if (!dialogs.scroll(d)) {
                 index = Math.max(0, index + d);
             }
             return;

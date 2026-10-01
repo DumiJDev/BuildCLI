@@ -6,12 +6,7 @@ import dev.buildcli.domain.RunInfo;
 import dev.buildcli.domain.Task;
 import dev.buildcli.domain.TaskStatus;
 import dev.buildcli.ports.RunStore;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -49,45 +44,15 @@ public final class StateStore implements RunStore, dev.buildcli.ports.ChatLog, A
         }
     }
 
-    private static final int QUEUE_CAPACITY = 100_000;
-    private static final int MAX_BATCH = 2_000;
-
-    /** Index i migrates the schema from version i to version i+1. Never edit a released entry; append a new one. */
-    static final List<List<String>> MIGRATIONS = List.of(
-            List.of(
-                    // the "team" column holds the name of the group (or agent) a run was for; kept so existing databases need no migration
-                    "CREATE TABLE runs (id TEXT PRIMARY KEY, team TEXT NOT NULL, request TEXT NOT NULL,"
-                            + " started_at TEXT NOT NULL, finished_at TEXT, status TEXT NOT NULL, summary TEXT)",
-                    "CREATE TABLE tasks (run_id TEXT NOT NULL, id INTEGER NOT NULL, parent_id INTEGER, from_agent TEXT NOT NULL,"
-                            + " to_agent TEXT NOT NULL, objective TEXT NOT NULL, brief TEXT NOT NULL, status TEXT NOT NULL,"
-                            + " result TEXT, attempts INTEGER NOT NULL, tokens INTEGER NOT NULL, updated_at TEXT NOT NULL,"
-                            + " PRIMARY KEY (run_id, id))",
-                    "CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL, ts TEXT NOT NULL,"
-                            + " type TEXT NOT NULL, task_id INTEGER NOT NULL, agent TEXT, payload TEXT,"
-                            + " input_tokens INTEGER NOT NULL DEFAULT 0, output_tokens INTEGER NOT NULL DEFAULT 0)",
-                    "CREATE INDEX events_by_run ON events (run_id, id)"),
-            List.of(
-                    "CREATE TABLE chat_messages (id INTEGER PRIMARY KEY, thread TEXT NOT NULL, kind TEXT NOT NULL,"
-                            + " author TEXT NOT NULL, text TEXT NOT NULL, at TEXT NOT NULL, state TEXT NOT NULL,"
-                            + " attachments TEXT NOT NULL DEFAULT '', position INTEGER NOT NULL DEFAULT 0)",
-                    "CREATE INDEX chat_messages_by_position ON chat_messages (position, id)"),
-            List.of(
-                    "CREATE TABLE file_changes (message_id INTEGER NOT NULL, seq INTEGER NOT NULL, agent TEXT NOT NULL,"
-                            + " path TEXT NOT NULL, existed INTEGER NOT NULL, before_text TEXT, after_text TEXT,"
-                            + " PRIMARY KEY (message_id, seq))"));
-
     /** The schema version this build writes. */
-    public static final int SCHEMA_VERSION = MIGRATIONS.size();
+    public static final int SCHEMA_VERSION = StateSchema.VERSION;
+    /** Kept for the tests that check how an old database is brought up to date. */
+    static final List<List<String>> MIGRATIONS = StateSchema.MIGRATIONS;
 
     private static final int MAX_TEXT = 8000;
 
-    private final Connection connection;
+    private final StateDb db;
     private final boolean h2;
-    /** Guards the connection: the writer thread and the readers take turns. */
-    private final Object db = new Object();
-    private final java.util.concurrent.BlockingQueue<Object> queue;
-    private final Thread writer;
-    private volatile Throwable failure;
 
     /** A store whose writes are applied before the call returns (what tests and one-off commands want). */
     public StateStore(String jdbcUrl) {
@@ -95,54 +60,8 @@ public final class StateStore implements RunStore, dev.buildcli.ports.ChatLog, A
     }
 
     public StateStore(String jdbcUrl, boolean batching) {
-        this.h2 = jdbcUrl.startsWith("jdbc:h2:");
-        Connection opened;
-        try {
-            opened = DriverManager.getConnection(jdbcUrl);
-        } catch (SQLException e) {
-            throw new IllegalStateException(openFailure(jdbcUrl, e), e);
-        }
-        try {
-            if (!h2) {
-                try (Statement st = opened.createStatement()) {
-                    st.execute("PRAGMA journal_mode=WAL");
-                    st.execute("PRAGMA synchronous=NORMAL");
-                    st.execute("PRAGMA busy_timeout=5000");
-                }
-            }
-            migrate(opened, h2);
-        } catch (SQLException | RuntimeException e) {
-            // A refused or broken database must not leave its file locked: on Windows an open handle blocks deleting it.
-            try {
-                opened.close();
-            } catch (SQLException ignored) {
-                // nothing more can be done; the original failure is what matters
-            }
-            if (e instanceof IllegalStateException ise) {
-                throw ise;
-            }
-            throw new IllegalStateException(openFailure(jdbcUrl, e), e);
-        }
-        this.connection = opened;
-        if (batching) {
-            this.queue = new java.util.concurrent.LinkedBlockingQueue<>(QUEUE_CAPACITY);
-            // a platform thread: JDBC blocks inside native code and monitors, which a virtual thread would pin
-            this.writer = new Thread(this::writeLoop, "state-writer");
-            this.writer.setDaemon(true);
-            this.writer.start();
-        } else {
-            this.queue = null;
-            this.writer = null;
-        }
-    }
-
-    private static String openFailure(String jdbcUrl, Exception e) {
-        String m = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
-        if (jdbcUrl.startsWith("jdbc:h2:file") && (m.contains("already in use") || m.contains("Locked by another process"))) {
-            return "the H2 state database is open in another BuildCLI, and H2 lets one process use it at a time"
-                    + " (SQLite, the default, can be read from several): " + m;
-        }
-        return "cannot open the state database " + jdbcUrl + ": " + m;
+        this.db = new StateDb(jdbcUrl, batching);
+        this.h2 = db.h2;
     }
 
     /** Opens (creating it if needed) the SQLite state database file; parent directories are created. */
@@ -170,58 +89,6 @@ public final class StateStore implements RunStore, dev.buildcli.ports.ChatLog, A
         return new StateStore("jdbc:sqlite:" + abs, batching);
     }
 
-    /** The SQL of a migration for this engine: H2 has no AUTOINCREMENT and keeps long text in VARCHAR. */
-    private static String dialect(String sql, boolean h2) {
-        return h2 ? sql.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY")
-                .replaceAll("\\bTEXT\\b", "VARCHAR") : sql;
-    }
-
-    private static int readVersion(Connection connection, boolean h2) throws SQLException {
-        try (Statement st = connection.createStatement()) {
-            if (h2) {
-                st.execute("CREATE TABLE IF NOT EXISTS buildcli_schema (version INT NOT NULL)");
-                try (ResultSet rs = st.executeQuery("SELECT version FROM buildcli_schema")) {
-                    return rs.next() ? rs.getInt(1) : 0;
-                }
-            }
-            try (ResultSet rs = st.executeQuery("PRAGMA user_version")) {
-                return rs.next() ? rs.getInt(1) : 0;
-            }
-        }
-    }
-
-    private static void writeVersion(Statement st, boolean h2, int version) throws SQLException {
-        if (h2) {
-            st.execute("DELETE FROM buildcli_schema");
-            st.execute("INSERT INTO buildcli_schema (version) VALUES (" + version + ")");
-        } else {
-            st.execute("PRAGMA user_version=" + version);
-        }
-    }
-
-    private static void migrate(Connection connection, boolean h2) throws SQLException {
-        int current = readVersion(connection, h2);
-        if (current > SCHEMA_VERSION) {
-            throw new IllegalStateException("the state database is schema version " + current + " but this BuildCLI only"
-                    + " understands up to " + SCHEMA_VERSION + "; upgrade BuildCLI (the database was not modified)");
-        }
-        for (int v = current; v < SCHEMA_VERSION; v++) {
-            connection.setAutoCommit(false);
-            try (Statement st = connection.createStatement()) {
-                for (String sql : MIGRATIONS.get(v)) {
-                    st.execute(dialect(sql, h2));
-                }
-                writeVersion(st, h2, v + 1);
-                connection.commit();
-            } catch (SQLException e) {
-                connection.rollback();
-                throw e;
-            } finally {
-                connection.setAutoCommit(true);
-            }
-        }
-    }
-
     // ---- chat history ----
 
     /** Longest message kept: long replies and pasted logs, but not unbounded. */
@@ -229,24 +96,11 @@ public final class StateStore implements RunStore, dev.buildcli.ports.ChatLog, A
 
     @Override
     public List<dev.buildcli.domain.ChatEntry> recent(int limit) {
-        List<dev.buildcli.domain.ChatEntry> out = new ArrayList<>();
-        String sql = "SELECT id, thread, kind, author, text, at, state, attachments, position FROM"
-                + " (SELECT * FROM chat_messages ORDER BY position DESC, id DESC LIMIT ?) recent ORDER BY position, id";
-        flush();
-        synchronized (db) {
-            try (PreparedStatement ps = connection.prepareStatement(sql)) {
-                ps.setInt(1, limit);
-                try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) {
-                        out.add(new dev.buildcli.domain.ChatEntry(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getString(4),
-                                rs.getString(5), Instant.parse(rs.getString(6)), rs.getString(7), attachmentsFrom(rs.getString(8)), rs.getLong(9)));
-                    }
-                }
-            } catch (SQLException e) {
-                throw new IllegalStateException("cannot read the chat history: " + e.getMessage(), e);
-            }
-        }
-        return out;
+        return query("SELECT id, thread, kind, author, text, at, state, attachments, position FROM"
+                + " (SELECT * FROM chat_messages ORDER BY position DESC, id DESC LIMIT ?) recent ORDER BY position, id",
+                ps -> ps.setInt(1, limit),
+                rs -> new dev.buildcli.domain.ChatEntry(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5),
+                        Instant.parse(rs.getString(6)), rs.getString(7), attachmentsFrom(rs.getString(8)), rs.getLong(9)));
     }
 
     @Override
@@ -315,23 +169,10 @@ public final class StateStore implements RunStore, dev.buildcli.ports.ChatLog, A
 
     @Override
     public List<dev.buildcli.domain.FileChange> changes(long messageId) {
-        List<dev.buildcli.domain.FileChange> out = new ArrayList<>();
-        flush();
-        synchronized (db) {
-            try (PreparedStatement ps = connection.prepareStatement(
-                    "SELECT agent, path, existed, before_text, after_text FROM file_changes WHERE message_id = ? ORDER BY seq")) {
-                ps.setLong(1, messageId);
-                try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) {
-                        // a null "after" means the content was not kept (a sensitive or very large file)
-                        out.add(new dev.buildcli.domain.FileChange(rs.getString(1), rs.getString(2), rs.getInt(3) == 1, rs.getString(4), rs.getString(5)));
-                    }
-                }
-            } catch (SQLException e) {
-                throw new IllegalStateException("cannot read the saved changes: " + e.getMessage(), e);
-            }
-        }
-        return out;
+        // a null "after" means the content was not kept (a sensitive or very large file)
+        return query("SELECT agent, path, existed, before_text, after_text FROM file_changes WHERE message_id = ? ORDER BY seq",
+                ps -> ps.setLong(1, messageId),
+                rs -> new dev.buildcli.domain.FileChange(rs.getString(1), rs.getString(2), rs.getInt(3) == 1, rs.getString(4), rs.getString(5)));
     }
 
     /** One line per attachment: kind, mime type, size and path, separated by tabs. */
@@ -364,14 +205,7 @@ public final class StateStore implements RunStore, dev.buildcli.ports.ChatLog, A
     }
 
     public int schemaVersion() {
-        flush();
-        synchronized (db) {
-            try {
-                return readVersion(connection, h2);
-            } catch (SQLException e) {
-                throw new IllegalStateException(e);
-            }
-        }
+        return db.schemaVersion();
     }
 
     @Override
@@ -479,166 +313,15 @@ public final class StateStore implements RunStore, dev.buildcli.ports.ChatLog, A
 
     @Override
     public void close() throws SQLException {
-        if (writer != null) {
-            flush();
-            writer.interrupt();
-            try {
-                writer.join(5000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }
-        synchronized (db) {
-            for (PreparedStatement ps : statements.values()) {
-                try {
-                    ps.close();
-                } catch (SQLException ignored) {
-                    // the connection is closed right after
-                }
-            }
-            statements.clear();
-            connection.close();
-        }
-        Throwable lost = failure;
-        if (lost != null) {
-            failure = null;
-            throw new SQLException("some writes to the state database failed: " + lost.getMessage(), lost);
-        }
+        db.close();
     }
 
-    // ---- small JDBC helpers ----
-
-    private interface Binder {
-        void bind(PreparedStatement ps) throws SQLException;
+    private void write(String sql, StateDb.Binder binder) {
+        db.write(sql, binder);
     }
 
-    private interface RowMapper<T> {
-        T map(ResultSet rs) throws SQLException;
-    }
-
-    private record Op(String sql, Binder binder) {}
-
-    private record Fence(java.util.concurrent.CountDownLatch done) {}
-
-    /** Applies a write now, or queues it for the writer thread. */
-    private void write(String sql, Binder binder) {
-        if (queue == null) {
-            synchronized (db) {
-                execute(sql, binder);
-            }
-            return;
-        }
-        Throwable earlier = failure;
-        if (earlier != null) {
-            failure = null;
-            throw new IllegalStateException("an earlier write to the state database failed: " + earlier.getMessage(), earlier);
-        }
-        try {
-            queue.put(new Op(sql, binder)); // blocks when 100000 writes are waiting, instead of growing without bound
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("interrupted while writing to the state database", e);
-        }
-    }
-
-    /** Writes are few kinds of statement repeated many times: prepare each once. Only used while holding {@link #db}. */
-    private final java.util.Map<String, PreparedStatement> statements = new java.util.HashMap<>();
-
-    private void execute(String sql, Binder binder) {
-        try {
-            PreparedStatement ps = statements.get(sql);
-            if (ps == null) {
-                ps = connection.prepareStatement(sql);
-                statements.put(sql, ps);
-            }
-            ps.clearParameters();
-            binder.bind(ps);
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            throw new IllegalStateException(e.getMessage(), e);
-        }
-    }
-
-    /** Waits until everything written before this call has been applied. */
-    private void flush() {
-        if (queue == null || !writer.isAlive()) {
-            return;
-        }
-        var fence = new Fence(new java.util.concurrent.CountDownLatch(1));
-        try {
-            queue.put(fence);
-            fence.done().await();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-    }
-
-    private void writeLoop() {
-        List<Object> batch = new ArrayList<>();
-        while (true) {
-            try {
-                batch.add(queue.take());
-            } catch (InterruptedException e) {
-                // closing: apply what is still waiting, then stop
-                queue.drainTo(batch);
-                apply(batch);
-                return;
-            }
-            queue.drainTo(batch, MAX_BATCH - 1);
-            apply(batch);
-            batch.clear();
-        }
-    }
-
-    /** One transaction for the whole group; a write that fails is remembered and does not stop the others. */
-    private void apply(List<Object> batch) {
-        synchronized (db) {
-            try {
-                connection.setAutoCommit(false);
-                for (Object o : batch) {
-                    if (o instanceof Op op) {
-                        try {
-                            execute(op.sql(), op.binder());
-                        } catch (RuntimeException e) {
-                            failure = e;
-                        }
-                    }
-                }
-                connection.commit();
-            } catch (SQLException e) {
-                failure = e;
-            } finally {
-                try {
-                    connection.setAutoCommit(true);
-                } catch (SQLException ignored) {
-                    // the connection is closing; nothing more to do
-                }
-            }
-        }
-        for (Object o : batch) {
-            if (o instanceof Fence f) {
-                f.done().countDown();
-            }
-        }
-        batch.clear();
-    }
-
-    private <T> List<T> query(String sql, Binder binder, RowMapper<T> mapper) {
-        flush();
-        List<T> out = new ArrayList<>();
-        synchronized (db) {
-            try (PreparedStatement ps = connection.prepareStatement(sql)) {
-                binder.bind(ps);
-                try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) {
-                        out.add(mapper.map(rs));
-                    }
-                }
-            } catch (SQLException e) {
-                throw new IllegalStateException(e.getMessage(), e);
-            }
-        }
-        return out;
+    private <T> List<T> query(String sql, StateDb.Binder binder, StateDb.RowMapper<T> mapper) {
+        return db.query(sql, binder, mapper);
     }
 
     private static String cut(String s) {

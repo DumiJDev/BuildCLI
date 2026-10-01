@@ -3,6 +3,7 @@ package dev.buildcli.infrastructure.tui;
 import static dev.buildcli.infrastructure.tui.Draw.clean;
 import static dev.buildcli.infrastructure.tui.Draw.fill;
 import static dev.buildcli.infrastructure.tui.Draw.put;
+import static dev.buildcli.infrastructure.tui.Draw.putFit;
 import static dev.buildcli.infrastructure.tui.Draw.st;
 import dev.buildcli.application.ChatSession;
 import dev.buildcli.application.ChatSession.Message;
@@ -123,7 +124,13 @@ final class ChatScreen implements Element {
     ChatScreen(ChatSession session, Map<String, String> models, Path cwd, Runnable quit, SettingsServices services) {
         this.session = session;
         // what you sent in earlier runs is still there to walk back through with Up
-        session.messages().stream().filter(m -> m.kind() == ChatSession.Kind.USER).forEach(m -> input.remember(m.text()));
+        for (var m : session.messages()) {
+            if (m.kind() == ChatSession.Kind.USER) {
+                input.scope(m.thread());
+                input.remember(m.text());
+            }
+        }
+        input.scope("");
         this.chatList = new ChatListView(session, new ChatListView.Host() {
             @Override
             public void hit(Rect rect, Runnable action) {
@@ -317,7 +324,7 @@ final class ChatScreen implements Element {
             }
         });
         ensureSelection();
-        if (services.canConnect() && noModelAnywhere()) {
+        if (services.canConnect() && !session.contacts().isEmpty() && noModelAnywhere()) {
             openConnect("None of your agents has a model yet. Connect one to start chatting; it takes a minute.");
         }
     }
@@ -905,7 +912,7 @@ final class ChatScreen implements Element {
             int y = r.y() + 1 + i;
             Wrap.Segment s = segs.get(inputFirstRow + i);
             if (src.isEmpty()) {
-                String hint = ChatSession.FATHER.equals(selected) ? "Ask AgentFather: /newagent, /agents, /samples, /help"
+                String hint = ChatSession.FATHER.equals(selected) ? "Ask AgentFather: /newagent, /agents, /editagent, /help"
                         : ChatSession.isAgentChat(selected) ? "Read only: ask one of them, in their own chat, to write to the other"
                         : selected.equals(ChatSession.NOTES) ? "A note to yourself: no agent reads it"
                         : session.busy() ? "Type a message (it waits its turn)" : "Type a message";
@@ -928,7 +935,11 @@ final class ChatScreen implements Element {
 
     // ---- the / and @ menus ----
 
-    private record MenuItem(String label, String detail, String right, Runnable accept) {}
+    private record MenuItem(String label, String detail, String right, Runnable accept, Runnable fill) {
+        MenuItem(String label, String detail, String right, Runnable accept) {
+            this(label, detail, right, accept, accept);
+        }
+    }
 
     /** The command menu while typing "/word", or the mention menu while typing "@name"; empty when neither. */
     private List<MenuItem> menu() {
@@ -941,7 +952,7 @@ final class ChatScreen implements Element {
             for (ChatCommands.Command c : commandsHere()) {
                 if (c.name().startsWith(typed)) {
                     items.add(new MenuItem("/" + c.name() + (c.arg().isEmpty() ? "" : " " + c.arg()), c.description(), c.shortcut(),
-                            () -> acceptCommand(c)));
+                            () -> acceptCommand(c), () -> input.set("/" + c.name() + " ")));
                 }
             }
         } else {
@@ -1007,6 +1018,9 @@ final class ChatScreen implements Element {
         Style bg = st(Theme.TEXT, Theme.DIALOG);
         fill(buf, new Rect(box.x(), y0, w, h + 1), bg);
         put(buf, box.x() + 2, y0, items.get(0).label().startsWith("/") ? "Commands" : "Mention an agent", st(Theme.DIM, Theme.DIALOG), box.right());
+        boolean commands = items.get(0).label().startsWith("/");
+        String hint = (commands ? "↑↓ choose · Tab fills · Enter runs" : "↑↓ choose · Tab or Enter completes") + (items.size() > h ? " · " + items.size() + " matches" : "");
+        put(buf, box.right() - 2 - Wrap.width(hint), y0, hint, st(Theme.FAINT, Theme.DIALOG), box.right() - 1);
         int labelW = 0;
         for (MenuItem it : items) {
             labelW = Math.max(labelW, Wrap.width(it.label()));
@@ -1018,7 +1032,7 @@ final class ChatScreen implements Element {
             Rect row = new Rect(box.x(), y0 + 1 + i, w, 1);
             fill(buf, row, st(Theme.TEXT, rowBg));
             put(buf, row.x() + 2, row.y(), it.label(), st(Theme.TEXT, rowBg).bold(), row.right() - 1);
-            put(buf, row.x() + 4 + labelW, row.y(), clean(it.detail()), st(Theme.DIM, rowBg), row.right() - 10);
+            putFit(buf, row.x() + 4 + labelW, row.y(), clean(it.detail()), st(Theme.DIM, rowBg), row.right() - 10);
             put(buf, row.right() - 2 - Wrap.width(it.right()), row.y(), it.right(), st(Theme.DIM, rowBg), row.right() - 1);
             int idx = first + i;
             hits.add(new Hit(row, () -> {
@@ -1337,6 +1351,7 @@ final class ChatScreen implements Element {
 
     @Override
     public EventResult handleKeyEvent(KeyEvent key, boolean focused) {
+        input.scope(selected);
         boolean ctrl = key.hasCtrl();
         boolean alt = key.hasAlt();
         KeyCode code = key.code();
@@ -1476,7 +1491,7 @@ final class ChatScreen implements Element {
                     return EventResult.HANDLED;
                 }
                 case TAB -> {
-                    items.get(Math.min(menuIndex, items.size() - 1)).accept().run();
+                    items.get(Math.min(menuIndex, items.size() - 1)).fill().run();
                     return EventResult.HANDLED;
                 }
                 case ENTER -> {
@@ -1706,7 +1721,9 @@ final class ChatScreen implements Element {
         }
         if (kind == MouseEventKind.SCROLL_UP || kind == MouseEventKind.SCROLL_DOWN) {
             int d = kind == MouseEventKind.SCROLL_UP ? 3 : -3;
-            if (view != null) {
+            if (!inPane) {
+                chatList.scrollBy(-d / 3);
+            } else if (view != null) {
                 viewScroll -= d;
             } else {
                 scroll(d);

@@ -118,6 +118,15 @@ class ConnectViewTest {
     }
 
     @Test
+    void withNoAgentsAtAllTheChatOpensOnTheWelcomeNotOnTheConnectScreen() {
+        var empty = new ChatSession(java.util.List.of(), java.util.List.of(), dev.buildcli.domain.Limits.defaults(),
+                (roster, request, ui, cancelled, d) -> null, dev.buildcli.ports.ChatStore.NONE, () -> 6, dev.buildcli.ports.ChatLog.NONE);
+        var screen = new ChatScreen(empty, Map.of(), dir, () -> { }, services());
+        assertFalse(screen.connectOpenForTest(), "there is nobody to connect a model to yet");
+        assertTrue(ChatScreenTest.render(screen, 130, 40).contains("Talk to AgentFather"));
+    }
+
+    @Test
     void aModelThatAnswersBecomesTheDefault() {
         var screen = screen(Map.of());
         ChatScreenTest.render(screen, 130, 40);

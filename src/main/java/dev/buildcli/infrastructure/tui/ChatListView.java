@@ -5,6 +5,7 @@ import static dev.buildcli.infrastructure.tui.Draw.TIME;
 import static dev.buildcli.infrastructure.tui.Draw.clean;
 import static dev.buildcli.infrastructure.tui.Draw.fill;
 import static dev.buildcli.infrastructure.tui.Draw.put;
+import static dev.buildcli.infrastructure.tui.Draw.putFit;
 import static dev.buildcli.infrastructure.tui.Draw.st;
 import static dev.buildcli.infrastructure.tui.Draw.tokens;
 
@@ -54,6 +55,9 @@ final class ChatListView {
     private final InputEditor query = new InputEditor();
     private boolean searching;
     private int index;
+    /** The first chat shown, when there are more than fit; the mouse wheel moves it and choosing a chat brings it into view. */
+    private int scroll;
+    private String lastSelected = "";
     /** The newest message of each chat that was on screen: what is newer counts as unread. */
     private final Map<String, Long> seen = new HashMap<>();
 
@@ -163,7 +167,18 @@ final class ChatListView {
             return;
         }
         List<String> threads = threads();
-        for (int i = 0; i < threads.size() && y + 2 < r.bottom() - 1; i++) {
+        int capacity = Math.max(1, (r.bottom() - 1 - y) / 3);
+        int at = threads.indexOf(host.selected());
+        if (!host.selected().equals(lastSelected)) {
+            lastSelected = host.selected();
+            if (at >= 0 && at < scroll) {
+                scroll = at;
+            } else if (at >= scroll + capacity) {
+                scroll = at - capacity + 1;
+            }
+        }
+        scroll = Math.max(0, Math.min(scroll, Math.max(0, threads.size() - capacity)));
+        for (int i = scroll; i < threads.size() && y + 2 < r.bottom() - 1; i++) {
             String t = threads.get(i);
             boolean sel = t.equals(host.selected());
             Color bg = sel ? Theme.SELECTED : Theme.SIDEBAR;
@@ -182,7 +197,7 @@ final class ChatListView {
             }
             String time = last == null ? "" : when(last);
             put(buf, limit - Wrap.width(time), y, time, st(unread(msgs, t) > 0 ? Theme.GREEN : Theme.DIM, bg), limit);
-            put(buf, r.x() + 6, y, title(t), st(Theme.TEXT, bg).bold(), limit - Wrap.width(time) - 1);
+            putFit(buf, r.x() + 6, y, title(t), st(Theme.TEXT, bg).bold(), limit - Wrap.width(time) - 1);
 
             String preview;
             Style ps = st(Theme.DIM, bg);
@@ -207,13 +222,19 @@ final class ChatListView {
             }
             int badge = unread(msgs, t);
             String b = badge > 0 ? " " + badge + " " : "";
-            put(buf, r.x() + 6, y + 1, preview.replace('\n', ' '), ps, limit - Wrap.width(b) - 1);
+            putFit(buf, r.x() + 6, y + 1, preview.replace('\n', ' '), ps, limit - Wrap.width(b) - 1);
             if (badge > 0) {
                 put(buf, limit - Wrap.width(b), y + 1, b, st(Theme.BG, Theme.GREEN).bold(), limit + 1);
             }
             y += 2;
             put(buf, r.x() + 6, y, "─".repeat(Math.max(0, r.width() - 7)), st(Theme.LINE, Theme.SIDEBAR), limit + 1);
             y++;
+        }
+        int above = scroll;
+        int below = Math.max(0, threads.size() - scroll - capacity);
+        if (above > 0 || below > 0) {
+            String more = (above > 0 ? "↑ " + above : "") + (above > 0 && below > 0 ? " · " : "") + (below > 0 ? "↓ " + below : "") + " more";
+            put(buf, r.right() - 2 - Wrap.width(more), r.y() + 3, more, st(Theme.FAINT, Theme.SIDEBAR), r.right() - 1);
         }
         int q = session.queued();
         String foot = (q > 0 ? q + " queued · " : "") + tokens(session.inputTokens() + (long) session.outputTokens()) + " tokens";
@@ -236,6 +257,11 @@ final class ChatListView {
         host.showSidebar();
         searching = true;
         index = 0;
+    }
+
+    /** The mouse wheel over the list: positive goes down. */
+    void scrollBy(int chats) {
+        scroll = Math.max(0, scroll + chats);
     }
 
     /** Closes the search box and forgets what was typed. */

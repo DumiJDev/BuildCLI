@@ -22,6 +22,7 @@ class AgentFatherTest {
     final Settings settings = Settings.defaults();
     final List<String> created = new ArrayList<>();
     final List<String> deleted = new ArrayList<>();
+    final List<String> edited = new ArrayList<>();
 
     SettingsServices services(ChatSession session) {
         return new SettingsServices() {
@@ -65,6 +66,11 @@ class AgentFatherTest {
             @Override
             public void deleteAgent(String name) {
                 deleted.add(name);
+            }
+
+            @Override
+            public void updateAgent(String name, dev.buildcli.infrastructure.AgentFileEditor.Edit edit) {
+                edited.add(name + "|" + edit);
             }
         };
     }
@@ -178,5 +184,50 @@ class AgentFatherTest {
         String out = ChatScreenTest.render(screen, 130, 40);
         assertTrue(out.contains("No agents yet") && out.contains("Talk to AgentFather"), out);
         assertTrue(out.contains("AgentFather"), "it is in the chat list from the start");
+    }
+
+    @Test
+    void editAgentChangesOneSettingAtATimeAndOnlyAfterYes() {
+        ChatSession session = session();
+        session.addContact(new dev.buildcli.domain.Agent("rita", "reviewer", "", java.util.Set.of("filesystem.read"),
+                dev.buildcli.domain.Permissions.none(), dev.buildcli.domain.Origin.PROJECT, "/p/.buildcli/agents/rita.md"));
+        ChatScreen screen = screen(session);
+        openFather(screen);
+
+        say(screen, "/editagent rita");
+        String out = ChatScreenTest.render(screen, 130, 40);
+        assertTrue(out.contains("role: reviewer") && out.contains("writes in: nowhere") && out.contains("What do you want to change?"), out);
+
+        say(screen, "4");
+        say(screen, "../secrets/**");
+        assertTrue(ChatScreenTest.render(screen, 130, 40).contains("is not a folder pattern inside the project"), "a bad folder is refused with a reason");
+        say(screen, "src/**, docs/**");
+        out = ChatScreenTest.render(screen, 130, 40);
+        assertTrue(out.contains("it may write in src/**, docs/**"), out);
+        assertTrue(edited.isEmpty(), "nothing changes before yes");
+        say(screen, "yes");
+        assertEquals(1, edited.size());
+        assertTrue(edited.get(0).startsWith("rita|") && edited.get(0).contains("writeGlobs=[src/**, docs/**]"), edited.get(0));
+        assertTrue(ChatScreenTest.render(screen, 130, 40).contains("What do you want to change?"), "back at the menu for the next change");
+
+        say(screen, "5");
+        say(screen, "mvn -q test; mvn -q verify");
+        out = ChatScreenTest.render(screen, 130, 40);
+        assertTrue(out.contains("WITHOUT asking you: mvn -q test;"), out);
+        say(screen, "no");
+        assertEquals(1, edited.size(), "no changes nothing");
+        say(screen, "done");
+        assertTrue(ChatScreenTest.render(screen, 130, 40).contains("as you left it"));
+    }
+
+    @Test
+    void editAgentRefusesAnAgentWithoutAMarkdownFile() {
+        ChatSession session = session();
+        ChatScreen screen = screen(session);
+        openFather(screen);
+        say(screen, "/editagent ana");
+        assertTrue(ChatScreenTest.render(screen, 130, 40).contains("cannot edit it"));
+        say(screen, "/editagent nobody");
+        assertTrue(ChatScreenTest.render(screen, 130, 40).contains("There is no agent called nobody"));
     }
 }
