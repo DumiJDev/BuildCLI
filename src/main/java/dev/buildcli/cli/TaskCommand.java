@@ -63,7 +63,7 @@ final class TaskCommand implements Callable<Integer> {
                 if (r == null) {
                     return run == null ? 0 : 2;
                 }
-                ctx.out.println("Run " + r.id() + "  " + r.status() + "  team " + r.team());
+                ctx.out.println("Run " + r.id() + "  " + r.status() + "  group " + r.group());
                 List<Task> tasks = store.listTasks(r.id());
                 List<List<String>> rows = new ArrayList<>();
                 for (Task t : tasks) {

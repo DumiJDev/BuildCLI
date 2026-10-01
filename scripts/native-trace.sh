@@ -27,7 +27,7 @@ git init -q . && git -c user.email=a@b -c user.name=t commit -q --allow-empty -m
 bc() { java "-agentlib:native-image-agent=config-merge-dir=$OLDPWD_OUT" -jar "$WORK/buildcli.jar" "$@" >/dev/null 2>&1 || true; }
 OLDPWD_OUT="$(cd "$OLDPWD" && cd "$OUT" && pwd)"
 
-for args in "--version" "--help" "init" "agent list" "agent show ana" "agent create dora --role tester" "team list" "provider list" \
+for args in "--version" "--help" "init" "agent list" "agent show wheslley" "agent create dora --role tester" "provider list" \
             "provider add foo --url http://localhost:9999/v1" "config" "doctor" "runs" "task list" "usage"; do
   echo "trace: buildcli $args"
   # shellcheck disable=SC2086

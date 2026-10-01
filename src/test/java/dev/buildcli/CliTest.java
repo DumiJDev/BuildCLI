@@ -137,17 +137,6 @@ class CliTest {
     }
 
     @Test
-    void teamCreateValidatesAgentsAndLead() throws Exception {
-        cli("init");
-        assertEquals(0, cli("team", "create", "review", "--agents", "breno,wheslley", "--lead", "wheslley", "--model", "ollama:qwen2.5:7b").code);
-        Result show = cli("team", "show", "review");
-        assertTrue(show.out.contains("lead: wheslley"), show.out);
-        assertEquals(2, cli("team", "create", "x", "--agents", "wheslley,ghost").code);
-        assertEquals(2, cli("team", "create", "y", "--agents", "wheslley", "--lead", "breno").code);
-        assertEquals(2, cli("team", "create", "review", "--agents", "wheslley").code, "no overwrite");
-    }
-
-    @Test
     void anInvalidConfigurationIsReportedWithEveryProblemAndExitCode2() throws Exception {
         Files.createDirectories(project.resolve(".buildcli/agents"));
         Files.writeString(project.resolve(".buildcli/agents/a.yaml"), "name: a\nrole: r\n");
@@ -197,20 +186,9 @@ class CliTest {
     }
 
     @Test
-    void oldTeamFilesBecomeGroups() throws Exception {
+    void runHeadlessExecutesTheGroupPersistsTheRunAndReportsTheResult() throws Exception {
         cli("init");
-        cli("team", "create", "review", "--agents", "breno,wheslley", "--lead", "breno");
-        ChatSession session = openChat();
-        var review = session.groups().stream().filter(g -> g.name().equals("review")).findFirst().orElseThrow();
-        assertEquals(List.of("breno", "wheslley"), review.members());
-        assertEquals(List.of("breno"), review.admins(), "the lead becomes the admin");
-        assertTrue(session.groups().stream().anyMatch(g -> g.name().equals("maintainers")));
-    }
-
-    @Test
-    void runHeadlessExecutesTheTeamPersistsTheRunAndReportsTheResult() throws Exception {
-        cli("init");
-        Result r = cli(CliTest::happyScript, "", Map.of(), "run", "--team", "maintainers", "--headless", "--approve", "writes", "add a Hello class");
+        Result r = cli(CliTest::happyScript, "", Map.of(), "run", "--group", "maintainers", "--headless", "--approve", "writes", "add a Hello class");
         assertEquals(0, r.code, r.err + r.out);
         assertTrue(r.out.contains("Hello was added."), r.out);
         assertTrue(r.out.contains("HandoffCreated"), r.out);
@@ -259,7 +237,7 @@ class CliTest {
         cli("init");
         assertTrue(cli("run", "--group", "nope", "--headless", "x").err.contains("no group named 'nope'"));
         assertTrue(cli("run", "--agent", "nope", "--headless", "x").err.contains("no agent named 'nope'"));
-        assertTrue(cli("run", "--team", "maintainers", "--agent", "wheslley", "--headless", "x").err.contains("either --group or --agent"));
+        assertTrue(cli("run", "--group", "maintainers", "--agent", "wheslley", "--headless", "x").err.contains("either --group or --agent"));
         assertTrue(cli("run", "--headless").err.contains("a request is required"));
         assertEquals(2, cli("run", "--model", "justamodel", "--headless", "x").code);
     }
@@ -374,10 +352,10 @@ class CliTest {
     @Test
     void helpListsTheCommandsAndHidesTheDevelopmentOnes() {
         Result r = cli("--help");
-        for (String c : List.of("init", "agent", "team", "run", "runs", "task", "usage", "doctor", "config")) {
+        for (String c : List.of("init", "agent", "run", "runs", "task", "usage", "doctor", "config")) {
             assertTrue(r.out.contains("  " + c), c + "\n" + r.out);
         }
-        assertFalse(r.out.contains("bench"));
+        assertFalse(r.out.contains("bench") || r.out.contains("  team"), "the development commands and the old team command are gone");
         assertEquals(0, cli().code, "no arguments without a terminal prints the help");
         assertTrue(cli().out.contains("Usage: buildcli"));
         assertEquals(2, cli("nonsense").code);

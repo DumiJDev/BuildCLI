@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.buildcli.application.TrustGate;
-import dev.buildcli.domain.Team;
+import dev.buildcli.domain.Roster;
 import dev.buildcli.infrastructure.FileConfigRepository;
 import dev.buildcli.infrastructure.FileTrustStore;
 import dev.buildcli.infrastructure.HeadlessUi;
@@ -26,7 +26,6 @@ class TrustTest {
 
     static final String AGENT = "schema: 1\nname: bruno\nrole: developer\ncapabilities: [filesystem.write, command.execute]\n"
             + "permissions:\n  filesystem:\n    write: [\"src/**\"]\n  command:\n    allow: [[\"mvn\", \"test\"]]\n";
-    static final String TEAM = "schema: 1\nname: t\nlead: bruno\nagents: [bruno]\n";
 
     @BeforeEach
     void setUp() throws IOException {
@@ -50,14 +49,13 @@ class TrustTest {
     }
 
     boolean gate(FileConfigRepository cfg, HeadlessUi ui) {
-        Team team = cfg.team("t").orElseThrow();
-        return TrustGate.ensureTrusted(team, cfg, store, project.toString(), ui);
+        Roster roster = new Roster("t", "bruno", cfg.agents(), dev.buildcli.domain.Limits.defaults());
+        return TrustGate.ensureTrusted(roster, cfg, store, project.toString(), ui);
     }
 
     @Test
     void projectAgentsNeedApprovalAndThePromptShowsWhatTheyMayDo() throws IOException {
         write(project, ".buildcli/agents/bruno.yaml", AGENT);
-        write(project, ".buildcli/teams/t.yaml", TEAM);
         var ui = user(true);
         assertTrue(gate(config(), ui));
         assertEquals(1, ui.approvals.size());
@@ -71,7 +69,6 @@ class TrustTest {
     @Test
     void anApprovalIsRememberedForTheSameFiles() throws IOException {
         write(project, ".buildcli/agents/bruno.yaml", AGENT);
-        write(project, ".buildcli/teams/t.yaml", TEAM);
         assertTrue(gate(config(), user(true)));
         var second = user(false);
         assertTrue(gate(config(), second), "already trusted");
@@ -81,7 +78,6 @@ class TrustTest {
     @Test
     void changingAnyDefinitionFileAsksAgain() throws IOException {
         write(project, ".buildcli/agents/bruno.yaml", AGENT);
-        write(project, ".buildcli/teams/t.yaml", TEAM);
         assertTrue(gate(config(), user(true)));
 
         write(project, ".buildcli/agents/bruno.yaml", AGENT.replace("mvn", "curl"));
@@ -93,7 +89,6 @@ class TrustTest {
     @Test
     void aDeclinedProjectIsNotTrustedAndIsAskedAgainNextTime() throws IOException {
         write(project, ".buildcli/agents/bruno.yaml", AGENT);
-        write(project, ".buildcli/teams/t.yaml", TEAM);
         assertFalse(gate(config(), user(false)));
         var next = user(true);
         assertTrue(gate(config(), next));
@@ -103,7 +98,6 @@ class TrustTest {
     @Test
     void yourOwnGlobalDefinitionsNeedNoApproval() throws IOException {
         write(global, "agents/bruno.yaml", AGENT);
-        write(global, "teams/t.yaml", TEAM);
         var ui = user(false);
         assertTrue(gate(config(), ui));
         assertTrue(ui.approvals.isEmpty());

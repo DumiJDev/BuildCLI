@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.buildcli.domain.Agent;
 import dev.buildcli.domain.Capability;
-import dev.buildcli.domain.Team;
 import dev.buildcli.infrastructure.FileConfigRepository;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -26,31 +25,26 @@ class ExamplesTest {
     }
 
     @Test
-    void everyExampleLoadsAndHasAtLeastOneTeamWhoseLeadIsAMember() throws IOException {
+    void everyExampleLoadsAndDefinesAtLeastOneAgent() throws IOException {
         try (Stream<Path> dirs = Files.list(EXAMPLES)) {
             List<Path> examples = dirs.filter(Files::isDirectory).toList();
             assertFalse(examples.isEmpty());
             for (Path dir : examples) {
-                var repo = new FileConfigRepository(dir, home);
-                assertFalse(repo.teams().isEmpty(), dir + " defines no team");
-                for (Team t : repo.teams()) {
-                    assertTrue(t.agent(t.lead()).isPresent(), dir + ": lead " + t.lead());
-                }
+                assertFalse(new FileConfigRepository(dir, home).agents().isEmpty(), dir + " defines no agent");
             }
         }
     }
 
     @Test
-    void theJavaExampleMatchesWhatInitGenerates() {
+    void theJavaExampleIsAThreeAgentBackendTeam() {
         var repo = load("java-maven-backend");
-        Team team = repo.team("backend").orElseThrow();
-        assertEquals(List.of("ana", "bruno", "carla"), team.agents().stream().map(Agent::name).toList());
+        assertEquals(List.of("ana", "bruno", "carla"), repo.agents().stream().map(Agent::name).sorted().toList());
         assertEquals(List.of("src/**"), repo.agent("bruno").orElseThrow().permissions().writeGlobs());
         assertFalse(repo.projectContext().isEmpty());
     }
 
     @Test
-    void theDocsTeamCannotRunAnyCommandAndOnlyWritesDocumentation() {
+    void theDocsExampleCannotRunAnyCommandAndOnlyWritesDocumentation() {
         var repo = load("docs-team");
         for (Agent a : repo.agents()) {
             assertFalse(a.can(Capability.COMMAND_EXECUTE), a.name() + " must not execute commands");

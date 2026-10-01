@@ -23,7 +23,7 @@ class ChangesScreenTest {
 
     ChatSession session() throws Exception {
         Files.writeString(dir.resolve("Hello.java"), "class Hello { int v = 2; }\n");
-        var s = new ChatSession(ChatScreenTest.TEAM, (team, request, ui, cancelled, dispatcher) -> {
+        var s = new ChatSession(ChatScreenTest.ROSTER, (team, request, ui, cancelled, dispatcher) -> {
             ui.fileChanged(new FileChange("ana", "Hello.java", true, "class Hello { int v = 1; }\n", "class Hello { int v = 2; }\n"));
             Task t = new Task(1, null, "user", "ana", request.text(), "");
             t.status = TaskStatus.DONE;
@@ -42,7 +42,7 @@ class ChangesScreenTest {
         ChatScreenTest.type(screen, "set v to 2");
         ChatScreenTest.key(screen, KeyCode.ENTER);
         long end = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
-        while ((s.busy() || s.lastChanges(ChatSession.TEAM) < 0) && System.nanoTime() < end) {
+        while ((s.busy() || s.lastChanges(ChatSession.MAIN) < 0) && System.nanoTime() < end) {
             Thread.sleep(10);
         }
         String out = ChatScreenTest.render(screen, 130, 36);
@@ -68,7 +68,7 @@ class ChangesScreenTest {
         assertTrue(out.contains("Undid ana's changes: restored Hello.java"), out);
         assertTrue(out.contains("undone"), out);
         assertFalse(out.contains(" Undo "), "no second undo for the same changes:\n" + out);
-        assertEquals(-1, s.lastChanges(ChatSession.TEAM));
+        assertEquals(-1, s.lastChanges(ChatSession.MAIN));
     }
 
     @Test
@@ -79,7 +79,7 @@ class ChangesScreenTest {
         ChatScreenTest.type(screen, "go");
         ChatScreenTest.key(screen, KeyCode.ENTER);
         long end = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
-        while ((s.busy() || s.lastChanges(ChatSession.TEAM) < 0) && System.nanoTime() < end) {
+        while ((s.busy() || s.lastChanges(ChatSession.MAIN) < 0) && System.nanoTime() < end) {
             Thread.sleep(10);
         }
         ChatScreenTest.type(screen, "/review");

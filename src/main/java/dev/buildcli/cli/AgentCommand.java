@@ -45,7 +45,7 @@ final class AgentCommand implements Callable<Integer> {
                 return 2;
             }
             if (config.agents().isEmpty()) {
-                ctx.out.println("No agents yet. Run 'buildcli init' for a sample team, or 'buildcli agent create <name>'.");
+                ctx.out.println("No agents yet. Run 'buildcli init' for sample agents, or 'buildcli agent create <name>'.");
                 return 0;
             }
             Tables.print(ctx.out, List.of("NAME", "ROLE", "ORIGIN", "CAPABILITIES"), config.agents().stream()

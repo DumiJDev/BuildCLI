@@ -42,7 +42,7 @@ class OrchestratorTest {
     }
 
     Orchestrator orch(LlmGateway llm, HeadlessUi ui, Limits limits) {
-        Team team = new Team("backend", "ana", List.of(ANA, BRUNO), limits);
+        Roster team = new Roster("backend", "ana", List.of(ANA, BRUNO), limits);
         Events events = new Events(store, "run1", ui);
         return new Orchestrator(team, llm, new ToolRuntime(workspace, ui, events), ui, events);
     }
@@ -161,7 +161,7 @@ class OrchestratorTest {
                 .say("bruno", "depth 1 done")
                 .say("ana", "root done");
         var ui = ui(true, EscalationChoice.ABORT);
-        Team team = new Team("t", "ana", List.of(looper, looper2), new Limits(3, 12, 1, 30_000, 3));
+        Roster team = new Roster("t", "ana", List.of(looper, looper2), new Limits(3, 12, 1, 30_000, 3));
         Events events = new Events(store, "run1", ui);
         Task root = new Orchestrator(team, llm, new ToolRuntime(workspace, ui, events), ui, events).run("go");
         // maxDepth=1: ana->bruno is depth 1 (ok), bruno->ana would be depth 2 (rejected as an error to the model)
@@ -362,7 +362,7 @@ class OrchestratorTest {
             return llm.chat(agent, messages, tools);
         };
         var ui = ui(true, EscalationChoice.ABORT);
-        Team team = new Team("backend", "ana", List.of(ANA, BRUNO), Limits.defaults());
+        Roster team = new Roster("backend", "ana", List.of(ANA, BRUNO), Limits.defaults());
         Events events = new Events(store, "run1", ui);
         new Orchestrator(team, spy, new ToolRuntime(workspace, ui, events), ui, events, "Build with mvn verify.").run("go");
         String system = ((LlmMessage.System) first.get(0)).text();
@@ -381,7 +381,7 @@ class OrchestratorTest {
 
         var run = store.listRuns(5).get(0);
         assertEquals("run1", run.id());
-        assertEquals("backend", run.team());
+        assertEquals("backend", run.group());
         assertEquals("do the thing", run.request());
         assertEquals("DONE", run.status());
         assertEquals("all done", run.summary());
@@ -416,7 +416,7 @@ class OrchestratorTest {
                 .say("bruno", "it timed out")
                 .say("ana", "ok");
         var ui = ui(true, EscalationChoice.ABORT);
-        Team team = new Team("t", "ana", List.of(ANA, slow), Limits.defaults());
+        Roster team = new Roster("t", "ana", List.of(ANA, slow), Limits.defaults());
         Events events = new Events(store, "run1", ui);
         new Orchestrator(team, llm, new ToolRuntime(workspace, ui, events), ui, events).run("go");
         assertTrue(ui.events.stream().anyMatch(e -> e.type().equals("ToolCompleted") && e.payload().contains("timed out")));
@@ -436,7 +436,7 @@ class OrchestratorTest {
                 .say("bruno", "done")
                 .say("ana", "ok");
         var ui = ui(true, EscalationChoice.ABORT);
-        Team team = new Team("t", "ana", List.of(ANA, reader), Limits.defaults());
+        Roster team = new Roster("t", "ana", List.of(ANA, reader), Limits.defaults());
         Events events = new Events(store, "run1", ui);
         new Orchestrator(team, llm, new ToolRuntime(workspace, ui, events), ui, events).run("go");
         var completed = ui.events.stream().filter(e -> e.type().equals("ToolCompleted") && e.agent().equals("bruno")).toList();

@@ -5,12 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import dev.buildcli.domain.Agent;
 import dev.buildcli.domain.Capability;
-import dev.buildcli.domain.Limits;
-import dev.buildcli.domain.ModelRef;
-import dev.buildcli.domain.ModelRouting;
 import dev.buildcli.domain.Origin;
 import dev.buildcli.domain.Permissions;
-import dev.buildcli.domain.Team;
 import dev.buildcli.ports.ConfigException;
 import dev.buildcli.ports.ConfigRepository;
 import java.io.IOException;
@@ -31,12 +27,12 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * Loads agents ({@code agents/*.md|yaml}) and teams ({@code teams/*.yaml}) from the global directory and from the
+ * Loads agents ({@code agents/*.md|yaml}) from the global directory and from the
  * project's {@code .buildcli/}; project definitions override global ones of the same name. Definitions are validated
  * strictly (unknown keys are errors, since a typo in a permission must never silently widen or drop it) and every
  * problem is reported at once. {@code AGENTS.md} in the project root is read as context only.
  *
- * <p>File format, schema 1: see docs/reference/agents-and-teams.md.
+ * <p>File format, schema 1: see docs/reference/agents.md.
  */
 public final class FileConfigRepository implements ConfigRepository {
     public static final int SCHEMA = 1;
@@ -51,12 +47,8 @@ public final class FileConfigRepository implements ConfigRepository {
     private static final java.util.regex.Pattern PROVIDER = java.util.regex.Pattern.compile("[a-z][a-z0-9-]{0,39}");
     private static final Set<String> AGENT_KEYS = Set.of("schema", "name", "role", "description", "instructions",
             "capabilities", "permissions", "memory", "personality");
-    private static final Set<String> TEAM_KEYS = Set.of("schema", "name", "description", "lead", "agents", "runtime", "limits");
-    private static final Set<String> LIMIT_KEYS = Set.of("max_retries", "max_steps", "max_depth", "max_tokens_per_task",
-            "max_handoffs_per_attempt");
 
     private final Map<String, Agent> agents = new LinkedHashMap<>();
-    private final Map<String, Team> teams = new LinkedHashMap<>();
     private final String context;
     private final java.security.MessageDigest digest = sha256();
     private boolean projectFilesSeen;
@@ -74,12 +66,6 @@ public final class FileConfigRepository implements ConfigRepository {
         this.projectRoot = project;
         loadAgents(globalDir.resolve("agents"), Origin.GLOBAL);
         loadAgents(project.resolve(".buildcli").resolve("agents"), Origin.PROJECT);
-        List<RawTeam> raw = new ArrayList<>();
-        loadTeams(globalDir.resolve("teams"), raw);
-        loadTeams(project.resolve(".buildcli").resolve("teams"), raw);
-        for (RawTeam r : raw) {
-            buildTeam(r);
-        }
         context = readContext(project.resolve("AGENTS.md"));
         projectDigest = projectFilesSeen ? java.util.HexFormat.of().formatHex(digest.digest()) : "";
         if (!problems.isEmpty()) {
@@ -95,16 +81,6 @@ public final class FileConfigRepository implements ConfigRepository {
     @Override
     public Optional<Agent> agent(String name) {
         return Optional.ofNullable(agents.get(name));
-    }
-
-    @Override
-    public List<Team> teams() {
-        return List.copyOf(teams.values());
-    }
-
-    @Override
-    public Optional<Team> team(String name) {
-        return Optional.ofNullable(teams.get(name));
     }
 
     @Override
@@ -283,121 +259,6 @@ public final class FileConfigRepository implements ConfigRepository {
         };
     }
 
-    // ---- teams ----
-
-    private record RawTeam(Path file, JsonNode node) {}
-
-    private void loadTeams(Path dir, List<RawTeam> out) {
-        for (Path file : files(dir, ".yaml", ".yml")) {
-            String text = read(file);
-            JsonNode n = text == null ? null : parseYaml(file, text);
-            if (n != null) {
-                out.add(new RawTeam(file, n));
-            }
-        }
-    }
-
-    private void buildTeam(RawTeam raw) {
-        Path file = raw.file();
-        JsonNode n = raw.node();
-        int before = problems.size();
-        checkSchema(file, n);
-        checkKeys(file, n, TEAM_KEYS, "team");
-        String name = requiredText(file, n, "name");
-        if (name != null && !NAME.matcher(name).matches()) {
-            problem(file, "name '" + name + "' must match [a-z][a-z0-9_-]*");
-        }
-        List<Agent> members = new ArrayList<>();
-        JsonNode list = n.get("agents");
-        if (list == null || !list.isArray() || list.isEmpty()) {
-            problem(file, "'agents' must be a non-empty list of agent names");
-        } else {
-            for (JsonNode a : list) {
-                Agent agent = agents.get(a.asText());
-                if (agent == null) {
-                    problem(file, "agent '" + a.asText() + "' is not defined; defined agents: " + new TreeSet<>(agents.keySet()));
-                } else if (members.contains(agent)) {
-                    problem(file, "agent '" + a.asText() + "' is listed twice");
-                } else {
-                    members.add(agent);
-                }
-            }
-        }
-        String lead = requiredText(file, n, "lead");
-        if (lead != null && members.stream().noneMatch(m -> m.name().equals(lead))) {
-            problem(file, "lead '" + lead + "' must be one of the team's agents");
-        }
-        ModelRouting routing = routing(file, n.get("runtime"), members);
-        Limits limits = limits(file, n.get("limits"));
-        if (problems.size() > before) {
-            return;
-        }
-        teams.put(name, new Team(name, lead, List.copyOf(members), limits, routing));
-    }
-
-    private ModelRouting routing(Path file, JsonNode node, List<Agent> members) {
-        if (node == null || node.isNull()) {
-            return ModelRouting.unspecified();
-        }
-        if (!node.isObject()) {
-            problem(file, "'runtime' must be a mapping of 'default' and agent names to {provider, model}");
-            return ModelRouting.unspecified();
-        }
-        ModelRef def = null;
-        Map<String, ModelRef> overrides = new LinkedHashMap<>();
-        for (Iterator<Map.Entry<String, JsonNode>> it = node.fields(); it.hasNext();) {
-            Map.Entry<String, JsonNode> e = it.next();
-            ModelRef ref = modelRef(file, e.getKey(), e.getValue());
-            if (e.getKey().equals("default")) {
-                def = ref;
-            } else if (members.stream().noneMatch(m -> m.name().equals(e.getKey()))) {
-                problem(file, "runtime." + e.getKey() + " refers to an agent that is not in the team");
-            } else if (ref != null) {
-                overrides.put(e.getKey(), ref);
-            }
-        }
-        return new ModelRouting(def, overrides);
-    }
-
-    private ModelRef modelRef(Path file, String key, JsonNode node) {
-        String provider = node.path("provider").asText("");
-        String model = node.path("model").asText("");
-        if (!PROVIDER.matcher(provider).matches() || model.isBlank()) {
-            problem(file, "runtime." + key + " needs a provider (e.g. ollama, openrouter; see 'buildcli provider list') and a model");
-            return null;
-        }
-        return new ModelRef(provider, model);
-    }
-
-    private Limits limits(Path file, JsonNode node) {
-        Limits d = Limits.defaults();
-        if (node == null || node.isNull()) {
-            return d;
-        }
-        if (!node.isObject()) {
-            problem(file, "'limits' must be a mapping");
-            return d;
-        }
-        unknownKeys(file, node, LIMIT_KEYS, "limits");
-        return new Limits(
-                bounded(file, node, "max_retries", d.maxRetries(), 0, 10),
-                bounded(file, node, "max_steps", d.maxSteps(), 1, 100),
-                bounded(file, node, "max_depth", d.maxDepth(), 1, 10),
-                bounded(file, node, "max_tokens_per_task", d.maxTokensPerTask(), 1000, 10_000_000),
-                bounded(file, node, "max_handoffs_per_attempt", d.maxHandoffsPerAttempt(), 1, 20));
-    }
-
-    private int bounded(Path file, JsonNode node, String key, int fallback, int min, int max) {
-        if (!node.has(key)) {
-            return fallback;
-        }
-        JsonNode v = node.get(key);
-        if (!v.isInt() || v.asInt() < min || v.asInt() > max) {
-            problem(file, "limits." + key + " must be an integer between " + min + " and " + max);
-            return fallback;
-        }
-        return v.asInt();
-    }
 
     // ---- shared helpers ----
 

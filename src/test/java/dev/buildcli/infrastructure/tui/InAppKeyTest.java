@@ -73,10 +73,6 @@ class InAppKeyTest {
             @Override
             public void deleteAgent(String name) { }
 
-            @Override
-            public String teamModel(String agent) {
-                return null;
-            }
 
             @Override
             public CompletableFuture<ModelCatalog.Result> checkKey(String provider, String key) {
@@ -104,7 +100,7 @@ class InAppKeyTest {
     }
 
     ChatScreen screen() {
-        var session = new ChatSession(ChatScreenTest.TEAM, (team, request, ui, cancelled, dispatcher) -> {
+        var session = new ChatSession(ChatScreenTest.ROSTER, (team, request, ui, cancelled, dispatcher) -> {
             Task t = new Task(1, null, "user", "ana", request.text(), "");
             t.status = TaskStatus.DONE;
             t.result = "ok";
