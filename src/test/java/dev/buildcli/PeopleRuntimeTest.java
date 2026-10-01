@@ -116,6 +116,26 @@ class PeopleRuntimeTest {
     }
 
     @Test
+    void streamedTextStaysInTheChatItWasWrittenFor() throws Exception {
+        var session = new ChatSession(TEAM, (team, request, ui, cancelled, dispatcher) -> {
+            // the HTTP client delivers streamed text on its own thread, not on the agent's
+            Thread t = new Thread(() -> {
+                ui.onText(1, "ana", "secret for the direct chat");
+                ui.onEvent(new dev.buildcli.domain.Event(java.time.Instant.now(), "ToolCalled", 1, "ana", "read_file {path=a.txt}"));
+            });
+            t.start();
+            t.join();
+            ui.onEvent(new dev.buildcli.domain.Event(java.time.Instant.now(), "AgentReplied", 1, "ana", "done"));
+            return done("ana", "done");
+        });
+        session.submit("hello", List.of(), "ana");
+        awaitIdle(session);
+        var seen = session.messages().stream().filter(m -> m.text().contains("secret") || m.text().contains("read a.txt")).toList();
+        assertFalse(seen.isEmpty(), "the text was shown somewhere");
+        assertTrue(seen.stream().allMatch(m -> m.thread().equals("ana")), "only in ana's chat: " + seen);
+    }
+
+    @Test
     void aHandoffThatWouldDeadlockIsRefusedInsteadOfHanging() throws Exception {
         CountDownLatch brunoBusy = new CountDownLatch(1);
         CountDownLatch anaHandedOff = new CountDownLatch(1);
