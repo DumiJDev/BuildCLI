@@ -8,6 +8,8 @@ BuildCLI is rebuilt from scratch as a local runtime for teams of AI agents. The 
 `legacy` branch and the `v0.14.0` tag. Design: `docs/rfc/0001-buildcli-1.0.md`.
 
 ### Fixed
+- **The approval mode chosen in Settings applies at once.** It was only read at start, so choosing `auto` in F2 kept asking until the
+  next restart. The setting is now called "Approval mode" (not "... at start").
 - Choosing a chat from the list closes the settings / connect / info screen that was over it.
 - Tab on a command only fills it in (`/diff `); Enter runs it. The `/` menu says so.
 - An empty project opens on the welcome screen, not on "Connect a model" (there is no agent to connect one to).
