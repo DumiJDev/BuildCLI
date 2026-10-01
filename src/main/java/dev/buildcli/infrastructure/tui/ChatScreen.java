@@ -508,7 +508,7 @@ final class ChatScreen implements Element {
 
     /** Keeps a chat open: the first group or agent, once there is one (for example right after the first agent is created). */
     private void ensureSelection() {
-        if (session.group(selected) != null || session.contact(selected) != null) {
+        if (chatList.exists(selected)) {
             return;
         }
         String first = session.defaultChat();
@@ -579,11 +579,11 @@ final class ChatScreen implements Element {
         }
         var group = session.group(selected);
         boolean isGroup = group != null;
-        String name = isGroup ? group.name() : session.contact(selected) != null ? selected : "Welcome";
+        String name = isGroup ? group.name() : chatList.exists(selected) ? chatList.title(selected) : "Welcome";
         Color c = isGroup ? Theme.ACCENT : Theme.agentColor(selected);
         put(buf, x, r.y(), " " + (name.isEmpty() ? "?" : name.substring(0, 1).toUpperCase(Locale.ROOT)) + " ", st(Theme.BG, c).bold(), r.right());
         int nx = x + 4;
-        put(buf, nx, r.y(), isGroup || session.contact(selected) != null ? chatList.title(selected) : "Welcome", base.bold(), r.right() - 30);
+        put(buf, nx, r.y(), chatList.exists(selected) ? chatList.title(selected) : "Welcome", base.bold(), r.right() - 30);
         String sub;
         Style subStyle = st(Theme.DIM, Theme.PANEL);
         ChatSession.Live live = session.live(selected);
@@ -603,6 +603,8 @@ final class ChatScreen implements Element {
             }
             sb.append(sb.isEmpty() ? "you" : ", you");
             sub = sb.toString() + "   · click for group info";
+        } else if (chatList.isSpecial(selected)) {
+            sub = chatList.describe(selected);
         } else if (session.contact(selected) == null) {
             sub = "create an agent to start";
         } else {
