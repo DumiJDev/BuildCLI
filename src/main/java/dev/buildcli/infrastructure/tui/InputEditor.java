@@ -12,7 +12,10 @@ final class InputEditor {
 
     private final StringBuilder text = new StringBuilder();
     private int cursor;
-    private final List<String> history = new ArrayList<>();
+    /** What was sent, per chat: Up in one chat never brings back what you wrote in another. */
+    private final java.util.Map<String, List<String>> histories = new java.util.HashMap<>();
+    private List<String> history = histories.computeIfAbsent("", k -> new ArrayList<>());
+    private String scope = "";
     private int historyPos = -1;
     private String draft = "";
     /** Column to return to when moving up and down across short lines. */
@@ -227,6 +230,15 @@ final class InputEditor {
     }
 
     // ---- history ----
+
+    /** Switches to the history of another chat. */
+    void scope(String chat) {
+        if (!chat.equals(scope)) {
+            scope = chat;
+            history = histories.computeIfAbsent(chat, k -> new ArrayList<>());
+            historyPos = -1;
+        }
+    }
 
     void remember(String sent) {
         if (!sent.isBlank() && (history.isEmpty() || !history.get(history.size() - 1).equals(sent))) {

@@ -1,6 +1,7 @@
 package dev.buildcli.infrastructure.tui;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.buildcli.application.ChatSession;
@@ -48,6 +49,35 @@ class HistoryAndTabScreenTest {
         ChatScreenTest.key(screen, KeyCode.DOWN);
         ChatScreenTest.key(screen, KeyCode.DOWN);
         assertTrue(ChatScreenTest.render(screen, 130, 40).contains("+   draft"), "back to what you were typing");
+    }
+
+    @Test
+    void tabOnACommandOnlyFillsItAndEnterRunsIt() {
+        var screen = screen();
+        ChatScreenTest.type(screen, "/hel");
+        assertTrue(ChatScreenTest.render(screen, 130, 40).contains("Tab fills"));
+        ChatScreenTest.key(screen, KeyCode.TAB);
+        assertEquals("/help ", screen.inputForTest().text(), "nothing ran yet");
+        assertFalse(screen.viewerOpenForTest());
+        ChatScreenTest.key(screen, KeyCode.ENTER);
+        assertTrue(screen.viewerOpenForTest(), "Enter ran it");
+    }
+
+    @Test
+    void eachChatHasItsOwnHistory() throws Exception {
+        var screen = screen();
+        var session = screen.sessionForTest();
+        ChatScreenTest.type(screen, "in the group");
+        ChatScreenTest.key(screen, KeyCode.ENTER);
+        ChatScreenTest.idle(session);
+        String first = screen.selectedForTest();
+        screen.handleKeyEvent(dev.tamboui.tui.event.KeyEvent.ofKey(KeyCode.DOWN, dev.tamboui.tui.event.KeyModifiers.ALT), true);
+        assertFalse(first.equals(screen.selectedForTest()), "moved to another chat");
+        ChatScreenTest.key(screen, KeyCode.UP);
+        assertEquals("", screen.inputForTest().text(), "nothing was written in this chat");
+        screen.handleKeyEvent(dev.tamboui.tui.event.KeyEvent.ofKey(KeyCode.UP, dev.tamboui.tui.event.KeyModifiers.ALT), true);
+        ChatScreenTest.key(screen, KeyCode.UP);
+        assertEquals("in the group", screen.inputForTest().text());
     }
 
     @Test
