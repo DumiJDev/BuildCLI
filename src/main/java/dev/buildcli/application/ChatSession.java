@@ -172,8 +172,7 @@ public final class ChatSession implements UserInterface {
     }
 
     private static final ThreadLocal<Run> RUN = new ThreadLocal<>();
-    private static final Pattern MENTION = Pattern.compile("(?<![\\w@])@([A-Za-z][A-Za-z0-9_-]*)");
-    private static final int MAX_EVENTS = 300;
+        private static final int MAX_EVENTS = 300;
     private static final int MAX_RUNS = 50;
 
     private final Limits limits;
@@ -185,12 +184,7 @@ public final class ChatSession implements UserInterface {
     private volatile java.nio.file.Path workspace;
     private volatile dev.buildcli.application.tools.WorkspaceLock workspaceLock;
     private final java.util.function.IntSupplier agentHops;
-    private final Map<String, Agent> contacts = new java.util.concurrent.ConcurrentSkipListMap<>();
-    /** Groups by id; the group made from a roster (tests) has the id {@link #MAIN}. Guarded by {@code lock}. */
-    private final Map<String, Chat> groups = new LinkedHashMap<>();
-    private final java.util.Set<String> directs = new java.util.LinkedHashSet<>();
-    /** Agent -> the agents it may not contact, set by the user. Guarded by {@code lock}. */
-    private final Map<String, java.util.Set<String>> blocked = new LinkedHashMap<>();
+    private final ChatDirectory directory;
     /** For a user message sent to several agents: how many have not finished, and whether one failed. */
     private final Map<Long, AtomicInteger> openRuns = new ConcurrentHashMap<>();
     private final java.util.Set<Long> failedMessages = ConcurrentHashMap.newKeySet();
@@ -241,17 +235,11 @@ public final class ChatSession implements UserInterface {
         this.executor = executor;
         this.store = store;
         this.agentHops = agentHops;
-        contacts.forEach(a -> this.contacts.putIfAbsent(a.name(), a));
-        for (Agent a : this.contacts.values()) {
+        this.directory = new ChatDirectory(contacts, groups, store, this::touch, this::error, this::note);
+        for (Agent a : directory.contacts()) {
             actors.put(a.name(), new Actor(a.name()));
             state.put(a.name(), "idle");
         }
-        for (Chat g : groups) {
-            List<String> members = g.members().stream().filter(this.contacts::containsKey).distinct().toList();
-            List<String> admins = g.admins().stream().filter(members::contains).toList();
-            this.groups.put(g.id(), new Chat(g.id(), g.name(), true, members, admins.isEmpty() && !members.isEmpty() ? List.of(members.get(0)) : admins));
-        }
-        store.loadBlocked().forEach((from, tos) -> blocked.put(from, new java.util.LinkedHashSet<>(tos)));
     }
 
     private static List<Agent> merge(List<Agent> first, List<Agent> more) {
@@ -274,20 +262,14 @@ public final class ChatSession implements UserInterface {
 
     /** A new agent (created on the settings screen) becomes a contact at once. */
     public void addContact(Agent agent) {
-        touch();
-        contacts.put(agent.name(), agent);
+        directory.addContact(agent);
         actors.computeIfAbsent(agent.name(), Actor::new);
         state.putIfAbsent(agent.name(), "idle");
     }
 
     /** A deleted agent leaves every group; what it already said stays in the chats. */
     public void removeContact(String name) {
-        for (Chat g : groups()) {
-            if (g.has(name)) {
-                removeMember(g.id(), name);
-            }
-        }
-        contacts.remove(name);
+        directory.removeContact(name);
         Actor a = actors.get(name);
         if (a != null && a.thread != null && a.current == null) {
             a.thread.interrupt();
@@ -335,7 +317,7 @@ public final class ChatSession implements UserInterface {
                     + "them in their own chat to write to the other.");
             return -1;
         }
-        String thread = chat == null || (group(chat) == null && !contacts.containsKey(chat)) ? defaultChat() : chat;
+        String thread = chat == null || (group(chat) == null && !directory.hasContact(chat)) ? defaultChat() : chat;
         if (thread == null) {
             error("There is nobody to talk to yet. Create an agent in Settings (F2) > Agents, or run 'buildcli init'.");
             return -1;
@@ -354,9 +336,7 @@ public final class ChatSession implements UserInterface {
         Chat g = group(thread);
         List<String> targets;
         if (g == null) {
-            synchronized (lock) {
-                directs.add(thread);
-            }
+            directory.openDirect(thread);
             targets = List.of(thread);
         } else {
             List<String> mentioned = mentioned(text);
@@ -402,62 +382,44 @@ public final class ChatSession implements UserInterface {
 
     /** Every contact @mentioned in the text, in order, once each. */
     public List<String> mentioned(String text) {
-        List<String> out = new ArrayList<>();
-        Matcher m = MENTION.matcher(text);
-        while (m.find()) {
-            for (String name : contacts.keySet()) {
-                if (name.equalsIgnoreCase(m.group(1)) && !out.contains(name)) {
-                    out.add(name);
-                }
-            }
-        }
-        return out;
+        return directory.mentioned(text);
     }
 
     // ---- chats: groups, members, admins, direct chats ----
 
     public Chat group(String id) {
-        synchronized (lock) {
-            return groups.get(id);
-        }
+        return directory.group(id);
     }
 
     public List<Chat> groups() {
-        synchronized (lock) {
-            return List.copyOf(groups.values());
-        }
+        return directory.groups();
     }
 
     /** The chat to open first: the first group, else a direct chat with the first agent; null when there are no agents. */
     public String defaultChat() {
-        List<Chat> gs = groups();
-        if (!gs.isEmpty()) {
-            return gs.get(0).id();
-        }
-        return contacts.isEmpty() ? null : contacts.keySet().iterator().next();
+        return directory.defaultChat();
     }
 
     /** Every agent the user can talk to. */
     public List<Agent> contacts() {
-        return List.copyOf(contacts.values());
+        return directory.contacts();
     }
 
     public Agent contact(String name) {
-        return contacts.get(name);
+        return directory.contact(name);
     }
 
     /** Direct chats that were opened or have messages. */
     public List<String> directChats() {
+        return directory.directChats(threadsWithMessages());
+    }
+
+    private java.util.Set<String> threadsWithMessages() {
         java.util.Set<String> out = new java.util.LinkedHashSet<>();
-        synchronized (lock) {
-            out.addAll(directs);
-            for (Message m : transcript.snapshot()) {
-                if (contacts.containsKey(m.thread())) {
-                    out.add(m.thread());
-                }
-            }
+        for (Message m : transcript.snapshot()) {
+            out.add(m.thread());
         }
-        return List.copyOf(out);
+        return out;
     }
 
     /** A private chat between two agents, started by one of them when the user asked it to write to the other. */
@@ -477,106 +439,39 @@ public final class ChatSession implements UserInterface {
 
     /** The private chats between agents that have messages, in the order they started. */
     public List<String> agentChats() {
-        java.util.Set<String> out = new java.util.LinkedHashSet<>();
-        synchronized (lock) {
-            for (Message m : transcript.snapshot()) {
-                if (isAgentChat(m.thread())) {
-                    out.add(m.thread());
-                }
-            }
-        }
-        return List.copyOf(out);
+        return threadsWithMessages().stream().filter(ChatSession::isAgentChat).toList();
     }
-
-    // ---- who may contact whom ----
 
     /** Whether {@code from} may write to {@code to}. Everyone may, until the user says otherwise. */
     public boolean canReach(String from, String to) {
-        synchronized (lock) {
-            return !blocked.getOrDefault(from, java.util.Set.of()).contains(to);
-        }
+        return directory.canReach(from, to);
     }
 
     public void setReach(String from, String to, boolean allowed) {
-        touch();
-        synchronized (lock) {
-            if (allowed) {
-                var set = blocked.get(from);
-                if (set != null) {
-                    set.remove(to);
-                    if (set.isEmpty()) {
-                        blocked.remove(from);
-                    }
-                }
-            } else {
-                blocked.computeIfAbsent(from, k -> new java.util.LinkedHashSet<>()).add(to);
-            }
-        }
-        saveBlocked();
+        directory.setReach(from, to, allowed);
     }
 
     /** Who cannot contact whom, as "bruno -> ana" lines. */
     public List<String> blockedPairs() {
-        List<String> out = new ArrayList<>();
-        synchronized (lock) {
-            blocked.forEach((from, tos) -> tos.forEach(to -> out.add(from + " -> " + to)));
-        }
-        return out;
-    }
-
-    private void saveBlocked() {
-        Map<String, List<String>> copy = new LinkedHashMap<>();
-        synchronized (lock) {
-            blocked.forEach((k, v) -> copy.put(k, List.copyOf(v)));
-        }
-        try {
-            store.saveBlocked(copy);
-        } catch (RuntimeException e) {
-            error("Could not save who can contact whom: " + e.getMessage());
-        }
+        return directory.blockedPairs();
     }
 
     public void openDirect(String agent) {
-        touch();
-        if (contacts.containsKey(agent)) {
-            synchronized (lock) {
-                directs.add(agent);
-            }
-        }
+        directory.openDirect(agent);
     }
 
     /** Agents in no group and with no direct chat: loaded, but nobody can reach them. */
     public List<String> idleContacts() {
-        List<String> direct = directChats();
-        List<String> out = new ArrayList<>();
-        for (String name : contacts.keySet()) {
-            boolean inGroup = groups().stream().anyMatch(g -> g.has(name));
-            if (!inGroup && !direct.contains(name)) {
-                out.add(name);
-            }
-        }
-        return out;
+        return directory.idleContacts(directChats());
     }
 
     /** @return the new group's id */
     public String createGroup(String name, List<String> members) {
-        String clean = name == null || name.isBlank() ? "group" : name.strip();
-        String base = "#" + clean.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("^-|-$", "");
-        List<String> known = members.stream().filter(contacts::containsKey).distinct().toList();
-        String id;
-        synchronized (lock) {
-            id = base;
-            for (int i = 2; groups.containsKey(id); i++) {
-                id = base + "-" + i;
-            }
-            groups.put(id, new Chat(id, clean, true, known, known.isEmpty() ? List.of() : List.of(known.get(0))));
-        }
-        saveGroups();
-        return id;
+        return directory.createGroup(name, members);
     }
 
     public void renameGroup(String id, String name) {
-        changeGroup(id, g -> new Chat(g.id(), name.strip(), true, g.members(), g.admins()));
+        directory.renameGroup(id, name);
     }
 
     /** The main group cannot be deleted. @return false if it was not deleted */
@@ -584,11 +479,7 @@ public final class ChatSession implements UserInterface {
         if (MAIN.equals(id)) {
             return false;
         }
-        boolean removed;
-        synchronized (lock) {
-            removed = groups.remove(id) != null;
-        }
-        saveGroups();
+        boolean removed = directory.removeGroup(id);
         if (removed) {
             clearChat(id);
         }
@@ -596,73 +487,17 @@ public final class ChatSession implements UserInterface {
     }
 
     public void addMember(String id, String agent) {
-        if (!contacts.containsKey(agent)) {
-            throw new IllegalArgumentException("no agent named " + agent);
-        }
-        changeGroup(id, g -> {
-            if (g.has(agent)) {
-                return g;
-            }
-            List<String> m = new ArrayList<>(g.members());
-            m.add(agent);
-            return g.withMembers(m, g.admins().isEmpty() ? List.of(agent) : g.admins());
-        });
-        note(id, agent + " was added");
+        directory.addMember(id, agent);
     }
 
     /** Removing the last admin makes the next member admin, so a group always has someone to answer it. */
     public void removeMember(String id, String agent) {
-        changeGroup(id, g -> {
-            List<String> m = new ArrayList<>(g.members());
-            m.remove(agent);
-            List<String> a = new ArrayList<>(g.admins());
-            a.remove(agent);
-            if (a.isEmpty() && !m.isEmpty()) {
-                a.add(m.get(0));
-            }
-            return g.withMembers(m, a);
-        });
-        note(id, agent + " was removed");
+        directory.removeMember(id, agent);
     }
 
     /** Makes a member an admin, or dismisses one. A group keeps at least one admin while it has members. */
     public void setAdmin(String id, String agent, boolean admin) {
-        Chat before = group(id);
-        if (before == null || !before.has(agent)) {
-            throw new IllegalArgumentException(agent + " is not in this group");
-        }
-        if (!admin && before.admins().size() == 1 && before.isAdmin(agent)) {
-            throw new IllegalArgumentException(agent + " is the only admin; make someone else admin first");
-        }
-        changeGroup(id, g -> {
-            List<String> a = new ArrayList<>(g.admins());
-            a.remove(agent);
-            if (admin) {
-                a.add(agent);
-            }
-            return g.withMembers(g.members(), a);
-        });
-        note(id, agent + (admin ? " is now an admin" : " is no longer an admin"));
-    }
-
-    private void changeGroup(String id, java.util.function.UnaryOperator<Chat> change) {
-        synchronized (lock) {
-            Chat g = groups.get(id);
-            if (g == null) {
-                throw new IllegalArgumentException("no such group");
-            }
-            groups.put(id, change.apply(g));
-        }
-        touch();
-        saveGroups();
-    }
-
-    private void saveGroups() {
-        try {
-            store.save(groups());
-        } catch (RuntimeException e) {
-            error("Could not save the groups: " + e.getMessage());
-        }
+        directory.setAdmin(id, agent, admin);
     }
 
     /** A note in one chat (who joined, who is not in the group). */
@@ -1032,7 +867,7 @@ public final class ChatSession implements UserInterface {
             to = mentioned(said).stream().filter(m -> !m.equals(run.me) && g.has(m) && !run.handedOffTo.contains(m)).toList();
         } else if (isAgentChat(thread)) {
             // in a private chat the other one reads what was said, until the agents have said enough to each other
-            to = agentChatMembers(thread).stream().filter(m -> !m.equals(run.me) && contacts.containsKey(m)).toList();
+            to = agentChatMembers(thread).stream().filter(m -> !m.equals(run.me) && directory.hasContact(m)).toList();
         } else {
             return;
         }
@@ -1053,9 +888,9 @@ public final class ChatSession implements UserInterface {
     private Roster rosterFor(String thread, String me) {
         Chat g = group(thread);
         List<Agent> members = new ArrayList<>();
-        members.add(contacts.get(me));
-        for (String name : g != null ? g.members() : List.copyOf(contacts.keySet())) {
-            Agent a = contacts.get(name);
+        members.add(directory.contact(me));
+        for (String name : g != null ? g.members() : List.copyOf(directory.contactNames())) {
+            Agent a = directory.contact(name);
             if (a != null && !a.name().equals(me)) {
                 members.add(a);
             }
@@ -1171,15 +1006,7 @@ public final class ChatSession implements UserInterface {
     /** An agent writes, as itself, in a group it belongs to or in a private chat with a teammate. Runs on that agent's thread. */
     private String postAs(String from, String to, String text) {
         Run run = RUN.get();
-        Chat g = null;
-        synchronized (lock) {
-            for (Chat c : groups.values()) {
-                if (c.id().equalsIgnoreCase(to) || c.name().equalsIgnoreCase(to)) {
-                    g = c;
-                    break;
-                }
-            }
-        }
+        Chat g = groups().stream().filter(c -> c.id().equalsIgnoreCase(to) || c.name().equalsIgnoreCase(to)).findFirst().orElse(null);
         if (g != null) {
             if (!g.has(from)) {
                 return "ERROR: you are not a member of the group '" + g.name() + "', so you cannot write there";
@@ -1190,7 +1017,7 @@ public final class ChatSession implements UserInterface {
             }
             return "Posted in the group '" + g.name() + "'. Tell the user it is done; do not post it again.";
         }
-        String other = contacts.keySet().stream().filter(n -> n.equalsIgnoreCase(to)).findFirst().orElse(null);
+        String other = directory.contactNames().stream().filter(n -> n.equalsIgnoreCase(to)).findFirst().orElse(null);
         if (other == null) {
             return "ERROR: there is no group or teammate called '" + to + "'";
         }
