@@ -9,7 +9,7 @@ import dev.buildcli.eval.Bench;
 import dev.buildcli.eval.Scenario;
 import dev.buildcli.infrastructure.ProviderSettings;
 import dev.buildcli.infrastructure.ScriptedGateway;
-import dev.buildcli.infrastructure.SqliteRunStore;
+import dev.buildcli.infrastructure.StateStore;
 import dev.buildcli.ports.LlmGateway;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -94,7 +94,7 @@ final class DevCommands {
                 // a message to the group goes to its admin, so "for the lead" means no target or the lead itself
                 boolean forLead = request.target() == null || request.target().equals(chatTeam.lead());
                 LlmGateway model = fake ? demoModel(script(escalate && forLead), request, forLead) : llm;
-                try (SqliteRunStore store = new SqliteRunStore(SqliteRunStore.IN_MEMORY)) {
+                try (StateStore store = new StateStore(StateStore.IN_MEMORY)) {
                     Events events = new Events(store, "demo", ui);
                     Orchestrator o = new Orchestrator(chatTeam, model, new ToolRuntime(workspace, ui, events, workspaceLock), ui, events);
                     o.cancelWhen(cancelled);

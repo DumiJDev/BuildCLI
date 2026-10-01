@@ -41,6 +41,16 @@ with the `sqlite3` CLI (good for an audit log), but ~9 MB larger and needs per-O
 **Decision: SQLite with WAL** because the event log is meant to outlive versions and be inspected. Switching
 is cheap (`JdbcEventStore` takes a URL), so this is reversible.
 
+**Update (1.0 work): the engine is now a setting.** `storage.backend` (Settings > General, or `BUILDCLI_STORAGE`): `sqlite` (default),
+`h2` (a file) or `memory` (H2 in memory, gone when BuildCLI closes). Writes are also applied asynchronously in batches (one writer
+thread, one transaction per batch; reads wait for what was written before them). Measured with `LoadProbe` (1000 virtual-thread
+writers, 200 000 events, 3 runs, Linux/JDK 25): SQLite one commit per event ~7 000/s; **SQLite batched ~90 000/s**; H2 file
+~90-115 000/s; H2 batched ~107-128 000/s; H2 memory batched ~109-166 000/s. So batching is what matters (13x); H2 on top adds
+1.2-1.4x. Caveats that still hold: H2's file format changes across major versions; an H2 file is open in one process at a time
+(`buildcli runs` fails with a clear message while the chat has it open); H2 was measured with its default sync behaviour, which
+may lose up to about a second of writes on a crash, not with `WRITE_DELAY=0` as in the table above; and H2 is not covered by the
+native-image metadata. SQLite stays the default for those reasons. Each engine keeps its own history: switching does not move it.
+
 ### TamboUI as the 1.0 interface
 
 Works and is usable: layout, dialog overlay, key handling, tick-driven redraw from a worker thread. Points to know:

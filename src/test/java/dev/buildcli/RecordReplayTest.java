@@ -15,7 +15,7 @@ import dev.buildcli.infrastructure.HeadlessUi;
 import dev.buildcli.infrastructure.RecordingGateway;
 import dev.buildcli.infrastructure.ReplayGateway;
 import dev.buildcli.infrastructure.ScriptedGateway;
-import dev.buildcli.infrastructure.SqliteRunStore;
+import dev.buildcli.infrastructure.StateStore;
 import dev.buildcli.ports.EscalationChoice;
 import dev.buildcli.ports.LlmGateway;
 import java.nio.file.Files;
@@ -36,7 +36,7 @@ class RecordReplayTest {
 
     HeadlessUi run(LlmGateway llm, Path workspace) throws Exception {
         var ui = new HeadlessUi(r -> true, EscalationChoice.ABORT, false);
-        try (var store = new SqliteRunStore(SqliteRunStore.IN_MEMORY)) {
+        try (var store = new StateStore(StateStore.IN_MEMORY)) {
             Events events = new Events(store, "r", ui);
             Task root = new Orchestrator(new Team("t", "ana", List.of(ana, bruno), Limits.defaults()), llm,
                     new ToolRuntime(workspace, ui, events), ui, events).run("go");

@@ -1,7 +1,7 @@
 package dev.buildcli.cli;
 
 import dev.buildcli.domain.RunInfo;
-import dev.buildcli.infrastructure.SqliteRunStore;
+import dev.buildcli.infrastructure.StateStore;
 import java.util.List;
 import java.util.concurrent.Callable;
 import picocli.CommandLine.Command;
@@ -24,7 +24,7 @@ final class RunsCommand implements Callable<Integer> {
             ctx.out.println("No runs yet for this project. Try: buildcli run --team <name> \"<what to do>\"");
             return 0;
         }
-        try (SqliteRunStore store = SqliteRunStore.open(ctx.stateDb())) {
+        try (StateStore store = ctx.openState()) {
             List<RunInfo> runs = store.listRuns(limit);
             if (runs.isEmpty()) {
                 ctx.out.println("No runs yet for this project.");
