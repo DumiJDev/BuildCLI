@@ -62,6 +62,22 @@ final class ChatListView {
         this.host = host;
     }
 
+    /** Whether {@code thread} is a chat that can be opened: a group, an agent, your notes, or a chat between two agents. */
+    boolean exists(String thread) {
+        return session.group(thread) != null || session.contact(thread) != null || isSpecial(thread);
+    }
+
+    /** Your notes and the private chats between agents: chats with no agent on the other side to answer you. */
+    boolean isSpecial(String thread) {
+        return ChatSession.NOTES.equals(thread) || ChatSession.isAgentChat(thread);
+    }
+
+    /** The line under the name of a special chat. */
+    String describe(String thread) {
+        return ChatSession.NOTES.equals(thread) ? "only you can read this · no agent sees it"
+                : "private chat between agents · you can read it, not write in it";
+    }
+
     boolean isSearching() {
         return searching;
     }

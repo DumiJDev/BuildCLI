@@ -73,7 +73,7 @@ final class ConversationRows {
 
     List<Row> build(int width, List<Message> msgs) {
         List<Row> rows = new ArrayList<>();
-        if (session.group(host.selected()) == null && session.contact(host.selected()) == null) {
+        if (!chatList.exists(host.selected())) {
             onboarding(rows, width);
             return rows;
         }
@@ -224,6 +224,15 @@ final class ConversationRows {
     }
 
     private void welcome(List<Row> rows, int width) {
+        if (chatList.isSpecial(host.selected())) {
+            boolean notes = ChatSession.NOTES.equals(host.selected());
+            centred(rows, width, notes ? "Notes to yourself" : "Nothing here yet", st(Theme.TEXT, Theme.BG).bold());
+            rows.add(new Row(0, List.of()));
+            centred(rows, width, notes ? "Write anything you want to keep. Only you can read this chat: no agent sees it."
+                    : "Agents write here when you ask one of them to write to the other. You can read it, but not write in it.",
+                    st(Theme.DIM, Theme.BG));
+            return;
+        }
         var g = session.group(host.selected());
         boolean isGroup = g != null;
         String who = isGroup ? clean(g.name()) : clean(host.selected());
