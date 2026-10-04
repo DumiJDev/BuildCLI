@@ -147,7 +147,7 @@ final class Previews {
                     int lo = big ? buf[i + 1] & 0xFF : buf[i] & 0xFF;
                     int hi = big ? buf[i] : buf[i + 1];
                     double v = Math.abs((hi << 8 | lo)) / 32768.0;
-                    int bar = (int) Math.min(bars - 1, (long) seen * bars / frames);
+                    int bar = (int) Math.min((long) bars - 1, (long) seen * bars / frames);
                     peak[bar] = Math.max(peak[bar], v);
                     seen++;
                 }

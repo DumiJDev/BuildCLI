@@ -24,7 +24,7 @@ jobs:
         with:
           java-version: '21'
           distribution: temurin
-          cache: maven
+          # no dependency cache in the release job: a cache written by another workflow must not reach a published artifact
 
       - name: Build and test
         run: mvn -B --no-transfer-progress verify

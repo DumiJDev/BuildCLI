@@ -85,6 +85,9 @@ final class PendingDialog {
 
     void draw(Buffer buf, Rect r) {
         ChatSession.Pending p = session.pending();
+        if (p == null) {
+            return; // answered from another thread since the screen decided to draw the dialog
+        }
         int w = Math.min(r.width() - 4, 100);
         Style base = st(Theme.TEXT, Theme.DIALOG);
         List<List<Span>> body = new ArrayList<>();
