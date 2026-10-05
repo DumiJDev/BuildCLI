@@ -95,6 +95,9 @@ public final class ModelCatalog {
             // models that can use tools first (agents need them), free ones first among those, then by name
             out.sort(Comparator.comparing((Model x) -> !x.tools()).thenComparing(x -> !x.free()).thenComparing(x -> x.ref().toLowerCase(Locale.ROOT)));
             return new Result(out, null);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return new Result(List.of(), ProviderErrors.message(e));
         } catch (Exception e) {
             return new Result(List.of(), ProviderErrors.message(e));
         }
