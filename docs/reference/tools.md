@@ -9,8 +9,8 @@ its capability, and a call to any other tool is refused.
 | `filesystem.read` | `list_files` | Lists a directory (`/` marks directories) | Hides what the read globs exclude; 200 entries |
 | `filesystem.write` | `write_file` | Creates or overwrites a file | Must match the write globs; **always shown to you as a unified diff and approved** |
 | `search` | `search` | Case-insensitive text search, `path:line: text` | 30 matches; skips `.git`, `target`, `node_modules`, `build`, binaries and files over 1 MB; alphabetical order |
-| `git.read` | `git_read` | `status`, `diff` (optionally of one path) or `log` (last 20) | Fixed argv; fsmonitor, external diff and textconv disabled |
-| `git.commit` | `git_commit` | Commits the named paths with a message | **Always approved by you**, shown with the diff; the agent must be able to read every path; repository hooks run |
+| `git.read` | `git_read` | `status`, `diff` (optionally of one path) or `log` (last 20) | Done by JGit inside BuildCLI: no `git` program needed, nothing the repository configures can run; untracked files are not shown; output capped at 4000 characters |
+| `git.commit` | `git_commit` | Commits the named paths with a message | **Always approved by you**, shown with the diff; the agent must be able to read every path; paths are literal names, never patterns; repository hooks run (`pre-commit`, `commit-msg`, `post-commit`); a hook has no time limit |
 | `command.execute` | `run_command` | Runs an argv array in the workspace | Allow list by argv prefix, otherwise approval; timeout (default 30 s) kills the process tree; scrubbed environment; output capped |
 | `agent.handoff` | `handoff` | Delegates a task to a teammate | The runtime validates the target, depth (default 3) and count per attempt (default 3) |
 | `chat.post` | `send_message` | Writes as the agent in a group it belongs to, or privately to a teammate (a chat between the two agents that you can read but not write in) | Only because you asked; a teammate you took contact away from with `/reach` cannot be written to; replies between agents stop after the hop limit |

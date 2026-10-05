@@ -12,7 +12,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Callable;
-import java.util.concurrent.TimeUnit;
 import picocli.CommandLine.Command;
 
 @Command(name = "doctor", description = "Check Java, git, the configuration, the state directory and the model providers")
@@ -91,20 +90,8 @@ final class DoctorCommand implements Callable<Integer> {
     }
 
     private void checkGit() {
-        try {
-            // the point of this check is to run the git that is first on the user's PATH, the one the agents will run too
-            Process p = new ProcessBuilder("git", "--version").redirectErrorStream(true).start(); // NOSONAR java:S4036
-            String out = new String(p.getInputStream().readAllBytes()).strip();
-            if (p.waitFor(5, TimeUnit.SECONDS) && p.exitValue() == 0) {
-                ok(out);
-                return;
-            }
-        } catch (IOException e) {
-            // fall through: not installed
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-        warn("git was not found on the PATH; the git tools (git_read, git_commit) will not work");
+        // git is built in (JGit): the tools never start a git program, so there is nothing to find on the PATH
+        ok("git support is built in; no git program is needed");
     }
 
     private void checkState() {

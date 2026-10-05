@@ -12,7 +12,7 @@ Exit codes: **0** success, **1** the work failed or was aborted, **2** usage or 
 | `buildcli task list [--run ID]` / `task show <n> [--run ID]` | The tasks and handoffs of a run (default: the latest), and one task with its events. |
 | `buildcli usage [--run ID] [--json]` | Tokens per agent for a run, derived from the event log. |
 | `buildcli provider list` / `login <provider> [--stdin]` / `logout <provider>` / `add <name> --url <url>` / `test <provider:model>` | The places models come from. `login` saves the provider's API key on this computer (asked hidden, or the first line of standard input with `--stdin`) so no variable has to be set before starting; `logout` forgets it. A set environment variable wins over a saved key. Inside the app, `/connect` does the same step by step. |
-| `buildcli doctor` | Checks Java, git, the state directory, the configuration and the model providers. Exits 1 if something is broken; an unreachable Ollama is only a warning. |
+| `buildcli doctor` | Checks Java, the state directory, the configuration and the model providers. Exits 1 if something is broken; an unreachable Ollama is only a warning. |
 | `buildcli config` | Where configuration and state live, and the provider endpoints. For each key it says only whether it is set, and whether from the environment or saved by you (never the key). |
 
 ## `run`
