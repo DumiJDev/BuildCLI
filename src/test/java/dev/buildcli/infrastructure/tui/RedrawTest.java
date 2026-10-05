@@ -27,6 +27,14 @@ class RedrawTest {
         Thread.sleep(ms);
     }
 
+    /** Waits for a condition instead of guessing how long a loaded CI machine takes. */
+    static void awaitUntil(java.util.function.BooleanSupplier condition, long timeoutMs) throws InterruptedException {
+        long deadline = System.nanoTime() + timeoutMs * 1_000_000;
+        while (!condition.getAsBoolean() && System.nanoTime() < deadline) {
+            Thread.sleep(10);
+        }
+    }
+
     @Test
     void idleMeansNoFramesAndNoClock() throws Exception {
         redraw.frameDrawn();
@@ -52,7 +60,7 @@ class RedrawTest {
     void somethingThatMovesGetsFramesUntilItStopsAndThenOneMore() throws Exception {
         moving.set(true);
         redraw.frameDrawn();
-        pause(400);
+        awaitUntil(() -> frames.get() >= 3, 5000);
         int whileMoving = frames.get();
         assertTrue(whileMoving >= 3, "the spinner turns: " + whileMoving);
         assertTrue(redraw.clockRunning());

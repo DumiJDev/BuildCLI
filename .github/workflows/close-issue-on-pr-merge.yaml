@@ -6,12 +6,17 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: close-issue-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
 jobs:
   close-issue:
+    name: Close the linked issue
     runs-on: ubuntu-latest
     if: github.event.pull_request.merged == true
     permissions:
-        issues: write
+      issues: write # close the linked issue and comment
 
     steps:
       - name: Extract Issue Number and Close Issue
