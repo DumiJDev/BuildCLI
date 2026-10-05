@@ -41,7 +41,7 @@ class ToolsTest {
         return new ToolContext(ws, request -> {
             approvals.add(request);
             return approve;
-        });
+        }).git(new dev.buildcli.infrastructure.JGitAccess());
     }
 
     static ToolCall call(String name, Map<String, Object> args) {
@@ -58,19 +58,28 @@ class ToolsTest {
         Files.writeString(f, content);
     }
 
-    void git(String... args) throws Exception {
-        List<String> argv = new ArrayList<>(List.of("git"));
-        argv.addAll(List.of(args));
-        Process p = new ProcessBuilder(argv).directory(ws.toFile()).redirectErrorStream(true).start();
-        String out = new String(p.getInputStream().readAllBytes());
-        assertEquals(0, p.waitFor(), "git " + String.join(" ", args) + " failed: " + out);
+    org.eclipse.jgit.api.Git repo;
+
+    /** Test repositories are made with JGit as well, so the tests need no git program either. */
+    void initRepo() throws Exception {
+        repo = org.eclipse.jgit.api.Git.init().setDirectory(ws.toFile()).call();
+        var config = repo.getRepository().getConfig();
+        config.setString("user", null, "name", "Test");
+        config.setString("user", null, "email", "test@example.com");
+        config.setBoolean("commit", null, "gpgsign", false);
+        config.save();
     }
 
-    void initRepo() throws Exception {
-        git("init", "-q");
-        git("config", "user.name", "Test");
-        git("config", "user.email", "test@example.com");
-        git("config", "commit.gpgsign", "false");
+    void commitAll(String message) throws Exception {
+        repo.add().addFilepattern(".").call();
+        repo.commit().setMessage(message).call();
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void closeRepo() {
+        if (repo != null) {
+            repo.close();
+        }
     }
 
     // ---- diffs ----
@@ -143,8 +152,7 @@ class ToolsTest {
     void gitReadShowsStatusDiffAndLog() throws Exception {
         initRepo();
         write("a.txt", "one\n");
-        git("add", "a.txt");
-        git("commit", "-q", "-m", "first commit");
+        commitAll("first commit");
         write("a.txt", "one\ntwo\n");
         Agent a = agent(List.of("**"), Capability.GIT_READ);
         assertTrue(run(new GitReadTool(), a, true, Map.of("operation", "status")).contains("M a.txt"));
@@ -164,15 +172,14 @@ class ToolsTest {
     @Test
     void gitReadOutsideARepositoryIsAnError() throws Exception {
         String out = run(new GitReadTool(), agent(List.of("**"), Capability.GIT_READ), true, Map.of("operation", "status"));
-        assertTrue(out.startsWith("ERROR: git exited with"), out);
+        assertTrue(out.startsWith("ERROR: git: not a git repository"), out);
     }
 
     @Test
     void gitCommitShowsTheDiffForApprovalAndCommitsOnlyThosePaths() throws Exception {
         initRepo();
         write("keep.txt", "k\n");
-        git("add", "keep.txt");
-        git("commit", "-q", "-m", "base");
+        commitAll("base");
         write("keep.txt", "k\nchanged\n");
         write("other.txt", "not committed\n");
         Agent a = agent(List.of("**"), Capability.GIT_COMMIT, Capability.GIT_READ);

@@ -21,6 +21,10 @@ BuildCLI is rebuilt from scratch as a local runtime for teams of AI agents. The 
 - Notes and the private chats between agents could not be opened: the screen went back to the default chat on the next frame.
 
 ### Changed
+- **Git runs through JGit, inside BuildCLI.** `git_read`, `git_commit` and `/diff`, `/status`, `/log` no longer start a `git`
+  program: nothing needs to be installed, and nothing a repository configures (external diff, textconv, fsmonitor) can run.
+  A diff never shows files git does not track. Commit hooks still run. A hook has no time limit now, and `buildcli doctor` no
+  longer looks for `git`.
 - **The screen is drawn when something changes, not on a timer.** The chat session tells the screen about every change
   (message, typing, presence, question) and requests that arrive together become one frame, at most one every 16 ms. The only
   clock left runs while something moves (a spinner, a toast) and stops by itself. Idle CPU is about the same as before

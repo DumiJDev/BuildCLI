@@ -39,6 +39,6 @@ class ArchitectureTest {
     static final ArchRule FRAMEWORKS_STAY_IN_INFRASTRUCTURE = noClasses()
             .that().resideOutsideOfPackage("dev.buildcli.infrastructure..")
             .should().dependOnClassesThat().resideInAnyPackage(
-                    "dev.langchain4j..", "dev.tamboui..", "java.sql..", "org.sqlite..", "com.fasterxml.jackson..")
-            .as("LangChain4j, TamboUI, JDBC and Jackson must stay in the infrastructure package");
+                    "dev.langchain4j..", "dev.tamboui..", "java.sql..", "org.sqlite..", "com.fasterxml.jackson..", "org.eclipse.jgit..")
+            .as("LangChain4j, TamboUI, JDBC, Jackson and JGit must stay in the infrastructure package");
 }

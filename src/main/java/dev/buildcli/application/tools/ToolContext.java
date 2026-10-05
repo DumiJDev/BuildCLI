@@ -26,6 +26,7 @@ public final class ToolContext {
     private final java.util.function.Consumer<String> onWait;
     private java.util.function.Consumer<dev.buildcli.domain.FileChange> onChange = c -> { };
     private List<Path> protectedPaths = List.of();
+    private dev.buildcli.ports.GitAccess git;
 
     public ToolContext(Path workspace, Approval approval) {
         this(workspace, approval, new WorkspaceLock(), "agent", who -> { });
@@ -51,6 +52,19 @@ public final class ToolContext {
     public ToolContext protect(List<Path> paths) {
         this.protectedPaths = paths.stream().map(p -> p.toAbsolutePath().normalize()).toList();
         return this;
+    }
+
+    /** The repository access the git tools use. */
+    public ToolContext git(dev.buildcli.ports.GitAccess access) {
+        this.git = access;
+        return this;
+    }
+
+    public dev.buildcli.ports.GitAccess git() {
+        if (git == null) {
+            throw new IllegalStateException("git is not available in this run");
+        }
+        return git;
     }
 
     /** Where to report the files this call writes, so they can be reviewed and undone. */

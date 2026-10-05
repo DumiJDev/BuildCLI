@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Start with `buildcli doctor`: it checks Java, git, the state directory, your configuration and the model providers.
+Start with `buildcli doctor`: it checks Java, the state directory, your configuration and the model providers.
 
 | Symptom | Cause and fix |
 |---|---|

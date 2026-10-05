@@ -13,11 +13,17 @@
   <properties>
     <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <jgit.version>7.4.0.202509020913-r</jgit.version>
     <langchain4j.version>1.20.2</langchain4j.version>
     <tamboui.version>0.5.0</tamboui.version>
   </properties>
 
   <dependencies>
+    <dependency>
+      <groupId>org.eclipse.jgit</groupId>
+      <artifactId>org.eclipse.jgit</artifactId>
+      <version>${jgit.version}</version>
+    </dependency>
     <dependency>
       <groupId>dev.langchain4j</groupId>
       <artifactId>langchain4j-ollama</artifactId>
@@ -59,7 +65,13 @@
       <version>4.17</version>
     </dependency>
     <dependency>
-      <!-- LangChain4j logs through SLF4J; without a binding SLF4J prints a warning on stderr, which would draw over the TUI. -->
+      <!-- JGit declares the 1.7 API, which does not know the nop binding below: pin the 2.x API that LangChain4j and the binding use. -->
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+      <version>2.0.18</version>
+    </dependency>
+    <dependency>
+      <!-- LangChain4j and JGit log through SLF4J; without a binding SLF4J prints a warning on stderr, which would draw over the TUI. -->
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-nop</artifactId>
       <version>2.0.18</version>

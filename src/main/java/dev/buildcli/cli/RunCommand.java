@@ -205,7 +205,7 @@ final class RunCommand implements Callable<Integer> {
                 throw new IllegalStateException("the project's agent definitions were not trusted, so nothing was run");
             }
             Events events = new Events(store, runId, ui);
-            Orchestrator orchestrator = new Orchestrator(roster, gateway, new ToolRuntime(ctx.cwd, ui, events, workspaceLock).protect(List.of(ctx.globalDir())), ui, events,
+            Orchestrator orchestrator = new Orchestrator(roster, gateway, new ToolRuntime(ctx.cwd, ui, events, workspaceLock).protect(List.of(ctx.globalDir())).git(new dev.buildcli.infrastructure.JGitAccess()), ui, events,
                     config.projectContext());
             orchestrator.cancelWhen(cancelled);
             orchestrator.dispatchWith(dispatcher);

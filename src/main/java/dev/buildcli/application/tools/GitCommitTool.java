@@ -3,9 +3,11 @@ package dev.buildcli.application.tools;
 import dev.buildcli.domain.Agent;
 import dev.buildcli.domain.Capability;
 import dev.buildcli.ports.ApprovalRequest;
+import dev.buildcli.ports.GitAccess;
 import dev.buildcli.ports.ToolCall;
 import dev.buildcli.ports.ToolSpec;
 import dev.buildcli.ports.ToolSpec.Param;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -13,10 +15,10 @@ import java.util.List;
 /**
  * Commits specific paths. Always requires the user's approval, shown with the status and diff of exactly those paths.
  * The agent must be able to read every path it commits. Repository hooks still run, as they would for the user.
+ * The paths are literal: a name that happens to look like a pattern is a file name, never a glob.
  */
 public final class GitCommitTool implements Tool {
     private static final int MAX_MESSAGE = 2000;
-    private static final List<String> GIT = List.of("git", "-c", "core.fsmonitor=false");
 
     @Override
     public String name() {
@@ -58,39 +60,25 @@ public final class GitCommitTool implements Tool {
             }
             paths.add(rel);
         }
-        String status = git(ctx, List.of("status", "--short", "--"), paths);
-        String diff = git(ctx, List.of("diff", "--no-color", "--no-ext-diff", "--no-textconv", "HEAD", "--"), paths);
+        String status;
+        String diff;
+        try {
+            status = ctx.git().status(ctx.workspace(), false, paths).strip();
+            diff = ctx.git().diff(ctx.workspace(), GitAccess.Scope.HEAD, paths).strip();
+        } catch (IOException e) {
+            return "ERROR: git: " + e.getMessage();
+        }
         String detail = "Message: " + message + "\n\n" + status + (diff.isBlank() ? "" : "\n" + diff);
         if (!ctx.approve(new ApprovalRequest(agent.name(), "git_commit", "Commit " + paths.size() + " path(s): "
                 + message.lines().findFirst().orElse(""), detail))) {
             return "DENIED: the user rejected the commit";
         }
         return ctx.exclusive(() -> {
-            ProcessRunner.Result add = run(ctx, List.of("add", "--"), paths);
-            if (add.exitCode() != 0) {
-                return "ERROR: git add failed: " + ToolContext.cap(add.output(), ToolContext.MAX_OUTPUT);
+            try {
+                return "OK: " + ToolContext.cap(ctx.git().commit(ctx.workspace(), message, paths), ToolContext.MAX_OUTPUT);
+            } catch (IOException e) {
+                return "ERROR: git commit: " + e.getMessage();
             }
-            List<String> commit = new ArrayList<>(GIT);
-            commit.addAll(List.of("commit", "-m", message, "--"));
-            commit.addAll(paths);
-            ProcessRunner.Result r = ProcessRunner.run(commit, ctx.workspace(), agent.permissions().commandTimeout(), GitReadTool.ENV);
-            if (r.timedOut()) {
-                return "ERROR: git commit timed out";
-            }
-            return (r.exitCode() == 0 ? "OK: " : "ERROR: git commit exited with " + r.exitCode() + ": ")
-                    + ToolContext.cap(r.output(), ToolContext.MAX_OUTPUT);
         });
-    }
-
-    private static ProcessRunner.Result run(ToolContext ctx, List<String> args, List<String> paths) throws Exception {
-        List<String> argv = new ArrayList<>(GIT);
-        argv.addAll(args);
-        argv.addAll(paths);
-        return ProcessRunner.run(argv, ctx.workspace(), GitReadTool.TIMEOUT, GitReadTool.ENV);
-    }
-
-    private static String git(ToolContext ctx, List<String> args, List<String> paths) throws Exception {
-        ProcessRunner.Result r = run(ctx, args, paths);
-        return r.exitCode() == 0 ? r.output().strip() : "";
     }
 }

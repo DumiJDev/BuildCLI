@@ -60,7 +60,7 @@ Everything can be done **inside the app**: `/connect` picks a provider (OpenRout
 API key (typed hidden, checked before it is saved, stored owner-only on your computer, or taken from the usual environment
 variable) and lets you choose a model; the empty chat has buttons for the sample agents, to create your own agent, and to talk to [AgentFather](#agentfather).
 From the shell, the same setup is `buildcli init` (the sample agents and an `AGENTS.md`), `buildcli provider login <name>`
-and `buildcli doctor` (checks Java, git, your configuration and whether Ollama has the model).
+and `buildcli doctor` (checks Java, your configuration and whether Ollama has the model).
 
 The sample agents are **wheslley** (architect, leads the group), **matheus** (developer), **breno** (devops) and
 **dumildes** (innovator) in the group `maintainers`. Their files are drafts based on each maintainer's git history; edit
