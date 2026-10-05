@@ -50,16 +50,8 @@ class JGitAccessTest {
     }
 
     @Test
-    void aFolderThatIsNotARepositoryIsAnErrorThatSaysSo() {
-        Path elsewhere = ws.resolve("..").normalize().resolveSibling("not-a-repo-" + System.nanoTime());
-        assertThrows(IOException.class, () -> {
-            Files.createDirectories(elsewhere);
-            try {
-                git.status(elsewhere, true, List.of());
-            } finally {
-                Files.deleteIfExists(elsewhere);
-            }
-        });
+    void aFolderThatIsNotARepositoryIsAnErrorThatSaysSo(@TempDir Path elsewhere) {
+        assertTrue(assertThrows(IOException.class, () -> git.status(elsewhere, true, List.of())).getMessage().contains("not a git repository"));
     }
 
     @Test
@@ -150,6 +142,8 @@ class JGitAccessTest {
 
     @Test
     void aPathThatLooksLikeAPatternIsAFileName() throws Exception {
+        org.junit.jupiter.api.Assumptions.assumeFalse(System.getProperty("os.name").toLowerCase().contains("win"),
+                "Windows does not allow * in a file name");
         write("a.txt", "a\n");
         write("*.txt", "star\n");
         commitAll("base");

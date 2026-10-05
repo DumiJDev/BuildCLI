@@ -222,18 +222,27 @@ public final class JGitAccess implements GitAccess {
             names.computeIfAbsent(head.getObjectId(), k -> new ArrayList<>()).add(attached == null ? "HEAD" : "HEAD -> " + attached);
         }
         for (Ref ref : repo.getRefDatabase().getRefs()) {
-            String name = ref.getName();
-            if (name.equals(Constants.HEAD) || name.equals(Constants.R_HEADS + attached)) {
-                continue;
+            ObjectId target = peeledTarget(repo, ref);
+            String shown = shownName(ref.getName(), attached);
+            if (target != null && shown != null) {
+                names.computeIfAbsent(target, k -> new ArrayList<>()).add(shown);
             }
-            Ref peeled = repo.getRefDatabase().peel(ref);
-            ObjectId target = peeled.getPeeledObjectId() != null ? peeled.getPeeledObjectId() : ref.getObjectId();
-            if (target == null) {
-                continue;
-            }
-            String shown = name.startsWith(Constants.R_TAGS) ? "tag: " + Repository.shortenRefName(name) : Repository.shortenRefName(name);
-            names.computeIfAbsent(target, k -> new ArrayList<>()).add(shown);
         }
         return names;
+    }
+
+    /** The commit a ref finally points at (a tag may point at a tag object first). */
+    private static ObjectId peeledTarget(Repository repo, Ref ref) throws IOException {
+        Ref peeled = repo.getRefDatabase().peel(ref);
+        return peeled.getPeeledObjectId() != null ? peeled.getPeeledObjectId() : ref.getObjectId();
+    }
+
+    /** How git prints a ref in a log decoration; null for the refs it leaves out (HEAD and the checked-out branch, printed first). */
+    private static String shownName(String name, String attached) {
+        if (name.equals(Constants.HEAD) || name.equals(Constants.R_HEADS + attached)) {
+            return null;
+        }
+        String shortName = Repository.shortenRefName(name);
+        return name.startsWith(Constants.R_TAGS) ? "tag: " + shortName : shortName;
     }
 }
